@@ -79,9 +79,9 @@ Control:
 
 ## Events
 
-Primitive events the engine emits for you: `spawned`, `patched`, `moved`, `left`, `destroyed`, `linked`, `unlinked`, `related`, `unrelated`, `embodied`, `released`, `scheduled`, `finished`, `script_error`. Semantic ones around actions: `before_act` (listeners may reject), `act` (it happened), then whatever the script emits. In a listener, `event.kind`, `event.actor`, `event.target`, `event.payload`, `event.path`, `event.seq`, `event.t`.
+Primitive events the engine emits for you: `spawned`, `patched`, `moved`, `left`, `destroyed`, `linked`, `unlinked`, `related`, `unrelated`, `embodied`, `released`, `scheduled`, `finished`, `script_error`. Semantic ones around actions: `before_act` (listeners may reject), `act` (it happened), then whatever the script emits. In a listener, `event.kind`, `event.actor`, `event.target`, `event.payload`, `event.path`, `event.seq`, `event.t`. The actor and target on an event are ids (compare with `ctx.self.id`, or `ctx.get(event.target)` for the view); `ctx.actor` and `ctx.target` are views.
 
-A listener on a place sees everything that happens inside it (events with reach >= 1). A listener on the world root sees everything with reach -1, which includes every `before_act`: that is how world rules work. `kinds` on the listener filters which events wake it.
+Listeners run along the bubble path only: the target, then its ancestors as far as `reach` allows. A listener on a place sees everything that happens inside it (events with reach >= 1). A listener on the world root sees everything with reach -1, which includes every `before_act`: that is how world rules work. A sibling hears nothing, so a watcher that must see the whole world is attached to the root with `set_rule`. `kinds` on the listener filters which events wake it.
 
 ## Patterns
 
@@ -99,6 +99,6 @@ A monster that acts on its own until a player embodies it: a behavior with `tick
 
 A turn-based pocket: a place whose `before_act` listener rejects anyone but `state.order[state.turn]`, and whose `act` listener advances `state.turn`. Outside that place the world keeps running.
 
-A storyline: a hidden entity (`state.hidden = True`) with a listener. Each stage waits for its trigger event, applies effects (spawn, patch, say, schedule) and advances `state.stage`.
+A storyline: a hidden entity (`state.hidden = True`) holds `state.stage`; its script is installed on the root with `set_rule(root, "story", kinds=[...])` so it hears every event, and finds its entity with `ctx.find(type="story")`. Each stage waits for its trigger event, applies effects (spawn, patch, move, emit a `scene` event at a place, schedule) and advances the stage. `worlds/ferry_at_dusk.py` is a full example.
 
 A lazily built place: `state.fidelity = "sketch"`. A listener on the root emits `approach_sketch` when someone enters it; an author agent waiting on that event fills it in.
