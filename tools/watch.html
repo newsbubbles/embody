@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>embody watch</title>
+<style>
+:root { --bg:#0f1115; --panel:#161a22; --line:#2a3140; --ink:#e6e9ef; --dim:#8a93a6; --place:#3b7dd8; --creature:#d8903b;
+  --thing:#5fb37a; --other:#9b7bd8; --hot:#ff5d73; --me:#ffd166; font-family: ui-sans-serif, system-ui, sans-serif; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); }
+body { display:grid; grid-template-columns: 1fr 340px; grid-template-rows: auto 1fr; height:100vh; }
+header { grid-column: 1 / span 2; display:flex; flex-wrap:wrap; align-items:center; gap:4px 18px; padding:8px 14px; border-bottom:1px solid var(--line); font-size:13px; }
+@media (max-width: 900px) {
+  body { grid-template-columns: 1fr; grid-template-rows: auto 52vh 1fr; }
+  header { grid-column: 1; }
+  aside { border-left:none; border-top:1px solid var(--line); }
+}
+header b { font-size:15px; } header .dim { color:var(--dim); }
+header .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); display:inline-block; margin-right:6px; }
+header .dot.run { background:var(--thing); box-shadow:0 0 8px var(--thing); }
+#graph { position:relative; overflow:auto; }
+svg { display:block; }
+aside { border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); border-bottom:1px solid var(--line); }
+#events { flex:1; overflow:auto; font-size:12px; font-family: ui-monospace, Consolas, monospace; }
+.ev { padding:5px 12px; border-bottom:1px solid #1d222d; display:grid; grid-template-columns: 44px 1fr; gap:8px; }
+.ev .t { color:var(--dim); } .ev .k { color:var(--place); } .ev .who { color:var(--ink); } .ev .pl { color:var(--dim); white-space:pre-wrap; word-break:break-word; }
+.ev.new { animation: flash 2.5s ease-out; }
+@keyframes flash { from { background:#3a2a10; } to { background:transparent; } }
+#detail { max-height:40%; overflow:auto; font-size:12px; font-family: ui-monospace, Consolas, monospace; padding:8px 12px; white-space:pre-wrap; word-break:break-word; color:var(--dim); border-top:1px solid var(--line); }
+#detail b { color:var(--ink); }
+.node rect { rx:8; fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
+.node.place rect { stroke:var(--place); } .node.creature rect { stroke:var(--creature); } .node.thing rect { stroke:var(--thing); } .node.other rect { stroke:var(--other); }
+.node.hidden rect { stroke-dasharray:4 3; opacity:.55; } .node.hidden text { opacity:.55; }
+.node.me rect { stroke:var(--me); stroke-width:3; filter: drop-shadow(0 0 6px var(--me)); }
+.node.changed rect { animation: pulse 2.5s ease-out; }
+@keyframes pulse { from { fill:#4a3a1a; } to { fill:var(--panel); } }
+.node text { fill:var(--ink); font-size:12px; pointer-events:none; }
+.node text.sub { fill:var(--dim); font-size:10px; }
+.node { cursor:pointer; }
+.tree { stroke:var(--line); stroke-width:1.5; fill:none; }
+.conn { stroke:var(--place); stroke-width:2; fill:none; opacity:.8; }
+.rel { stroke:var(--other); stroke-width:1.5; fill:none; stroke-dasharray:5 4; }
+.lbl { fill:var(--dim); font-size:10px; }
+.tag { fill:var(--me); font-size:10px; font-weight:600; }
+.badge { fill:var(--hot); font-size:10px; }
+</style>
+</head>
+<body>
+<header>
+  <b>embody watch</b>
+  <span id="wname" class="dim">connecting</span>
+  <span><span id="dot" class="dot"></span><span id="clock"></span></span>
+  <span class="dim" id="counts"></span>
+  <span class="dim" id="sched"></span>
+  <span class="dim" id="err"></span>
+</header>
+<div id="graph"><svg id="svg"></svg></div>
+<aside>
+  <h3>events</h3>
+  <div id="events"></div>
+  <h3>entity</h3>
+  <div id="detail">click a box</div>
+</aside>
+<script>
+const BOX_W = 150, BOX_H = 44, GAP_X = 14, GAP_Y = 84, PAD = 24, TOP = 70;
+let lastSeq = -1, lastVersions = "", pinned = null, data = null, seenSeq = 0;
+const $ = id => document.getElementById(id);
+
+function kindOf(e, schemas) {
+  let t = e.type, guard = 0;
+  while (t && guard++ < 20) { if (t === "place" || t === "creature" || t === "thing") return t; t = schemas[t]; }
+  return "other";
+}
+function short(v, n = 90) { const s = typeof v === "string" ? v : JSON.stringify(v); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+function nameOf(id) { if (!data || !id) return id || ""; const e = data.entities.find(x => x.id === id); return e ? (e.name || e.type) + " (" + e.id + ")" : id; }
+function plain(id) { return nameOf(id).split(" (")[0]; }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+function layout(d) {
+  const byParent = {};
+  d.entities.forEach(e => { (byParent[e.parent || "__none"] ||= []).push(e); });
+  const size = {}, rowsOf = {};
+  const COLS = 3;
+  const measure = e => {
+    const kids = byParent[e.id] || [];
+    if (!kids.length) { size[e.id] = { w: BOX_W, h: BOX_H }; return size[e.id]; }
+    kids.forEach(measure);
+    const rows = []; for (let i = 0; i < kids.length; i += COLS) rows.push(kids.slice(i, i + COLS));
+    rowsOf[e.id] = rows.map(r => ({ kids: r, w: r.reduce((a, k) => a + size[k.id].w, 0) + GAP_X * (r.length - 1), h: Math.max(...r.map(k => size[k.id].h)) }));
+    size[e.id] = { w: Math.max(BOX_W, ...rowsOf[e.id].map(r => r.w)), h: BOX_H + rowsOf[e.id].reduce((a, r) => a + GAP_Y + r.h, 0) };
+    return size[e.id];
+  };
+  const roots = d.entities.filter(e => !e.parent || !d.entities.some(x => x.id === e.parent));
+  roots.forEach(measure);
+  const pos = {};
+  const place = (e, x, y) => {
+    const s = size[e.id];
+    pos[e.id] = { x: x + s.w / 2 - BOX_W / 2, y };
+    let cy = y + BOX_H + GAP_Y;
+    (rowsOf[e.id] || []).forEach(r => { let rx = x + (s.w - r.w) / 2; r.kids.forEach(k => { place(k, rx, cy); rx += size[k.id].w + GAP_X; }); cy += r.h + GAP_Y; });
+  };
+  let x = PAD, maxH = 0; roots.forEach(r => { place(r, x, TOP); x += size[r.id].w + GAP_X * 3; maxH = Math.max(maxH, size[r.id].h); });
+  return { pos, totalW: x + PAD, totalH: TOP + maxH + PAD };
+}
+
+function render(d, changed) {
+  const { pos, totalW, totalH } = layout(d);
+  const svg = $("svg");
+  const scale = Math.min(1, Math.max(0.45, ($("graph").clientWidth - 8) / totalW));
+  svg.setAttribute("viewBox", `0 0 ${totalW} ${totalH}`);
+  svg.setAttribute("width", Math.round(totalW * scale));
+  svg.setAttribute("height", Math.round(totalH * scale));
+  const me = {}; d.principals.forEach(p => { if (p.entity) me[p.entity] = p; });
+  let out = "";
+  d.entities.forEach(e => {
+    if (e.parent && pos[e.parent]) {
+      const a = pos[e.parent], b = pos[e.id];
+      const ax = a.x + BOX_W / 2, ay = a.y + BOX_H, bx = b.x + BOX_W / 2, by = b.y;
+      out += `<path class="tree" d="M${ax},${ay} C${ax},${ay + GAP_Y / 2} ${bx},${by - GAP_Y / 2} ${bx},${by}"/>`;
+    }
+  });
+  const seen = new Set();
+  d.edges.forEach(ed => {
+    const a = pos[ed.source], b = pos[ed.target]; if (!a || !b) return;
+    const conn = ed.relation === "connects_to";
+    const key = [ed.source, ed.target].sort().join("|") + ed.relation;
+    if (conn && seen.has(key)) return; seen.add(key);
+    const ax = a.x + BOX_W / 2, bx = b.x + BOX_W / 2, mx = (ax + bx) / 2;
+    if (conn) {
+      const lift = 40 + Math.abs(ax - bx) * 0.12, my = Math.min(a.y, b.y) - lift;
+      out += `<path class="conn" d="M${ax},${a.y} Q${mx},${my} ${bx},${b.y}"/>`;
+      const via = ed.data && ed.data.via ? "via " + plain(ed.data.via) : "";
+      if (via) out += `<text class="lbl" x="${mx}" y="${(a.y + my) / 2}" text-anchor="middle">${esc(via)}</text>`;
+    } else {
+      const drop = 30 + Math.abs(ax - bx) * 0.1, my = Math.max(a.y, b.y) + BOX_H + drop;
+      out += `<path class="rel" d="M${ax},${a.y + BOX_H} Q${mx},${my} ${bx},${b.y + BOX_H}"/>`;
+      out += `<text class="lbl" x="${mx}" y="${my - drop / 2 + 12}" text-anchor="middle">${esc(ed.relation)}</text>`;
+    }
+  });
+  d.entities.forEach(e => {
+    const p = pos[e.id]; if (!p) return;
+    const k = kindOf(e, d.schemas), st = e.state || {};
+    const cls = ["node", k, st.hidden ? "hidden" : "", me[e.id] ? "me" : "", changed.has(e.id) ? "changed" : ""].join(" ");
+    const bits = [e.type, e.id];
+    if (st.hp !== undefined) bits.push("hp " + st.hp);
+    if (st.lit) bits.push("lit");
+    if (st.fog) bits.push("fog");
+    if (st.stage) bits.push("stage " + st.stage);
+    out += `<g class="${cls}" data-id="${e.id}" transform="translate(${p.x},${p.y})"><rect width="${BOX_W}" height="${BOX_H}"/>`;
+    out += `<text x="10" y="18">${esc(short(e.name || e.type, 20))}</text><text class="sub" x="10" y="34">${esc(short(bits.join(" · "), 26))}</text>`;
+    if (me[e.id]) out += `<text class="tag" x="${BOX_W - 6}" y="-5" text-anchor="end">${esc(me[e.id].id)} ◀</text>`;
+    if (st.rules && st.rules.length) out += `<text class="badge" x="${BOX_W - 6}" y="34" text-anchor="end">⚖ ${st.rules.length}</text>`;
+    out += `</g>`;
+  });
+  d.hyperedges.forEach((h, i) => {
+    out += `<text class="lbl" x="${PAD}" y="${18 + i * 14}">${esc(h.relation)}: ${esc(h.participants.map(plain).join(", "))}</text>`;
+  });
+  svg.innerHTML = out;
+  svg.querySelectorAll(".node").forEach(n => n.addEventListener("click", () => { pinned = n.dataset.id; showDetail(); }));
+}
+
+function showDetail() {
+  if (!data || !pinned) return;
+  const e = data.entities.find(x => x.id === pinned);
+  if (!e) { $("detail").textContent = pinned + " no longer exists"; return; }
+  const kids = data.entities.filter(x => x.parent === e.id).map(x => x.name || x.type);
+  const rel = data.edges.filter(x => x.source === e.id || x.target === e.id).map(x => plain(x.source) + " -" + x.relation + "-> " + plain(x.target));
+  let txt = `<b>${esc(e.name || e.type)}</b> ${esc(e.id)} : ${esc(e.type)}  v${e.version}\n`;
+  txt += `in: ${esc(e.parent ? nameOf(e.parent) : "(root)")}\nholds: ${esc(kids.join(", ") || "nothing")}\n`;
+  if (rel.length) txt += "edges: " + esc(rel.join("\n       ")) + "\n";
+  txt += "state: " + esc(JSON.stringify(e.state, null, 1));
+  $("detail").innerHTML = txt;
+}
+
+function renderEvents(d) {
+  let html = "";
+  d.events.slice().reverse().forEach(ev => {
+    const who = [ev.actor ? plain(ev.actor) : "", ev.target ? "→ " + plain(ev.target) : ""].join(" ").trim();
+    const pl = ev.payload && Object.keys(ev.payload).length ? short(ev.payload, 140) : "";
+    html += `<div class="ev ${ev.seq > seenSeq ? "new" : ""}"><span class="t">${ev.t.toFixed(1)}</span><span><span class="k">${esc(ev.kind)}</span> <span class="who">${esc(who)}</span> <span class="dim">#${ev.seq} r${ev.reach}</span>`;
+    if (pl) html += `<div class="pl">${esc(pl)}</div>`;
+    html += `</span></div>`;
+  });
+  $("events").innerHTML = html;
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/state.json?limit=80" + (location.hash ? "&world=" + location.hash.slice(1) : ""));
+    const d = await r.json();
+    if (!d.ok) { $("err").textContent = d.reason; return; }
+    $("err").textContent = "";
+    const versions = d.entities.map(e => e.id + ":" + e.version + ":" + e.parent).join(",");
+    const w = d.world;
+    $("wname").textContent = w.name + " (" + w.id + ")";
+    $("clock").textContent = "t=" + w.t.toFixed(1) + (w.running ? " running x" + w.rate : " paused");
+    $("dot").className = "dot" + (w.running ? " run" : "");
+    $("counts").textContent = d.entities.length + " entities · " + d.edges.length + " edges · " + d.max_seq + " events · " + d.principals.length + (d.principals.length === 1 ? " principal" : " principals");
+    $("sched").textContent = d.scheduled.length ? "next: " + d.scheduled.slice(0, 3).map(s => s.kind + "@" + s.t.toFixed(0)).join(", ") : "";
+    if (d.max_seq !== lastSeq || versions !== lastVersions) {
+      const changed = new Set(d.entities.filter(e => data && e.updated_seq > lastSeq).map(e => e.id));
+      data = d; render(d, changed); renderEvents(d); showDetail();
+      seenSeq = d.max_seq; lastSeq = d.max_seq; lastVersions = versions;
+    }
+  } catch (e) { $("err").textContent = "no server: " + e.message; }
+}
+poll(); setInterval(poll, 1000);
+</script>
+</body>
+</html>

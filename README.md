@@ -48,6 +48,10 @@ uv run embody --as gm mirror
 - **Python**: `from embody.ops import Engine`, `Engine("worlds/embody.db").session("me", capabilities=["author"])`.
 - **Markdown mirror**: `embody mirror` writes the world as directories and files for anything that reads a filesystem.
 
+## Watching a world
+
+`uv run python tools/watch.py` serves a read-only live graph of the database at http://127.0.0.1:8765/: containment as a tree, passages between places as arcs, who embodies what, the event feed, and each entity's state on click. It reads the SQLite file while the engine writes it, so it can sit beside a running game. `.claude/launch.json` registers it as the `watch` preview.
+
 ## Layout
 
 - `src/embody/` the engine: `script.py` interpreter, `store.py` SQLite, `world.py` graph, events, actions, clock, `ops.py` sessions and capabilities, `mirror.py`, `cli.py`, `mcp_server.py`
