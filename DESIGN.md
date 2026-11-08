@@ -152,7 +152,23 @@ Every world projects to a read-only directory: containment is directories, each 
 
 An external system (webhook, sensor, feed) is a principal of kind `oracle` embodying an entity whose actions are "report X". World listeners decide what a report means. Representation, observation and authority are separate grants: an entity standing for a real server is just a node, reading its telemetry is a sense, acting on the real server is an action gated by a capability.
 
-## 14. The slice
+## 14. Many players, one hosted world
+
+The engine already holds several principals in one world; the hosted version puts that world on a server and lets each player reach it with the agent they already use, or with no agent at all. Two players whose entities stand in the same place see each other's events through their own agents. That is the whole multiplayer: the engine needs no new idea, it needs a door that is safe to leave open.
+
+Accounts and grants. An account owns principals. A grant is `(principal, world, role, scope)`, checked in the engine on every op, never in the harness. Roles: `owner` (everything, including grants), `author` (schemas, scripts, spawn, rules), `narrator` (`act_as`, `say_as`, `clock`, spawn under the world's `fill` policy, no schemas or scripts), `player` (join one of the entities the grant names or any entity tagged `playable`), `mind` (join exactly the entities the grant names, read their `brief` and `memory`, nothing else of anyone's), `observer` (read everything, write nothing). The flat capability list becomes the single-player shorthand for a grant with world-wide scope. Every token a player's agent carries is one grant, so a mind agent that gets prompt-injected in play can at most misplay its own entity.
+
+Secrets have owners. An entity's `memory` and `brief` are read by whoever embodies it and by the world's owner; a player's entity's memory is the player's. Who stands behind an entity (the account) is shown only where the world policy says so; by default other players meet the entity, not the person.
+
+Time. A world with many players runs its clock; durations price actions and `wait` wakes an agent when something happens near its entity. Turn-based play stays a single-player convenience. Over the network `wait` is a long poll with a `since` cursor and the same filter, and the server also streams events (server-sent events) for harnesses that have a monitor tool rather than a blocking one. Nothing in the engine changes; the transport grows a second shape.
+
+No agent. The `perceive` bundle lists affordances with their preconditions evaluated, so a plain web client can render the room, the people, the exits and the verbs as text and buttons. A person can play without a model, and the person next to them can play through one. Both produce the same events.
+
+Untrusted text. Everything another principal says reaches an agent's context as data. The server marks every event with its actor and the actor's account, caps the length and rate of `say`, and the role references for hosted play tell a mind or narrator harness to run with no filesystem or shell tools. The safest mind is one the server runs itself, in a sandbox that has only the embody tools; that is an option, not the only way. A security audit of the whole door (auth, grants, script sandbox, rate limits, abuse of `fill`) comes before the first public world.
+
+The hosted product (sign-in, rosters, world listings, invitations, claims on entities) sits on top of the engine's grants and knows nothing about worlds beyond their ids.
+
+## 15. The slice
 
 1. Core library: schemas, graph, scripts, actions, events, bubble, SQLite. A test world of two rooms, a door, a key. Replay test.
 2. Clock, durations, behaviors, a combat pocket.

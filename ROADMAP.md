@@ -81,6 +81,21 @@ These were agreed in conversation on 2026-11-08 and are not built. Order of atta
 - [ ] Sample worlds ship inside the package, so `load_world("ferry_at_dusk")` works from any workspace without a path.
 - [ ] World state is never in the engine repo. Already true (databases, mirrors and session files are ignored); keep it true after the split.
 
+### Hosted, many players
+
+Direction from Nate on 2026-11-08, after the second round shipped: a hosted embody where players reach one world at the same time through their own agents, or with no agent, meet each other in places and act through their entities. The design is DESIGN.md section 14. It comes after the playtests settle the single-player loop and after the workspace split. Engine and server work first, product last.
+
+- [ ] Grants: `(principal, world, role, scope)` checked in the engine on every op. Roles owner, author, narrator, player, mind, observer. The capability list becomes the single-player shorthand. Tests that every op refuses outside its grant.
+- [ ] Entity claims: `playable` tag, a claim op, one embodier per entity, owner can evict. A mind grant names its entities and cannot read anyone else's `brief` or `memory`.
+- [ ] Network transport: the MCP server over streamable HTTP with a bearer token per grant, plus a small REST face for clients that are not agents. Same op table, same errors.
+- [ ] `wait` over the network: long poll with `since` and the filter; a server-sent event stream for harnesses with a monitor tool. Document both in the per-harness table of the skill.
+- [ ] Real-time defaults for hosted worlds: clock running, durations price every verb (the engine default duration per verb above becomes necessary here), `say` capped in length and rate.
+- [ ] Provenance on every event: actor entity, principal, account; other players' text arrives marked as untrusted data in the bundle.
+- [ ] Hosted role references: narrator and mind for a remote world, with the harness profile they must run under (no filesystem, no shell, only the embody tools), and the server-run sandboxed mind as the recommended option for NPCs.
+- [ ] Web client without an agent: room, people, exits, inventory and the evaluated affordances as text and buttons, `say` as a box. Reads the same bundle.
+- [ ] Accounts, rosters, world listings, invitations, a per-world page with the live graph (today's `tools/watch.py` behind a grant).
+- [ ] Security audit before any public world: auth, grants, the script sandbox under hostile authors, rate limits, abuse of `fill`, what a captured mind token can do.
+
 ### Later
 
 - [ ] Stock verbs on the base schemas (go, take, drop, give, say) as an opt-in, so a sketch world plays without defining physics first.
@@ -98,6 +113,7 @@ These were agreed in conversation on 2026-11-08 and are not built. Order of atta
 2. Second playtest on the forked ferry world with turn-based play and a subagent mind for Mara. New gaps go under "Found in play".
 3. The lint for names in prose that match no entity; an engine default duration per verb; the `overheard` tail.
 4. Workspace split (`embody init`, sample worlds inside the package), then the release.
+5. Hosted, many players: grants and claims in the engine, the network transport and `wait` over it, then the client without an agent, accounts and rosters, and the security audit before anything is public.
 
 ## How this file is kept
 
