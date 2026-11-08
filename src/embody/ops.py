@@ -12,12 +12,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .store import Store
-from .world import Rejected, World, _INTERNAL_KINDS, _public_event
+from .world import Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
 
 AUTHOR = "author"
 OBSERVER = "observer"
 # State keys only the entity itself (its mind) and authors ever see.
-_ALWAYS_SECRET = frozenset({"memory", "brief"})
+_ALWAYS_SECRET = frozenset({"memory", "brief", "goals"})
+# Relations whose edge data is world structure, readable by anyone who sees the edge.
+_PUBLIC_RELATIONS = frozenset({"connects_to"})
 
 
 class Engine:
@@ -37,7 +39,7 @@ class Engine:
             s = w.summary()
             out.append({"id": s["id"], "name": s["name"], "description": s["description"], "t": s["t"],
                         "entities": s["entities"], "principals": len(s["principals"]),
-                        "running": s["clock"]["running"]})
+                        "running": s["clock"]["running"], "forked_from": w.meta().get("forked_from")})
         return out
 
     def world(self, world_id: str) -> World:
@@ -216,9 +218,13 @@ class Session:
         ent = w.need(me)
         here_id = ent["parent_id"]
         here = w.get(here_id) if here_id else None
+        ck = w.clock()
         bundle: dict[str, Any] = {
             "world": w.id, "t": w.t,
+            "clock": {"running": ck["running"], "rate": ck["rate"], "turn": w.meta().get("turn_seconds")},
+            "ambient": self._ambient(here),
             "you": self._card(ent, full=True),
+            "goals": [g for g in ent["state"].get("goals") or [] if g.get("status", "active") == "active"],
             "holding": [self._card(c) for c in w.children(me)],
             "here": self._place_card(here) if here else None,
             "present": [self._card(c) for c in w.children(here_id) if c["id"] != me and not c["state"].get("hidden")]
@@ -228,8 +234,7 @@ class Session:
             "knows": self._knows(me),
             "known_places": [{"id": pid, "name": w.get(pid)["name"]} for pid in w.known_places(me) if w.get(pid)],
             "affordances": [a for a in w.affordances(me)],
-            "events": [_public_event(e) for e in w.events(since=cursor, touching=me, limit=events)
-                       if e["kind"] not in _INTERNAL_KINDS],
+            "events": self._events_for(me, w.events(since=cursor, touching=me, limit=events)),
             "cursor": w.store.next_seq(w.id) - 1,
         }
         if p is not None:
@@ -237,6 +242,45 @@ class Session:
         else:
             w.set_entity_cursor(me, bundle["cursor"])
         return bundle
+
+    def _ambient(self, here: dict[str, Any] | None) -> dict[str, Any]:
+        """Facts every perceive carries: the root's `ambient` dict (time of day, weather, light) with the
+        place's own `ambient` laid over it. Worlds patch these; the engine only shows them."""
+        w = self.world
+        root = w.get(w.root_id)
+        out = dict((root["state"].get("ambient") or {}) if root else {})
+        if here:
+            out.update(here["state"].get("ambient") or {})
+        return out
+
+    def _privileged(self) -> bool:
+        return AUTHOR in self.capabilities or OBSERVER in self.capabilities
+
+    def _events_for(self, me: str | None, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """The public view of events for one viewer. Authors and observers see everything but the internal
+        kinds. An embodied viewer never sees another entity's private events (remembered, intended) and sees
+        `patched` only with that entity's secret keys taken out; a patch that was all secret is dropped."""
+        w = self.world
+        out = []
+        full = self._privileged()
+        for e in rows:
+            if e["kind"] in _INTERNAL_KINDS:
+                continue
+            if not full and e["target_id"] != me:
+                if e["kind"] in _PRIVATE_KINDS:
+                    continue
+                if e["kind"] == "patched":
+                    t = w.get(e["target_id"]) if e["target_id"] else None
+                    secret = set((t["state"].get("secret") or []) if t else []) | _ALWAYS_SECRET
+                    p = e["payload"]
+                    changes = {k: v for k, v in (p.get("changes") or {}).items() if k not in secret}
+                    if not changes:
+                        continue
+                    e = dict(e)
+                    e["payload"] = {**p, "changes": changes,
+                                    "before": {k: v for k, v in (p.get("before") or {}).items() if k not in secret}}
+            out.append(_public_event(e))
+        return out
 
     def _knows(self, me: str) -> list[dict[str, Any]]:
         """Who this entity knows: each `knows` edge with its data (standing, notes) and the last exchanges
@@ -363,8 +407,9 @@ class Session:
             touching = self._me()
         elif touching:
             touching = self._resolve(touching)
-        return [_public_event(e) for e in w.events(since=since, until=until, kinds=kinds, touching=touching,
-                                                    limit=min(limit, 500)) if e["kind"] not in _INTERNAL_KINDS]
+        me = touching if not self._privileged() else None
+        return self._events_for(me, w.events(since=since, until=until, kinds=kinds, touching=touching,
+                                             limit=min(limit, 500)))
 
     # ---- acting -----------------------------------------------------------------------
 
@@ -373,7 +418,12 @@ class Session:
         me = self._me()
         tid = self._resolve(target) if target else None
         r = self.world.act(me, verb, tid, params, principal_id=self.pid)
-        return self._turn(r)
+        r = self._turn(r)
+        if r.get("events"):
+            rows = [{"kind": e["kind"], "target_id": e["target"], "seq": e["seq"], "payload": e["payload"],
+                     "actor_id": e["actor"], "t": e["t"], "caused_by": e["caused_by"]} for e in r["events"]]
+            r["events"] = self._events_for(me, rows)
+        return r
 
     def _turn(self, r: dict[str, Any]) -> dict[str, Any]:
         """Turn-based play: with the clock paused and meta.turn_seconds set, each act of an embodied principal
@@ -426,10 +476,92 @@ class Session:
             eid = self._resolve(entity)
         else:
             eid = self._me()
-        note = self.world.remember(eid, text, actor=self._actor_or_none() or eid)
+        note = self.world.remember(eid, text, actor=eid)
         if entity is None:
             self.world._bump_cursor(self.pid)
         return {"ok": True, "entity": eid, "note": note, "memory_size": len(self.world.need(eid)["state"].get("memory", []))}
+
+    def intend(self, text: str | None = None, why: str | None = None, id: str | None = None,
+               status: str | None = None, priority: int | None = None, entity: str | None = None) -> dict[str, Any]:
+        """Track a goal. New goal: intend(text, why). Change one: intend(id=..., status='done'|'dropped'|'active',
+        text=..., why=..., priority=...). Goals are secret state on the entity; active ones come back in every
+        perceive under `goals`. Authors may pass entity=<id or name> to set goals for any entity."""
+        self._tick()
+        if entity is not None:
+            self._need(AUTHOR)
+            eid = self._resolve(entity)
+        else:
+            eid = self._me()
+        g = self.world.intend(eid, text=text, why=why, id=id, status=status, priority=priority, actor=eid)
+        if entity is None:
+            self.world._bump_cursor(self.pid)
+        goals = self.world.need(eid)["state"].get("goals") or []
+        return {"ok": True, "entity": eid, "goal": g,
+                "goals": [x for x in goals if x.get("status", "active") == "active"]}
+
+    def recall(self, about: str | None = None, relation: str | None = None, limit: int = 20,
+               entity: str | None = None) -> dict[str, Any]:
+        """A graph query from one entity's point of view, with its permissions. Without `about`: everyone and
+        everything linked to you (edges, group relations), with the data you are allowed to read. With `about`:
+        all you know about one entity, drawn from the graph, the log and your own notes: your edge to them,
+        what they have told you, what you have said and done to each other, the notes and goals that name them.
+        Edge data is yours to read when the edge starts at you or is world structure; what others think of you
+        stays theirs. Authors and observers read everything and may pass entity=<id or name>."""
+        self._tick()
+        w = self.world
+        full = self._privileged()
+        if entity is not None:
+            if not full:
+                raise Rejected("recalling from another entity needs the author or observer capability",
+                               hint="recall() works from the entity you embody")
+            me = self._resolve(entity)
+        else:
+            me = self._me()
+        limit = max(1, min(int(limit), 100))
+        ent = w.need(me)
+
+        def edge_view(e: dict[str, Any]) -> dict[str, Any]:
+            other = e["target"] if e["source"] == me else e["source"]
+            o = w.get(other)
+            readable = full or e["source"] == me or e["relation"] in _PUBLIC_RELATIONS or bool(e["data"].get("public"))
+            v = {"relation": e["relation"], "direction": "out" if e["source"] == me else "in",
+                 "with": other, "name": o["name"] if o else None, "type": o["type"] if o else None,
+                 "here": bool(o and o["parent_id"] == ent["parent_id"])}
+            if readable:
+                v["data"] = e["data"]
+            return v
+
+        if about is None:
+            edges = [edge_view(e) for e in w.edges(me, relation, "both") if e["relation"] != "connects_to"]
+            groups = [{"relation": h["relation"], "participants": h["participants"], "data": h["data"], "id": h["id"]}
+                      for h in w.hyperedges(me, relation)]
+            return {"entity": me, "edges": edges[:limit], "groups": groups[:limit],
+                    "goals": [g for g in ent["state"].get("goals") or [] if g.get("status", "active") == "active"],
+                    "known_places": [{"id": pid, "name": w.get(pid)["name"]} for pid in w.known_places(me) if w.get(pid)]}
+
+        them = self._resolve(about)
+        o = w.need(them)
+        known = {e["target"] for e in w.edges(me, "knows", "out")}
+        if not full and o["state"].get("hidden") and o["parent_id"] != ent["parent_id"] and them not in known:
+            # a hidden entity that never crossed your path is nobody to you
+            raise Rejected(f"you know nothing of {about!r}", hint="recall() lists who you know")
+        name = (o["name"] or "").lower()
+        mine = [edge_view(e) for e in w.edges(me, relation, "both") if e["source"] == them or e["target"] == them]
+        shared = [{"relation": h["relation"], "participants": h["participants"], "data": h["data"], "id": h["id"]}
+                  for h in w.hyperedges(me, relation) if them in h["participants"]]
+        rows = w.store.query(
+            "event", "world_id=? AND ((actor_id=? AND target_id=?) OR (actor_id=? AND target_id=?))",
+            (w.id, me, them, them, me), order="seq DESC", limit=limit)
+        between = self._events_for(me, list(reversed(rows)))
+        notes = [n for n in (ent["state"].get("memory") or []) if name and name in str(n.get("text", "")).lower()]
+        goals = [g for g in (ent["state"].get("goals") or [])
+                 if name and (name in str(g.get("text", "")).lower() or name in str(g.get("why") or "").lower())]
+        return {"entity": me, "about": self._card(o, full=full), "edges": mine, "groups": shared,
+                "exchanges": [{"t": x["t"], "who": x["actor"], "kind": x["kind"],
+                               "text": x["payload"].get("text") or x["payload"].get("about")}
+                              for x in w.exchanges(me, them, limit=min(limit, 10))],
+                "between": between[-limit:], "notes": notes[-limit:], "goals": goals,
+                "here": o["parent_id"] == ent["parent_id"]}
 
     def wait(self, timeout: float = 30.0, kinds: list[str] | None = None, poll: float = 0.1,
              clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
@@ -439,8 +571,8 @@ class Session:
         start = clock()
         while True:
             self._tick()
-            evs = [e for e in self.world.events(since=p["cursor_seq"], touching=me, limit=50)
-                   if e["kind"] not in _INTERNAL_KINDS and (not kinds or e["kind"] in kinds)]
+            evs = [e for e in self._events_for(me, self.world.events(since=p["cursor_seq"], touching=me, limit=50))
+                   if not kinds or e["kind"] in kinds]
             if evs:
                 return self.perceive()
             if clock() - start >= timeout:
@@ -551,6 +683,12 @@ class Session:
                                   every=every)
         return {"ok": True, "scheduled": sid}
 
+    def unschedule(self, id: str) -> dict[str, Any]:
+        """Cancel a pending timer by its id from timers()."""
+        self._need(AUTHOR)
+        item = self.world.unschedule(id)
+        return {"ok": True, "unscheduled": id, "kind": item["kind"]}
+
     def clock(self, run: bool | None = None, rate: float | None = None, step: float | None = None,
               turn: float | None = None) -> dict[str, Any]:
         """Read or set the clock. run/rate: realtime. step: advance by n seconds now. turn: seconds the world
@@ -568,7 +706,28 @@ class Session:
             out["events"] = w.step(step)
         out.update(w.clock())
         out["turn"] = w.meta().get("turn_seconds")
+        out["timers"] = self._timers()
         return out
+
+    def _timers(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Pending scheduled events, soonest first. Behaviors' ticks are left out."""
+        w = self.world
+        out = []
+        for s in w.pending():
+            if s["kind"] == "tick":
+                continue
+            e = w.get(s["entity_id"]) if s.get("entity_id") else None
+            out.append({"id": s["id"], "kind": s["kind"], "at": s["t"], "in": round(s["t"] - w.t, 3),
+                        "entity": s.get("entity_id"), "name": e["name"] if e else None,
+                        "every": s.get("every"), "payload": s.get("payload") or {}})
+            if len(out) >= limit:
+                break
+        return out
+
+    def timers(self) -> list[dict[str, Any]]:
+        """What is scheduled and when (fog in 38 s, dawn in 200 s). Ticks of behaviors are left out."""
+        self._tick()
+        return self._timers()
 
     def summary(self) -> dict[str, Any]:
         self._tick()
@@ -591,8 +750,9 @@ class Session:
         return self.world.act(self._resolve(entity), verb, self._resolve(target) if target else None, params)
 
     def _actor_or_none(self) -> str | None:
-        p = self.world.principal(self.pid)
-        return p["entity_id"] if p else None
+        """Author ops (spawn, patch, move, destroy) are the narrator's hand, not the character's. An entity actor
+        on them made secret patches and notes show up in the embodying player's own feed. So: none."""
+        return None
 
 
 def call(session: Session, op: str, **kw: Any) -> Any:
@@ -610,8 +770,8 @@ def call(session: Session, op: str, **kw: Any) -> Any:
 
 OPS = [
     "worlds", "use", "create_world", "fork_world", "join", "leave",
-    "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "wait",
+    "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate",
-    "set_rule", "clear_rule", "schedule", "clock", "summary", "mirror", "act_as", "say_as",
+    "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
 ]

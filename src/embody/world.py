@@ -817,8 +817,12 @@ class World:
                  caused_by: int | None = None) -> None:
         self.script(script)
         e = self.need(entity)
-        rules = [r for r in e["state"].get("rules", []) if r["script"] != script]
-        rules.append({"script": script, "kinds": kinds or ["before_act"]})
+        rule = {"script": script, "kinds": kinds or ["before_act"]}
+        have = e["state"].get("rules", [])
+        if rule in have:
+            return  # already installed as is: a world file's upgrade() may run twice
+        rules = [r for r in have if r["script"] != script]
+        rules.append(rule)
         self.patch(entity, {"rules": rules}, actor=actor, caused_by=caused_by)
 
     def clear_rule(self, entity: str, script: str, actor: str | None = None, caused_by: int | None = None) -> None:
@@ -1090,8 +1094,8 @@ class World:
                 continue
             scope = adef.get("scope", "any")
             for cid in candidates:
-                if cid == actor_id and adef.get("reach") != "self":
-                    continue
+                if cid == actor_id and adef.get("reach") != "self" and not adef.get("self"):
+                    continue  # self is a target only for reach "self" verbs or verbs flagged self: true
                 # scope keeps the impossible pairs out of the list: drop what you do not hold, go where you stand
                 if scope == "held" and cid not in held:
                     continue
@@ -1128,6 +1132,19 @@ class World:
 
     def pending(self) -> list[dict[str, Any]]:
         return self.store.query("scheduled", "world_id=?", (self.id,), order="t, id")
+
+    def unschedule(self, sid: str, caused_by: int | None = None) -> dict[str, Any]:
+        """Cancel a pending timer by id (see pending()); the `tick` of a running clock cannot be cancelled."""
+        rows = self.store.query("scheduled", "world_id=? AND id=?", (self.id, sid), limit=1)
+        if not rows:
+            raise Rejected(f"no timer {sid!r}", hint="timers() lists what is pending")
+        item = rows[0]
+        if item["kind"] == "tick":
+            raise Rejected("the clock's own tick is not a timer", hint="clock(run=false) pauses it")
+        self.store.delete("scheduled", self.id, sid)
+        self.emit("unscheduled", actor=None, target=item["entity_id"], reach=0, caused_by=caused_by,
+                  payload={"id": sid, "kind": item["kind"], "at": item["t"]})
+        return item
 
     def embodied(self, entity_id: str) -> dict[str, Any] | None:
         rows = self.store.query("principal", "world_id=? AND entity_id=?", (self.id, entity_id), limit=1)
@@ -1217,14 +1234,19 @@ class World:
 
     def say(self, who: str, text: str, reach: int = 1, to: str | None = None,
             caused_by: int | None = None) -> dict[str, Any]:
-        """Speech. Addressed speech targets the listener so it shows in both their logs; the room still hears it."""
-        self.need(who)
+        """Speech. Addressed speech targets the listener so it shows in both their logs; the room still hears it.
+        Unaddressed speech targets the room the speaker stands in (reach counts from there), never the speaker."""
+        e = self.need(who)
         payload: dict[str, Any] = {"text": str(text)}
-        target = who
         if to:
             self.need(to)
             payload["to"] = to
             target = to
+        elif e["parent_id"]:
+            target = e["parent_id"]
+            reach = reach - 1 if reach > 0 else reach
+        else:
+            target = who
         return self.emit("say", actor=who, target=target, reach=reach, payload=payload, caused_by=caused_by)
 
     # ---- principals -----------------------------------------------------------
@@ -1299,6 +1321,40 @@ class World:
 
     # ---- minds -------------------------------------------------------------------
 
+    def intend(self, entity_id: str, text: str | None = None, why: str | None = None, id: str | None = None,
+               status: str | None = None, priority: int | None = None, actor: str | None = None) -> dict[str, Any]:
+        """Add or change one goal in the entity's secret `goals` list. A goal is {id, text, why, status, priority,
+        t}. status: active (default), done, dropped. Returns the goal as it stands."""
+        e = self.need(entity_id)
+        goals = [dict(g) for g in (e["state"].get("goals") or [])]
+        g = next((x for x in goals if x.get("id") == id), None) if id else None
+        if g is None:
+            if not text:
+                raise Rejected("a new goal needs text" if not id else f"no goal {id!r}",
+                               hint="intend(text='cross the river tonight', why='...') adds one; perceive lists yours")
+            n = 1 + max([int(str(x.get("id", "g0"))[1:] or 0) for x in goals
+                         if str(x.get("id", "")).startswith("g") and str(x.get("id", ""))[1:].isdigit()] or [0])
+            g = {"id": id or f"g{n}", "text": str(text), "why": str(why) if why else None, "status": "active",
+                 "priority": int(priority) if priority is not None else 1, "t": self.t}
+            goals.append(g)
+        else:
+            if text is not None:
+                g["text"] = str(text)
+            if why is not None:
+                g["why"] = str(why)
+            if priority is not None:
+                g["priority"] = int(priority)
+        if status is not None:
+            if status not in ("active", "done", "dropped"):
+                raise Rejected(f"unknown goal status {status!r}", hint="active, done or dropped")
+            g["status"] = status
+            g["status_t"] = self.t
+        e["state"]["goals"] = goals
+        self._touch(e)
+        self.emit("intended", actor=actor or entity_id, target=entity_id, reach=0,
+                  payload={"goal": g["id"], "text": g["text"], "status": g["status"]})
+        return g
+
     def remember(self, entity_id: str, text: str, actor: str | None = None) -> dict[str, Any]:
         """Append to the entity's secret memory. Whoever embodies it next reads the same notes."""
         e = self.need(entity_id)
@@ -1347,6 +1403,7 @@ class World:
         if not a or not b or not self.is_a(a["type"], "creature") or not self.is_a(b["type"], "creature"):
             return
         delta = self._OPINION[kind]
+        moved: list[dict[str, Any]] = []
         for src, dst, d in ((target, actor, delta), (actor, target, 0)):
             ex = next((x for x in self.edges(src, "knows", "out") if x["target"] == dst), None)
             if ex is None:
@@ -1359,8 +1416,10 @@ class World:
             data["last_kind"] = kind
             ex["data"] = data
             self.store.put("edge", ex)
+            moved.append({"holder": src, "of": dst, "delta": d, "standing": data["standing"]})
+        # holder: whose opinion moved; of: about whom. The receiver's view of the actor is the one that changes.
         self.emit("opinion", actor=actor, target=target, reach=0, caused_by=ev["seq"],
-                  payload={"kind": kind, "delta": delta})
+                  payload={"kind": kind, "delta": delta, "edges": moved})
 
     # ---- integrity -------------------------------------------------------------
 
@@ -1391,9 +1450,11 @@ class World:
 # Events that exist for the log, not for listeners.
 _SILENT_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "scheduled", "patched", "linked", "unlinked",
                            "related", "unrelated", "spawned", "destroyed", "left", "moved", "embodied", "released",
-                           "tick", "script_error", "finished", "opinion", "remembered"})
+                           "tick", "script_error", "finished", "opinion", "remembered", "intended"})
+# Events only the entity they target (its mind) and authors ever see.
+_PRIVATE_KINDS = frozenset({"remembered", "intended"})
 # Events hidden from the public stream (perceive, act results). Primitive mutations stay in the log.
-_INTERNAL_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "scheduled", "tick"})
+_INTERNAL_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "scheduled", "unscheduled", "tick"})
 
 
 class EventView(ScriptObject):

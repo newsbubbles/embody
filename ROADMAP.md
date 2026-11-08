@@ -15,10 +15,10 @@ Status: alpha. The first vertical slice was built in one day (2026-11-08) and pl
 ## What exists (2026-11-08)
 
 - Engine: entity graph with containment, schemas with `extends`, actions with check and apply, events that bubble with reach, listeners along the bubble path, behaviors on the clock, rules via `set_rule`, relations as edges and hyperedges, event-sourced SQLite, deterministic state hash, seeded rand, a Python-subset interpreter for scripts.
-- Ops: 39 of them behind a Session with capabilities (author, observer, embodied). CLI and MCP server expose the same table. `wait` blocks on events. The MCP server holds many principals behind one connection (`principal=` on the playing tools).
-- Minds in the engine: secret `memory` and `brief`, per-entity cursors, `knows` edges with an opinion floor and the last exchanges, `known_places`, addressed speech (`say(to=...)`, `say_as`), `fork_world`, turn-based play (`clock(turn=n)`), deep-merging `patch`, scoped affordances.
-- Content: `worlds/ferry_at_dusk.py` (three places, four NPCs, storyline on rails, fog on a timer; split into define/populate so a live world takes new code), `worlds/two_rooms.py`.
-- Tooling: 41 tests, markdown mirror, `tools/watch.py` live graph viewer with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
+- Ops: 41 of them behind a Session with capabilities (author, observer, embodied). CLI and MCP server expose the same table. `wait` blocks on events. The MCP server holds many principals behind one connection (`principal=` on the playing tools).
+- Minds in the engine: secret `memory`, `brief` and `goals` (`intend`), `recall` as the permission-aware graph query, per-entity cursors, `knows` edges with an opinion floor and the last exchanges, `known_places`, addressed speech (`say(to=...)`, `say_as`) and speech into the room, `fork_world`, turn-based play (`clock(turn=n)`), deep-merging `patch`, scoped affordances, per-viewer event filtering, `ambient` facts and `clock` in every perceive, `timers` and `unschedule`.
+- Content: `worlds/ferry_at_dusk.py` (five places, four NPCs, a storyline that checks facts with two routes to the ferryman, fog, night and dawn on timers, sleep and wake, followers; split into define/populate/upgrade so a live world takes new code and additions), `worlds/two_rooms.py`.
+- Tooling: 54 tests, markdown mirror, `tools/watch.py` live graph viewer with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
 
 ## Found in the first playtest
 
@@ -45,6 +45,33 @@ Gaps
 - [ ] No money in the ferry world. That is a world choice, not an engine gap, but the base schemas could offer a `coin` convention.
 - [ ] Prose points at things that do not exist (the bench, the well). Round 2 spawned the bench and the well in the ferry world; the lint is still open. Add an authoring lint that flags names in dialog and descriptions that match no entity, so the author decides: spawn it or keep it scenery.
 
+## Found in the second playtest
+
+Source: worlds/notes/ferry-at-dusk-2-2026-11-08.md (the forked world, turn-based, a subagent mind for Mara) and the round-3 design message. Closed in round 3 (2026-11-08) unless marked open.
+
+Bugs
+
+- [x] (round 3) Privacy leak: author ops stamped with the embodied entity as actor put Tam's secret memory and the hidden Story's patches into the player's own feed. Author ops carry no actor now, and every feed is filtered per viewer (`remembered` and `intended` reach only the entity's mind and authors; `patched` on others shows public keys only).
+- [x] (round 3) An unaddressed `say` targeted the speaker, so nobody in the room was guaranteed to hear it. It now targets the speaker's place.
+- [x] (round 3) `opinion` events did not say whose edge moved. Payload `edges: [{holder, of, delta, standing}]`.
+- [x] (round 3, ferry world) Mara's tinderbox appeared from nowhere when asked. It is a real thing in her apron; `gives` entries may name a held `item`, so the table and a mind hand over the same object.
+- [x] (round 3, ferry world) Dialog took the first key that matched; "a light for the lantern" should prefer the lantern entry. Entries are scored by matched aliases and their length.
+
+Gaps
+
+- [x] (round 3) Minds had no goals. `intend(text, why, id, status, priority)` manages secret `goals`; every perceive shows the active ones; authors seed them with `entity=`.
+- [x] (round 3) No graph query for a mind. `recall(about?, relation?)` returns edges, groups, exchanges, events between, notes and goals about one entity, within the mind's permissions (edge data readable when the edge starts at you, is world structure or is flagged `public`; authors and observers read all).
+- [x] (round 3) Nobody could see what was scheduled. `timers()` and `clock()["timers"]`; `unschedule(id)` cancels one.
+- [x] (round 3) The hour and the weather lived only in prose. `ambient` on the root overlaid by the place, in every perceive, with `clock` beside it.
+- [x] (round 3) `worlds()` did not show lineage. `forked_from` on every row.
+- [x] (round 3, ferry world) The story advanced on a stage number, so play off the rails stalled. Rails check facts (`seen_landing`, `mara_told`, Tam at the landing, `crossed`), and there are two routes to Tam: ring the bell, or walk to the Reeds and wake him.
+- [x] (round 3, ferry world) Night never fell and nobody could sleep. `nightfall` at t=150 and `dawn` at t=400 change the ambient; `sleep` and `wake` verbs, a root guard that lets a sleeper do nothing but wake, dawn wakes everyone and thins the fog.
+- [x] (round 3, ferry world) The fed dog only caught up on its tick. Followers (`friend` or `follows` == the actor) move with `go` and ride the raft.
+- [x] (round 3, ferry world) No way to pet the dog or try your luck. `touch` and `check` (a d20 everyone sees).
+- [x] (round 3) A world file could renew code but not add a place to a live world. `upgrade(s)` in the file, run by `load_world(upgrade=true)` after `define`; `set_rule` is idempotent so it runs twice without change.
+- [ ] The narrator's prose still has to be reminded to stay in character; the skill now says so, the next playtest tells whether it holds.
+- [ ] An `overheard` tail and NPC-to-NPC talk on their own (Hob and Mara trading lines when nobody is there) are still open.
+
 ## Directions from the design talks
 
 These were agreed in conversation on 2026-11-08 and are not built. Order of attack is at the end.
@@ -62,7 +89,7 @@ These were agreed in conversation on 2026-11-08 and are not built. Order of atta
 ### Canon and what is flexible
 
 - [x] (round 2, ferry world `POLICY`, read by the narrator per the skill) A policy on the world root: `fixed` (places, people, storyline beats, named facts), `fill` (props of daily life the narrator may spawn on request), `voice` (whether NPC minds may speak beyond their dialog table). The player's preference picks within what the world allows, never past it.
-- [x] (round 2, convention in the skill; `find(state={"improvised": true})` lists them) Everything improvised is tagged `improvised: true` with the narrator as actor in the event. One query lists a session's improvisations so the author can promote them into the world file or drop them.
+- [x] (round 2, convention in the skill; `find(state={"improvised": true})` lists them; round 3 dropped the actor stamp, the tag is the provenance) Everything improvised is tagged `improvised: true`. One query lists a session's improvisations so the author can promote them into the world file or drop them.
 
 ### Roles in the skill
 
@@ -110,7 +137,8 @@ Direction from Nate on 2026-11-08, after the second round shipped: a hosted embo
 ## Order of attack
 
 1. (done, round 2) Fix pass, minds in the engine, roles in the skill, canon policy, many principals, forks.
-2. Second playtest on the forked ferry world with turn-based play and a subagent mind for Mara. New gaps go under "Found in play".
+2. (done, round 2) Second playtest on the forked ferry world with turn-based play and a subagent mind for Mara.
+2b. (done, round 3) Fix pass from the second playtest: the leak, goals and `recall` for minds, ambient facts, timers, the ferry world on facts with the Reeds route, night and dawn. Third playtest on `ferry-at-dusk-3` with a mind playing the Traveler and the narrator as Hob.
 3. The lint for names in prose that match no entity; an engine default duration per verb; the `overheard` tail.
 4. Workspace split (`embody init`, sample worlds inside the package), then the release.
 5. Hosted, many players: grants and claims in the engine, the network transport and `wait` over it, then the client without an agent, accounts and rosters, and the security audit before anything is public.

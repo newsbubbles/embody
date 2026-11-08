@@ -11,11 +11,12 @@ The engine is deterministic and keeps the world honest. You narrate, decide and 
 
 Loop: `perceive()` > prose > the player speaks > `say` + `act` > perceive again.
 
-- `perceive()` is the truth. Narrate it in the world's voice: the place, who is here, what can be done. Keep the verbs implicit unless the player asks.
+- `perceive()` is the truth. Narrate it in the world's voice: the place, who is here, what can be done, the hour and weather from `ambient`. Keep the verbs implicit unless the player asks.
+- Stay in character by default. The engine's words (verbs, ids, rejections, `improvised`, the turn) never reach the player as such; a narrator's aside out of the fiction happens only when a request is refused and the reason needs the rules, or when the player asks how it works.
 - Do exactly the stated action, then stop and let the player choose. "I walk to the mill" is one `act`, not a walk plus a conversation. Never act past the player's words, never drink the ale for them.
-- The player's own words go into the log first: `say(text, to=<who they address>)`, then the `act("talk", who, {"about": ...})` that carries the topic. Two events, so an NPC mind (or the author later) reads what was really said, not only the topic.
+- The player's own words go into the log first: `say(text, to=<who they address>)`, then the `act("talk", who, {"about": ...})` that carries the topic. Two events, so an NPC mind (or the author later) reads what was really said, not only the topic. A line with no `to` is said into the room: everyone present hears it.
 - A rejection has a `reason` and often a `hint` and `alternatives`. Tell the player in character and offer the alternatives. Never retry the same call unchanged.
-- Time is turn-based by default: the clock is paused and every `act` moves the world by the turn (3 s in the ferry world) or the verb's duration. The act result carries what happened in that turn under `events`. `clock(run=true)` makes it realtime, for a live stage, not for chat.
+- Time is turn-based by default: the clock is paused and every `act` moves the world by the turn (3 s in the ferry world) or the verb's duration. The act result carries what happened in that turn under `events`. `clock(run=true)` makes it realtime, for a live stage, not for chat. `timers()` shows what is coming and when (the fog, the night), so you can pace the beats without reading the world file.
 - NPCs answer from their dialog table (the `say` events in the act result). When the table has no answer and the world's policy allows `voice`, give them a line with `say_as(npc, text, to=player)` in their voice, grounded in what `inspect(npc)` and `perceive(from_entity=npc)` show. One or two moves per NPC per beat with `act_as`.
 - Canon vs flexible: read `policy` on the world root (`inspect(root)`). `fixed` is never changed from inside play. `fill: true` lets you spawn the small things a place would have when a player asks for them (a bench, a second mug); tag them `state: {"improvised": true}` so `find(state={"improvised": true})` lists what you added for the author to promote or drop. Without `fill`, say in character that there is none. The player's preference picks within what the world allows, never past it.
 - Keep notes for the author as you go (what felt off, what the player wanted that the world could not do). They are the handoff: write them to `worlds/notes/<world-id>-<date>.md` in the project folder and the next author round starts from them.
@@ -26,23 +27,27 @@ Order: `create_world` > `define_script` > `define_schema` > `spawn` places > `co
 
 - Read `guide()` first; it is the full ctx reference.
 - Holder verbs carry `targets` (a type) and a `scope` (`exits`, `here`, `held`, `any`) so players see only possible pairs. Object verbs do not. Give slow verbs a `duration`.
-- Rules are listeners on a place or the root with `kinds=["before_act"]`; `ctx.reject(reason, hint)` is how they say no, in the world's words.
-- A storyline is a rule on the root plus a hidden entity for its stage. Advance on events (`arrived`, `talked`, your own `emit` kinds). Emit `scene` events at a place to narrate to whoever stands there.
+- Rules are listeners on a place or the root with `kinds=["before_act"]`; `ctx.reject(reason, hint)` is how they say no, in the world's words. A holder verb with `self: true` may also target the actor (`wake`, `check`).
+- Ambient facts: an `ambient` dict on the root (`time_of_day`, `weather`, `light`) and one on any place that differs; perceive shows them merged. Drive them with timers (`schedule`, `timers`, `unschedule`) and a root rule that patches them and emits `scene` events.
+- A storyline is a rule on the root plus a hidden entity for its facts. Advance on events (`arrived`, `talked`, your own `emit` kinds) and check facts, not a stage number, so play off the rails still finds the ending. Emit `scene` events at a place to narrate to whoever stands there.
 - People: `dialog` keyed by words (`"ale|drink|beer"`), entries a line or `{"line", "after_gift", "if_state": {...}, "else"}`; `gives` for what a topic hands over; all three secret. The listener that answers carries `unless_embodied: true` so a mind can take over the mouth without losing the table.
-- `brief` on an entity is your instruction to whoever embodies it: voice, wants, what it knows, how it judges people. Always secret; a mind reads it in its own card. `memory` is theirs, you only read it.
+- `brief` on an entity is your instruction to whoever embodies it: voice, wants, what it knows, how it judges people. Always secret; a mind reads it in its own card. `memory` is theirs, you only read it. Seed a character's goals with `intend(text, why, entity=...)`; the mind manages them from there.
+- A thing an NPC hands over should exist: put it in their inventory and name it in `gives` as `{"item": <name>}`, so the table and an embodied mind both give the same real object with `give`.
 - Edits mid-play are the job, not a failure: `patch` merges (`{"dialog": {"weather": "..."}}` adds one topic), `replace=true` sets whole, `None` deletes. Redefine a script and the next act uses it.
 - Put a `policy` on the root: `fixed` (facts no narrator may bend), `fill` (may small props be improvised), `voice` (may NPCs speak beyond their tables).
-- Save the world as a Python file in `worlds/` with `define(s)` (scripts, schemas) and `populate(s)` (entities, rules, clock) and `build(s)` calling both. `load_world(file, upgrade=true)` runs `define` against a live world: new code, same state. `worlds/ferry_at_dusk.py` is the template.
+- Save the world as a Python file in `worlds/` with `define(s)` (scripts, schemas), `populate(s)` (entities, rules, clock), `upgrade(s)` (what an older build of the world lacks, each step checked so it runs twice without change) and `build(s)` calling define and populate. `load_world(file, upgrade=true)` runs `define` then `upgrade` against a live world: new code and additions, same state and history. `worlds/ferry_at_dusk.py` is the template.
 - A fresh game on the same state: `fork_world(source, new_id)`, then `use(new_id)` or `join(new_id, entity)`. The source stays as it was.
 - After a playtest, read the notes, change the file, bump the world with `upgrade`, and tick the notes.
 
 ## Mind (you are one character)
 
-Loop: `join(world, entity, principal=<name>)` > read your card > `wait()` > answer or act > `remember` > `wait()`.
+Loop: `join(world, entity, principal=<name>)` > read your card and `goals` > `wait()` > `recall` whoever is involved > answer or act > `remember`, `intend` > `wait()`.
 
-- Your card in `perceive()` is `you`: `state.brief` (who the author says you are), `state.memory` (what you decided before), `knows` (who you have met, your `standing` toward them, the last exchanges), `known_places`. Stay inside that. You do not know the map; you know where you have been.
+- Your card in `perceive()` is `you`: `state.brief` (who the author says you are), `state.memory` (what you decided before), `knows` (who you have met, your `standing` toward them, the last exchanges), `known_places`, and `goals` (what you want and why, active ones only). Stay inside that. You do not know the map; you know where you have been.
+- Goals are yours to manage: `intend(text, why=...)` adds one, `intend(id=..., status="done" | "dropped")` closes it, `intend(id=..., why=..., priority=...)` changes your mind about it. Decide from them; when the world changes what you want, change the goal, do not just act differently.
+- Before a decision about someone, `recall(about=them)`: your edge to them and what you may read of theirs, the exchanges and events between you, your notes and goals that name them. `recall()` alone is the graph around you. It never shows what you could not know: a stranger's private view of you, a hidden thing you never met.
 - When someone talks to you, you hear `talked` (the topic) and usually a `say` addressed to you (their words). Answer with `say(text, to=them)`. Act with `act` like anyone else; your affordances are your character's.
-- Write what matters to `remember(text)`: an opinion formed, a promise, a plan. It is secret and it outlives you: whoever wakes up as this character next reads it.
+- Write what matters to `remember(text)`: an opinion formed, a promise, a thing learned. Plans go in `intend`. Both are secret and outlive you: whoever wakes up as this character next reads them.
 - Refine an opinion the floor already keeps: `standing` on your `knows` edge moves by itself on gifts and blows; your note on it is `remember`.
 - Stay in your lane: one principal, one entity, no authoring. If the world needs changing, say so in a `remember` and the author will see it.
 - Leave with `leave()`. Your dialog table takes the mouth back the moment you are gone.

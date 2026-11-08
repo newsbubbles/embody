@@ -203,6 +203,31 @@ def build_server(session: Session, db: Path, engine: Engine | None = None):
         return S(principal).remember(text, entity=entity)
 
     @tool()
+    @_wrap
+    def intend(text: str | None = None, why: str | None = None, id: str | None = None, status: str | None = None,
+               priority: int | None = None, entity: str | None = None, principal: str | None = None) -> dict[str, Any]:
+        """Track your character's goals, kept secret by the engine. New: intend(text, why=<the motivation>).
+        Change one: intend(id=..., status='done'|'dropped'|'active', text=..., why=..., priority=...). Active goals
+        come back in every perceive under `goals`. Authors may pass entity=<id or name>."""
+        return S(principal).intend(text=text, why=why, id=id, status=status, priority=priority, entity=entity)
+
+    @tool()
+    @_wrap
+    def recall(about: str | None = None, relation: str | None = None, limit: int = 20, entity: str | None = None,
+               principal: str | None = None) -> dict[str, Any]:
+        """Graph query from your character's point of view, within what it may know. recall(): everyone linked to
+        you (edges with the data you may read, groups, goals, known places). recall(about=<id or name>): all you
+        know about one entity: your edge to them, your exchanges, what passed between you, the notes and goals
+        that name them. What others think of you stays theirs. Authors see everything and may pass entity=."""
+        return S(principal).recall(about=about, relation=relation, limit=limit, entity=entity)
+
+    @tool()
+    @_wrap
+    def timers() -> list[dict[str, Any]]:
+        """What is scheduled and when: each pending timer with its kind, entity, world time and seconds to go."""
+        return s.timers()
+
+    @tool()
     async def wait(timeout: float = 30.0, kinds: list[str] | None = None, principal: str | None = None) -> dict[str, Any]:
         """Block until an event touches you or your place (or the timeout, max 120 s), then perceive. A mind loops on this."""
         import anyio
@@ -327,6 +352,12 @@ def build_server(session: Session, db: Path, engine: Engine | None = None):
                  every: float | None = None) -> dict[str, Any]:
         """(author) An event in the future (world seconds), once or repeating."""
         return s.schedule(after, kind, entity=entity, payload=payload, every=every)
+
+    @tool()
+    @_wrap
+    def unschedule(id: str) -> dict[str, Any]:
+        """(author) Cancel a pending timer by the id timers() shows."""
+        return s.unschedule(id)
 
     @tool()
     @_wrap

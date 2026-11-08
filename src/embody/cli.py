@@ -206,8 +206,9 @@ def load_world_file(session: Session, path: Path, upgrade: bool = False) -> dict
     """A world file is a Python module with `build(session)`. It runs with the author's session.
 
     A file may split build into `define(session)` (scripts and schemas) and `populate(session)` (entities).
-    With upgrade=True only `define` runs, against the world the session points at: the code is renewed,
-    the state and history stay. That is how a forked world picks up engine and world-file changes."""
+    With upgrade=True `define` runs against the world the session points at, then `upgrade(session)` if the
+    file has one (idempotent additions: a new place, a prop, a timer, ambient facts). The code is renewed, the
+    state and history stay. That is how a forked world picks up engine and world-file changes."""
     spec = importlib.util.spec_from_file_location(f"embody_world_{path.stem}", path)
     if spec is None or spec.loader is None:
         raise Rejected(f"cannot load {path}")
@@ -220,6 +221,8 @@ def load_world_file(session: Session, path: Path, upgrade: bool = False) -> dict
         if not session.world_id:
             raise Rejected("point the session at the world to upgrade first", hint="use(world_id)")
         mod.define(session)
+        if hasattr(mod, "upgrade"):
+            mod.upgrade(session)
         r = session.summary()
         r["upgraded"] = True
         return r

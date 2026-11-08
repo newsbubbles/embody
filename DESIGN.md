@@ -95,6 +95,8 @@ Embodied:
 | `act_many([...])` | ordered batch, stops at first rejection with the partial result |
 | `say(text, reach?, to?)` | words; `to` addresses one entity so the line is in both logs |
 | `remember(text)` | a note into my entity's secret `memory`; the next mind in this body reads it |
+| `intend(text, why, id, status, priority)` | my entity's secret `goals`: add one with its motivation, or change one's status (`active`, `done`, `dropped`), reason or priority. Every perceive shows the active ones |
+| `recall(about?, relation?)` | the graph around me within my permissions: my edges (the data of an edge is mine to read when it starts at me, is world structure or is flagged public), my groups, goals, known places; with `about`, one entity's card as I may see it, our edges, the exchanges and events between us, my notes and goals that name them |
 | `wait(filter?, timeout)` | block until an event touches my bubble path |
 | `history(filter, window)` | paged event log |
 | `find(query)` | structured graph query, never vector search |
@@ -108,17 +110,22 @@ Author (needs the `author` capability):
 | `link`, `unlink`, `relate` | edges and hyperedges |
 | `set_rule` | attach a listener to an entity |
 | `clock(run \| pause \| step \| rate \| turn)` | world time; `turn` makes every embodied act move the paused world by n seconds |
+| `schedule`, `timers`, `unschedule` | an event in the future, what is pending and when, cancel one |
 | `act_as`, `say_as` | drive any entity without embodying it: the game master's NPC beat |
 | `fork_world(source, id)` | a fresh game on the same state: copy with history, nobody embodied, source untouched |
 | `mirror()` | regenerate the markdown projection |
 
-Observer: `perceive` from any entity, `history`, `find`, no mutation.
+Observer: `perceive` and `recall` from any entity, `history`, `find`, no mutation.
+
+Author ops carry no entity as actor, even while the same principal embodies someone: a `spawn` or `patch` by the game master is the world's doing, not the Traveler's, so it never lands in the player's own feed as theirs. What an author improvises is tagged on the entity (`improvised: true`); the tag is the provenance. Every feed is filtered per viewer: an entity's `remembered` and `intended` events reach only its own mind and authors, and a `patched` event on someone else shows only the public keys.
 
 Error shape, every time: why it failed, what is true instead, what would make it possible. "`go(hall_b)` rejected: no path from hall_a. `open(door_7)` is available to you and would connect them."
 
+The bundle also carries `clock` (running, rate, turn) and `ambient`, the world root's ambient facts (time of day, weather, light) overlaid by the place's own, so a narrator or mind never guesses the hour.
+
 The `perceive` bundle is the NPC subagent's entire context. Paired with `wait`, an NPC costs nothing while nothing happens near it, and wakes with the diff.
 
-A mind lives in the engine, not in an agent's context. The entity carries the author's `brief` and its own `memory` (always secret), `knows` edges to whoever it has met (a deterministic opinion floor nudges `standing` on gifts and blows; the last exchanges come from the log) and `known_places` from its own moves. Any agent that wakes up as Mara gets the same Mara. A dialog table is the floor: its listener carries `unless_embodied`, so an embodied mind takes the mouth and the table returns when it leaves.
+A mind lives in the engine, not in an agent's context. The entity carries the author's `brief` and its own `memory` (always secret), `knows` edges to whoever it has met (a deterministic opinion floor nudges `standing` on gifts and blows; the last exchanges come from the log), `known_places` from its own moves, and its own `goals` with their motivations, managed through `intend` and shown in every perceive so a mind decides from what it wants. `recall` is the mind's graph query: relationships, groups, notes and goals around one person, within what that mind may know. Any agent that wakes up as Mara gets the same Mara. A dialog table is the floor: its listener carries `unless_embodied`, so an embodied mind takes the mouth and the table returns when it leaves.
 
 One server connection speaks for many principals: the playing ops take a `principal` name, and an extra principal never gets the author capability. A subagent in the same session can therefore embody an NPC properly instead of sharing the narrator's body.
 
