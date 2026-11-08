@@ -10,3 +10,5 @@ worlds/*/mirror/
 worlds/mirror/
 .embody.json
 .claude/settings.local.json
+worlds/*.db-shm
+worlds/*.db-wal
