@@ -166,6 +166,18 @@ class RandView(ScriptObject):
         return self._r.random() < p
 
 
+def _deep_merge(base: dict[str, Any], top: dict[str, Any]) -> dict[str, Any]:
+    out = dict(base)
+    for k, v in top.items():
+        if v is None:
+            out.pop(k, None)
+        elif isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
 def _ev(world: "World", x: Any) -> Any:
     """Normalize an entity reference from a script to an id string."""
     if isinstance(x, EntityView):
@@ -299,10 +311,10 @@ class Ctx(ScriptObject):
         return self._w.emit(kind, actor=self._actor, target=tgt, reach=reach, payload=p,
                             caused_by=self._caused_by)["seq"]
 
-    def say(self, text: str, reach: int = 1) -> int:
+    def say(self, text: str, reach: int = 1, to: Any = None) -> int:
         who = self._owner or self._actor
-        return self._w.emit("say", actor=who, target=who, reach=reach, payload={"text": str(text)},
-                            caused_by=self._caused_by)["seq"]
+        return self._w.say(who, text, reach=reach, to=_ev(self._w, to) if to is not None else None,
+                           caused_by=self._caused_by)["seq"]
 
     def schedule(self, after: float, kind: str, target: Any = None, payload: dict[str, Any] | None = None,
                  every: float | None = None, **kw: Any) -> str:
@@ -691,7 +703,10 @@ class World:
                           caused_by=caused_by, log=False)
         return eid
 
-    def patch(self, id: str, changes: dict[str, Any], actor: str | None = None, caused_by: int | None = None) -> None:
+    def patch(self, id: str, changes: dict[str, Any], actor: str | None = None, caused_by: int | None = None,
+              replace: bool = False) -> None:
+        """Change state keys. A dict value merges into an existing dict (one new dialog topic does not
+        resend the others); replace=True sets the key whole. A value of None deletes the key."""
         e = self.need(id)
         if not changes:
             return
@@ -699,10 +714,16 @@ class World:
             if str(k).startswith("_"):
                 raise Rejected(f"state key {k!r} is private")
         before = {k: e["state"].get(k) for k in changes}
-        e["state"].update(changes)
+        for k, v in changes.items():
+            if v is None:
+                e["state"].pop(k, None)
+            elif not replace and isinstance(v, dict) and isinstance(e["state"].get(k), dict):
+                e["state"][k] = _deep_merge(e["state"][k], v)
+            else:
+                e["state"][k] = v
         self._touch(e)
         self.emit("patched", actor=actor, target=id, reach=1, caused_by=caused_by,
-                  payload={"changes": changes, "before": before})
+                  payload={"changes": changes, "before": before, "replace": replace})
 
     def _touch(self, e: dict[str, Any]) -> None:
         e["version"] += 1
@@ -729,12 +750,13 @@ class World:
         e = self.need(id)
         if id == self.root_id:
             raise Rejected("cannot destroy the world root")
+        # Logged first, while the entity still has a place in the tree, so the event's path reaches its container.
+        self.emit("destroyed", actor=actor, target=id, reach=1, caused_by=caused_by,
+                  payload={"entity": id, "type": e["type"], "name": e["name"], "parent": e["parent_id"]})
         for cid in reversed(self.subtree_ids(id)):
             self.store.execute("DELETE FROM edge WHERE world_id=? AND (source=? OR target=?)", (self.id, cid, cid))
             self.store.execute("DELETE FROM scheduled WHERE world_id=? AND entity_id=?", (self.id, cid))
             self.store.delete("entity", self.id, cid)
-        self.emit("destroyed", actor=actor, target=e["parent_id"], reach=1, caused_by=caused_by,
-                  payload={"entity": id, "type": e["type"], "name": e["name"]})
 
     def link(self, source: str, target: str, relation: str, data: dict[str, Any] | None = None,
              actor: str | None = None, caused_by: int | None = None) -> str:
@@ -825,6 +847,8 @@ class World:
         self.store.put("event", ev)
         if kind not in _SILENT_KINDS:
             self._dispatch(ev)
+            if kind in self._OPINION and self._row["meta"].get("opinion_floor", True):
+                self._opinion_floor(ev)
         return ev
 
     def _listeners_for(self, entity_id: str) -> list[dict[str, Any]]:
@@ -844,6 +868,8 @@ class World:
                 kinds = lst.get("kinds") or []
                 if kinds and ev["kind"] not in kinds:
                     continue
+                if lst.get("unless_embodied") and self.embodied(node):
+                    continue  # the table is the floor; an embodied mind answers instead
                 s = self.script(lst["script"])
                 fn = lst.get("fn", "on")
                 if not s.has(fn):
@@ -1022,6 +1048,7 @@ class World:
             raise
         evs = self.events(since=start_seq, limit=500)
         return {"ok": True, "verb": verb, "target": target_id, "result": result,
+                "duration": float(adef.get("duration", 0) or 0),
                 "events": [_public_event(e) for e in evs if e["kind"] not in _INTERNAL_KINDS], "logs": logs}
 
     def affordances(self, actor_id: str, target_id: str | None = None) -> list[dict[str, Any]]:
@@ -1053,13 +1080,24 @@ class World:
         # Verbs the actor carries. One with `targets` (a type) pairs with every reachable entity of that type;
         # one without is the actor's own (rest, shout, look).
         actor_verbs = self.schema_actions(actor["type"])
+        here = actor["parent_id"]
+        held = {c["id"] for c in self.children(actor_id)}
+        exits = set(self.neighbors(here, "connects_to")) if here else set()
         for verb, adef in actor_verbs.items():
             tt = adef.get("targets")
             if tt is None:
                 add(verb, adef, None)
                 continue
+            scope = adef.get("scope", "any")
             for cid in candidates:
                 if cid == actor_id and adef.get("reach") != "self":
+                    continue
+                # scope keeps the impossible pairs out of the list: drop what you do not hold, go where you stand
+                if scope == "held" and cid not in held:
+                    continue
+                if scope == "here" and (cid in held or cid == here or cid in exits):
+                    continue
+                if scope == "exits" and cid not in exits:
                     continue
                 ent = self.get(cid)
                 if ent and (tt == "any" or self.is_a(ent["type"], tt)):
@@ -1177,6 +1215,18 @@ class World:
         return {"t": self.t, "running": bool(self._row["clock_running"]), "rate": float(self._row["clock_rate"]),
                 "pending": self.store.count("scheduled", "world_id=?", (self.id,))}
 
+    def say(self, who: str, text: str, reach: int = 1, to: str | None = None,
+            caused_by: int | None = None) -> dict[str, Any]:
+        """Speech. Addressed speech targets the listener so it shows in both their logs; the room still hears it."""
+        self.need(who)
+        payload: dict[str, Any] = {"text": str(text)}
+        target = who
+        if to:
+            self.need(to)
+            payload["to"] = to
+            target = to
+        return self.emit("say", actor=who, target=target, reach=reach, payload=payload, caused_by=caused_by)
+
     # ---- principals -----------------------------------------------------------
 
     def join(self, principal_id: str, entity_id: str, kind: str = "agent", name: str = "",
@@ -1187,12 +1237,14 @@ class World:
             raise Rejected(f"{entity_id} is already embodied by {other['id']}",
                            hint="pick another entity, or spawn one with author capability")
         old = self.store.get("principal", self.id, principal_id)
+        ecur = self.entity_cursor(entity_id)
         row = {"world_id": self.id, "id": principal_id, "kind": kind, "name": name or principal_id,
                "capabilities": capabilities if capabilities is not None else (old["capabilities"] if old else []),
-               "entity_id": entity_id, "cursor_seq": old["cursor_seq"] if old else self.store.next_seq(self.id) - 1}
+               "entity_id": entity_id,
+               "cursor_seq": ecur if ecur is not None else (old["cursor_seq"] if old else self.store.next_seq(self.id) - 1)}
         self.store.put("principal", row)
         self.emit("embodied", actor=entity_id, target=entity_id, reach=1,
-                  payload={"principal": principal_id, "kind": kind})
+                  payload={"principal": principal_id, "as": kind})
         return row
 
     def leave(self, principal_id: str) -> None:
@@ -1221,6 +1273,94 @@ class World:
         if p:
             p["cursor_seq"] = seq
             self.store.put("principal", p)
+            if p.get("entity_id"):
+                self.set_entity_cursor(p["entity_id"], seq)
+
+    def entity_cursor(self, entity_id: str) -> int | None:
+        """Where this entity last looked. Its own, whoever is driving it."""
+        v = self._row["meta"].get("cursors", {}).get(entity_id)
+        return int(v) if v is not None else None
+
+    def set_entity_cursor(self, entity_id: str, seq: int) -> None:
+        self._row["meta"].setdefault("cursors", {})[entity_id] = int(seq)
+        self._save_row()
+
+    def meta(self) -> dict[str, Any]:
+        return dict(self._row["meta"])
+
+    def set_meta(self, changes: dict[str, Any]) -> dict[str, Any]:
+        for k, v in changes.items():
+            if v is None:
+                self._row["meta"].pop(k, None)
+            else:
+                self._row["meta"][k] = v
+        self._save_row()
+        return self.meta()
+
+    # ---- minds -------------------------------------------------------------------
+
+    def remember(self, entity_id: str, text: str, actor: str | None = None) -> dict[str, Any]:
+        """Append to the entity's secret memory. Whoever embodies it next reads the same notes."""
+        e = self.need(entity_id)
+        note = {"t": self.t, "seq": self.store.next_seq(self.id), "text": str(text)}
+        mem = list(e["state"].get("memory") or [])
+        mem.append(note)
+        e["state"]["memory"] = mem
+        self._touch(e)
+        self.emit("remembered", actor=actor or entity_id, target=entity_id, reach=0, payload={"text": str(text)})
+        return note
+
+    def exchanges(self, a: str, b: str, limit: int = 5) -> list[dict[str, Any]]:
+        """The last spoken exchanges between two entities, from the log. Newest last."""
+        rows = self.store.query(
+            "event",
+            "world_id=? AND kind IN ('say','talked') AND ((actor_id=? AND target_id=?) OR (actor_id=? AND target_id=?))",
+            (self.id, a, b, b, a), order="seq DESC", limit=limit)
+        return [_public_event(r) for r in reversed(rows)]
+
+    def known_places(self, entity_id: str) -> list[str]:
+        """Places this entity has arrived at, from its own moved events, plus where it stands."""
+        rows = self.store.query("event", "world_id=? AND kind='moved' AND target_id=?", (self.id, entity_id),
+                                order="seq")
+        out: list[str] = []
+        for r in rows:
+            to = r["payload"].get("to")
+            if to and to not in out and self.get(to):
+                out.append(to)
+        e = self.get(entity_id)
+        if e and e["parent_id"] and e["parent_id"] not in out:
+            out.append(e["parent_id"])
+        return out
+
+    _OPINION = {"given": 2, "hit": -3, "attacked": -3, "talked": 0, "say": 0}
+
+    def _opinion_floor(self, ev: dict[str, Any]) -> None:
+        """A deterministic floor under relationships: meeting makes a `knows` edge both ways, gifts and blows
+        move `standing` on the receiver's side. A mind refines the edge data; the engine never speaks."""
+        kind = ev["kind"]
+        actor, target = ev["actor_id"], ev["target_id"]
+        if kind == "say":
+            target = ev["payload"].get("to")
+        if not actor or not target or actor == target:
+            return
+        a, b = self.get(actor), self.get(target)
+        if not a or not b or not self.is_a(a["type"], "creature") or not self.is_a(b["type"], "creature"):
+            return
+        delta = self._OPINION[kind]
+        for src, dst, d in ((target, actor, delta), (actor, target, 0)):
+            ex = next((x for x in self.edges(src, "knows", "out") if x["target"] == dst), None)
+            if ex is None:
+                ex = {"world_id": self.id, "id": self._next_id("g"), "source": src, "target": dst, "relation": "knows",
+                      "data": {"standing": 0, "met_t": self.t, "count": 0}}
+            data = dict(ex["data"])
+            data["standing"] = int(data.get("standing", 0)) + d
+            data["count"] = int(data.get("count", 0)) + 1
+            data["last_t"] = self.t
+            data["last_kind"] = kind
+            ex["data"] = data
+            self.store.put("edge", ex)
+        self.emit("opinion", actor=actor, target=target, reach=0, caused_by=ev["seq"],
+                  payload={"kind": kind, "delta": delta})
 
     # ---- integrity -------------------------------------------------------------
 
@@ -1229,7 +1369,8 @@ class World:
         h = hashlib.sha256()
         for table in ("entity", "edge", "hyperedge", "scheduled"):
             for row in self.store.query(table, "world_id=?", (self.id,), order="id"):
-                row = {k: v for k, v in row.items() if k not in ("created_seq", "updated_seq")}
+                # world_id left out so a fork hashes equal to its source
+                row = {k: v for k, v in row.items() if k not in ("created_seq", "updated_seq", "world_id")}
                 h.update(json.dumps(row, sort_keys=True, default=str).encode())
         h.update(f"{self.t}".encode())
         return h.hexdigest()
@@ -1250,7 +1391,7 @@ class World:
 # Events that exist for the log, not for listeners.
 _SILENT_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "scheduled", "patched", "linked", "unlinked",
                            "related", "unrelated", "spawned", "destroyed", "left", "moved", "embodied", "released",
-                           "tick", "script_error", "finished"})
+                           "tick", "script_error", "finished", "opinion", "remembered"})
 # Events hidden from the public stream (perceive, act results). Primitive mutations stay in the log.
 _INTERNAL_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "scheduled", "tick"})
 

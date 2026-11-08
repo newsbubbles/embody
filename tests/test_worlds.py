@@ -57,8 +57,7 @@ def test_ferry_at_dusk_rails_complete():
         assert "fog" in rej.reason
     you.act_many([{"verb": "take", "target": "Post lantern"}, {"verb": "light", "target": "Post lantern"},
                   {"verb": "cross", "target": "Ferry raft"}])
-    assert you.perceive()["here"]["name"] == "The Landing"  # the crossing takes 12 s
-    gm.clock(step=13)
+    # turn-based: a 12 s verb is one 12 s turn, so the crossing has finished by the time the act returns
     after = you.perceive()
     assert after["here"]["name"] == "The Far Bank"
     assert any(p["name"] == "Old Tam" for p in after["present"])

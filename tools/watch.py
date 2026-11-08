@@ -38,13 +38,20 @@ class Reader:
         return c
 
     def worlds(self) -> list[dict]:
+        # newest first: a fork made a moment ago is what the watcher wants to see
         with self.conn() as c:
-            return [dict(r) for r in c.execute("SELECT id, name, t, clock_running, clock_rate FROM world ORDER BY id")]
+            out = []
+            for r in c.execute("SELECT id, name, t, clock_running, clock_rate, meta FROM world ORDER BY rowid DESC"):
+                meta = _loads(r["meta"]) or {}
+                out.append({"id": r["id"], "name": r["name"], "t": r["t"], "running": bool(r["clock_running"]),
+                            "rate": r["clock_rate"], "forked_from": meta.get("forked_from"),
+                            "turn": meta.get("turn_seconds")})
+            return out
 
     def state(self, world_id: str | None, since: int, limit: int) -> dict:
         with self.conn() as c:
             if not world_id:
-                row = c.execute("SELECT id FROM world ORDER BY id LIMIT 1").fetchone()
+                row = c.execute("SELECT id FROM world ORDER BY rowid DESC LIMIT 1").fetchone()
                 if row is None:
                     return {"ok": False, "reason": "no worlds in this database"}
                 world_id = row["id"]
@@ -74,8 +81,11 @@ class Reader:
                    for r in c.execute("SELECT * FROM event WHERE world_id=? AND seq>? ORDER BY seq DESC LIMIT ?",
                                       (world_id, since, limit))]
             schemas = {r["id"]: r["extends"] for r in c.execute("SELECT id, extends FROM schema WHERE world_id=?", (world_id,))}
+        meta = _loads(w["meta"]) or {}
         return {"ok": True, "world": {"id": w["id"], "name": w["name"], "root": w["root_id"], "t": w["t"],
-                                      "running": bool(w["clock_running"]), "rate": w["clock_rate"]},
+                                      "running": bool(w["clock_running"]), "rate": w["clock_rate"],
+                                      "turn": meta.get("turn_seconds"), "forked_from": meta.get("forked_from"),
+                                      "policy": None},
                 "entities": ents, "edges": edges, "hyperedges": hyper, "principals": prin, "scheduled": sched,
                 "schemas": schemas, "max_seq": maxseq, "events": list(reversed(evs))}
 

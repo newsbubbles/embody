@@ -202,13 +202,27 @@ def parse_params(items: list[str] | None) -> dict[str, Any]:
 # ---- world files -------------------------------------------------------------------
 
 
-def load_world_file(session: Session, path: Path) -> dict[str, Any]:
-    """A world file is a Python module with `build(session)`. It runs with the author's session."""
+def load_world_file(session: Session, path: Path, upgrade: bool = False) -> dict[str, Any]:
+    """A world file is a Python module with `build(session)`. It runs with the author's session.
+
+    A file may split build into `define(session)` (scripts and schemas) and `populate(session)` (entities).
+    With upgrade=True only `define` runs, against the world the session points at: the code is renewed,
+    the state and history stay. That is how a forked world picks up engine and world-file changes."""
     spec = importlib.util.spec_from_file_location(f"embody_world_{path.stem}", path)
     if spec is None or spec.loader is None:
         raise Rejected(f"cannot load {path}")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    if upgrade:
+        if not hasattr(mod, "define"):
+            raise Rejected(f"{path} has no define(session) function to upgrade with",
+                           hint="split build into define(s) for scripts and schemas and populate(s) for entities")
+        if not session.world_id:
+            raise Rejected("point the session at the world to upgrade first", hint="use(world_id)")
+        mod.define(session)
+        r = session.summary()
+        r["upgraded"] = True
+        return r
     if not hasattr(mod, "build"):
         raise Rejected(f"{path} has no build(session) function",
                        hint="def build(s): s.create_world(...); s.define_schema(...); s.spawn(...)")
@@ -236,6 +250,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--description", default="")
     c = sub.add_parser("load", help="run a world file's build(session) (author)")
     c.add_argument("file")
+    c.add_argument("--upgrade", action="store_true",
+                   help="run only define(session) against the current world: new code, same state")
     c = sub.add_parser("use", help="point at a world without embodying")
     c.add_argument("world_id")
     c = sub.add_parser("join", help="embody an entity")
@@ -303,8 +319,8 @@ def main(argv: list[str] | None = None) -> int:
             r = s.create_world(args.name, seed=args.seed, id=args.id, description=args.description)
             emit(args, r, f"created {r['id']} ({r['name']}), root {r['root']}")
         elif args.cmd == "load":
-            r = load_world_file(s, Path(args.file))
-            emit(args, r, f"loaded {s.world_id}: {json.dumps(r, default=str)[:400]}")
+            r = load_world_file(s, Path(args.file), upgrade=args.upgrade)
+            emit(args, r, f"{'upgraded' if args.upgrade else 'loaded'} {s.world_id}: {json.dumps(r, default=str)[:400]}")
         elif args.cmd == "use":
             emit(args, s.use(args.world_id))
         elif args.cmd == "join":

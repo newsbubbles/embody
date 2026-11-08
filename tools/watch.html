@@ -18,8 +18,14 @@ header { grid-column: 1 / span 2; display:flex; flex-wrap:wrap; align-items:cent
 header b { font-size:15px; } header .dim { color:var(--dim); }
 header .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); display:inline-block; margin-right:6px; }
 header .dot.run { background:var(--thing); box-shadow:0 0 8px var(--thing); }
-#graph { position:relative; overflow:auto; }
-svg { display:block; }
+#graph { position:relative; overflow:hidden; cursor:grab; }
+#graph.dragging { cursor:grabbing; }
+svg { display:block; width:100%; height:100%; }
+#zoom { position:absolute; right:10px; top:10px; display:flex; gap:4px; }
+#zoom button { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:3px 9px; font-size:12px; cursor:pointer; }
+#zoom button:hover { border-color:var(--dim); }
+header select { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:3px 6px; font-size:13px; }
+header .fork { color:var(--other); }
 aside { border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); border-bottom:1px solid var(--line); }
 #events { flex:1; overflow:auto; font-size:12px; font-family: ui-monospace, Consolas, monospace; }
@@ -49,13 +55,16 @@ aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; tex
 <body>
 <header>
   <b>embody watch</b>
-  <span id="wname" class="dim">connecting</span>
+  <select id="wsel" title="which world to watch"></select>
+  <span id="fork" class="fork"></span>
   <span><span id="dot" class="dot"></span><span id="clock"></span></span>
   <span class="dim" id="counts"></span>
   <span class="dim" id="sched"></span>
   <span class="dim" id="err"></span>
 </header>
-<div id="graph"><svg id="svg"></svg></div>
+<div id="graph"><svg id="svg"><g id="view"></g></svg>
+  <div id="zoom"><button id="zin" title="zoom in">+</button><button id="zout" title="zoom out">−</button><button id="zfit" title="fit the whole world (or double-click the graph)">fit</button></div>
+</div>
 <aside>
   <h3>events</h3>
   <div id="events"></div>
@@ -65,7 +74,40 @@ aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; tex
 <script>
 const BOX_W = 150, BOX_H = 44, GAP_X = 14, GAP_Y = 84, PAD = 24, TOP = 70;
 let lastSeq = -1, lastVersions = "", pinned = null, data = null, seenSeq = 0;
+let watching = location.hash ? location.hash.slice(1) : null, knownWorlds = "";
 const $ = id => document.getElementById(id);
+
+// ---- zoom and pan: one transform on the <g id="view">, kept across redraws, reset by fit
+const cam = { k: 1, x: 0, y: 0, fitted: false, w: 0, h: 0 };
+function applyCam() { $("view").setAttribute("transform", `translate(${cam.x},${cam.y}) scale(${cam.k})`); }
+function fit() {
+  const g = $("graph"), cw = g.clientWidth, ch = g.clientHeight;
+  if (!cam.w || !cam.h) return;
+  cam.k = Math.min(1.6, (cw - 16) / cam.w, (ch - 16) / cam.h);
+  cam.x = (cw - cam.w * cam.k) / 2; cam.y = (ch - cam.h * cam.k) / 2 + 8;
+  cam.fitted = true; applyCam();
+}
+function zoomAt(f, px, py) {
+  const k = Math.min(6, Math.max(0.08, cam.k * f));
+  cam.x = px - (px - cam.x) * (k / cam.k); cam.y = py - (py - cam.y) * (k / cam.k); cam.k = k;
+  cam.fitted = false; applyCam();
+}
+(function wire() {
+  const g = $("graph");
+  g.addEventListener("wheel", ev => { ev.preventDefault(); const r = g.getBoundingClientRect(); zoomAt(ev.deltaY < 0 ? 1.15 : 1 / 1.15, ev.clientX - r.left, ev.clientY - r.top); }, { passive: false });
+  let drag = null;
+  g.addEventListener("mousedown", ev => { if (ev.button !== 0) return; drag = { x: ev.clientX, y: ev.clientY, cx: cam.x, cy: cam.y, moved: false }; g.classList.add("dragging"); });
+  window.addEventListener("mousemove", ev => { if (!drag) return; const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true; cam.x = drag.cx + dx; cam.y = drag.cy + dy; cam.fitted = false; applyCam(); });
+  window.addEventListener("mouseup", () => { if (drag && drag.moved) suppressClick = true; drag = null; g.classList.remove("dragging"); });
+  g.addEventListener("dblclick", fit);
+  $("zin").onclick = () => zoomAt(1.3, g.clientWidth / 2, g.clientHeight / 2);
+  $("zout").onclick = () => zoomAt(1 / 1.3, g.clientWidth / 2, g.clientHeight / 2);
+  $("zfit").onclick = fit;
+  window.addEventListener("resize", () => { if (cam.fitted) fit(); });
+  $("wsel").onchange = () => { watching = $("wsel").value; location.hash = watching; lastSeq = -1; cam.fitted = false; cam.w = 0; pinned = null; poll(); };
+  window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (h && h !== watching) { watching = h; lastSeq = -1; cam.w = 0; poll(); } });
+})();
+let suppressClick = false;
 
 function kindOf(e, schemas) {
   let t = e.type, guard = 0;
@@ -106,11 +148,9 @@ function layout(d) {
 
 function render(d, changed) {
   const { pos, totalW, totalH } = layout(d);
-  const svg = $("svg");
-  const scale = Math.min(1, Math.max(0.45, ($("graph").clientWidth - 8) / totalW));
-  svg.setAttribute("viewBox", `0 0 ${totalW} ${totalH}`);
-  svg.setAttribute("width", Math.round(totalW * scale));
-  svg.setAttribute("height", Math.round(totalH * scale));
+  const svg = $("view");
+  const firstDraw = !cam.w;
+  cam.w = totalW; cam.h = totalH;
   const me = {}; d.principals.forEach(p => { if (p.entity) me[p.entity] = p; });
   let out = "";
   d.entities.forEach(e => {
@@ -157,7 +197,17 @@ function render(d, changed) {
     out += `<text class="lbl" x="${PAD}" y="${18 + i * 14}">${esc(h.relation)}: ${esc(h.participants.map(plain).join(", "))}</text>`;
   });
   svg.innerHTML = out;
-  svg.querySelectorAll(".node").forEach(n => n.addEventListener("click", () => { pinned = n.dataset.id; showDetail(); }));
+  svg.querySelectorAll(".node").forEach(n => n.addEventListener("click", () => { if (suppressClick) { suppressClick = false; return; } pinned = n.dataset.id; showDetail(); }));
+  if (firstDraw || cam.fitted) fit(); else applyCam();
+}
+
+async function refreshWorlds() {
+  const r = await fetch("/worlds.json"); const ws = await r.json();
+  const key = ws.map(w => w.id + ":" + w.name).join("|");
+  if (key === knownWorlds) return ws;
+  knownWorlds = key;
+  $("wsel").innerHTML = ws.map(w => `<option value="${esc(w.id)}">${esc(w.name)} (${esc(w.id)})${w.forked_from ? " ⑂" : ""}</option>`).join("");
+  return ws;
 }
 
 function showDetail() {
@@ -187,14 +237,19 @@ function renderEvents(d) {
 
 async function poll() {
   try {
-    const r = await fetch("/state.json?limit=80" + (location.hash ? "&world=" + location.hash.slice(1) : ""));
+    await refreshWorlds();
+    const want = watching;
+    const r = await fetch("/state.json?limit=80" + (want ? "&world=" + encodeURIComponent(want) : ""));
     const d = await r.json();
     if (!d.ok) { $("err").textContent = d.reason; return; }
+    if (watching !== want) return;              // the user switched worlds while this poll was in flight
     $("err").textContent = "";
     const versions = d.entities.map(e => e.id + ":" + e.version + ":" + e.parent).join(",");
     const w = d.world;
-    $("wname").textContent = w.name + " (" + w.id + ")";
-    $("clock").textContent = "t=" + w.t.toFixed(1) + (w.running ? " running x" + w.rate : " paused");
+    if (!want) { watching = w.id; }             // no pick yet: the server chose the newest world
+    if ($("wsel").value !== w.id) $("wsel").value = w.id;
+    $("fork").textContent = w.forked_from ? "forked from " + w.forked_from.world + " at t=" + Number(w.forked_from.t).toFixed(1) + " (seq " + w.forked_from.seq + ")" : "";
+    $("clock").textContent = "t=" + w.t.toFixed(1) + (w.running ? " running x" + w.rate : (" paused" + (w.turn ? " · turn " + w.turn + "s" : "")));
     $("dot").className = "dot" + (w.running ? " run" : "");
     $("counts").textContent = d.entities.length + " entities · " + d.edges.length + " edges · " + d.max_seq + " events · " + d.principals.length + (d.principals.length === 1 ? " principal" : " principals");
     $("sched").textContent = d.scheduled.length ? "next: " + d.scheduled.slice(0, 3).map(s => s.kind + "@" + s.t.toFixed(0)).join(", ") : "";

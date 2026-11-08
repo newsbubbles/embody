@@ -5,7 +5,7 @@ Scripts are the code side of an entity. They are written in a subset of Python a
 | component | functions | runs when |
 |---|---|---|
 | action | `check(ctx)` optional, `apply(ctx)` required, `finish(ctx)` optional | a principal calls `act(verb, target)` |
-| listener | `on(ctx, event)` (or the `fn` named in the schema) | an event bubbles past the entity that carries it |
+| listener | `on(ctx, event)` (or the `fn` named in the schema) | an event bubbles past the entity that carries it; with `unless_embodied: true`, only while no principal embodies that entity |
 | behavior | `tick(ctx)` | every `every` world seconds, while nobody embodies the entity |
 
 A script is stored once with `define_script(id, source)` and referenced from schemas:
@@ -22,7 +22,7 @@ define_schema("rat", extends="creature", behaviors=[{"script": "wander", "every"
 
 ## Holder verbs and object verbs
 
-An action with `targets` (a type name, or `"any"`) is the holder's own verb, done to something of that type: `go` targets a `place`, `take` a `thing`, `attack` a `creature`. An action without `targets` is done to the entity that carries it: `open` on a door, `read` on a sign. Perception pairs the first kind with every reachable entity of the right type and lists the second kind under the object. Other action keys: `doc`, `params` (documentation of expected params), `reach` (`near` default, `self`, or `any`), `range` (max distance in the container's space), `duration` (world seconds until `finish` runs), `hidden`.
+An action with `targets` (a type name, or `"any"`) is the holder's own verb, done to something of that type: `go` targets a `place`, `take` a `thing`, `attack` a `creature`. An action without `targets` is done to the entity that carries it: `open` on a door, `read` on a sign. Perception pairs the first kind with every reachable entity of the right type and lists the second kind under the object. Other action keys: `doc`, `params` (documentation of expected params), `reach` (`near` default, `self`, or `any`), `range` (max distance in the container's space), `duration` (world seconds until `finish` runs; in turn-based play also the length of that turn), `scope` on holder verbs (`exits`: only connected places, `here`: only what lies in the actor's place, `held`: only what the actor holds, `any`: the default), `hidden`. Scope keeps impossible pairs out of a player's affordances; the near misses keep their reasons.
 
 ## The language
 
@@ -57,7 +57,7 @@ Queries (ids or views both work as arguments):
 
 Mutations (each one is logged as an event):
 
-- `ctx.patch(x, {...})` or `view.state.key = value`
+- `ctx.patch(x, {...})` or `view.state.key = value`. A dict value merges into the existing dict (add one dialog topic without resending the rest), `None` deletes the key; the op-level `patch(..., replace=True)` sets whole
 - `ctx.spawn(type, parent, name="", state=None, pos=None)` returns the new view
 - `ctx.move(x, parent, pos=None)`, `ctx.set_pos(x, pos)`, `ctx.destroy(x)`
 - `ctx.link(a, b, relation, data=None)`, `ctx.unlink(a, b, relation)`
@@ -67,7 +67,7 @@ Mutations (each one is logged as an event):
 Events and time:
 
 - `ctx.emit(kind, target=None, reach=1, **payload)` a semantic event (`opened`, `hit`, `arrived`). reach 0 = the target only, 1 = its container hears it, -1 = all the way to the root
-- `ctx.say(text, reach=1)` speech from `ctx.self` (or the actor)
+- `ctx.say(text, reach=1, to=None)` speech from `ctx.self` (or the actor); `to` addresses one entity, so the line lands in both logs (the `say` event targets the listener, `payload.to` names them) and the room still hears it
 - `ctx.schedule(after, kind, target=None, payload=None, every=None)` an event later; listeners react to it
 - `ctx.log(msg)` text returned with the act result
 
@@ -79,7 +79,7 @@ Control:
 
 ## Events
 
-Primitive events the engine emits for you: `spawned`, `patched`, `moved`, `left`, `destroyed`, `linked`, `unlinked`, `related`, `unrelated`, `embodied`, `released`, `scheduled`, `finished`, `script_error`. Semantic ones around actions: `before_act` (listeners may reject), `act` (it happened), then whatever the script emits. In a listener, `event.kind`, `event.actor`, `event.target`, `event.payload`, `event.path`, `event.seq`, `event.t`. The actor and target on an event are ids (compare with `ctx.self.id`, or `ctx.get(event.target)` for the view); `ctx.actor` and `ctx.target` are views.
+Primitive events the engine emits for you: `spawned`, `patched`, `moved`, `left`, `destroyed` (target: the destroyed entity, emitted before it goes), `linked`, `unlinked`, `related`, `unrelated`, `embodied` (payload `principal`, `as`), `released`, `scheduled`, `finished`, `script_error`, `forked` (on the root of a copy). Speech is `say` (payload `text`, optional `to`). Silent ones that exist for the log and for minds, never for listeners: `remembered` (an entity wrote to its secret `memory`) and `opinion` (the opinion floor moved a `knows` edge: `given` +2, `hit` or `attacked` -3 on the receiver's standing toward the actor, `talked` and `say` only mark the meeting; switch it off with world meta `opinion_floor: false`). Semantic ones around actions: `before_act` (listeners may reject), `act` (it happened), then whatever the script emits. In a listener, `event.kind`, `event.actor`, `event.target`, `event.payload`, `event.path`, `event.seq`, `event.t`. The actor and target on an event are ids (compare with `ctx.self.id`, or `ctx.get(event.target)` for the view); `ctx.actor` and `ctx.target` are views.
 
 Listeners run along the bubble path only: the target, then its ancestors as far as `reach` allows. A listener on a place sees everything that happens inside it (events with reach >= 1). A listener on the world root sees everything with reach -1, which includes every `before_act`: that is how world rules work. A sibling hears nothing, so a watcher that must see the whole world is attached to the root with `set_rule`. `kinds` on the listener filters which events wake it.
 
@@ -96,6 +96,10 @@ def on(ctx, event):
 A door between two rooms: spawn the door in one room and connect the rooms `via` it. The door is reachable from both sides; `go` checks `state.open` of the `via` entity.
 
 A monster that acts on its own until a player embodies it: a behavior with `tick`. The engine skips ticks while the entity is embodied.
+
+A table as the floor and a mind on top: the listener that answers `talked` from a dialog table carries `unless_embodied: true`. While an agent embodies the person the table is silent and the agent hears the `talked` and the addressed `say`; when it leaves, the table answers again. State an author writes for the mind goes in `brief`; the mind's own notes go in `memory` through `remember`. Both are always secret.
+
+Whole-word dialog: split the topic into words and match each `|`-separated alias of a key against them, so `ale` matches "an ale, please" and not "a tale". Entries may be dicts: `{"line": ..., "after_gift": ..., "if_state": {"friend": None}, "else": ...}`. `worlds/ferry_at_dusk.py` has the script (`PERSON_ON`).
 
 A turn-based pocket: a place whose `before_act` listener rejects anyone but `state.order[state.turn]`, and whose `act` listener advances `state.turn`. Outside that place the world keeps running.
 

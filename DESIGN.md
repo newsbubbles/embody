@@ -93,6 +93,8 @@ Embodied:
 | `inspect(entity)` | one entity in full, as seen from here |
 | `act(verb, target?, params?)` | the only mutation. Returns the events it caused, or a forward error |
 | `act_many([...])` | ordered batch, stops at first rejection with the partial result |
+| `say(text, reach?, to?)` | words; `to` addresses one entity so the line is in both logs |
+| `remember(text)` | a note into my entity's secret `memory`; the next mind in this body reads it |
 | `wait(filter?, timeout)` | block until an event touches my bubble path |
 | `history(filter, window)` | paged event log |
 | `find(query)` | structured graph query, never vector search |
@@ -105,7 +107,9 @@ Author (needs the `author` capability):
 | `spawn`, `patch`, `destroy` | entities |
 | `link`, `unlink`, `relate` | edges and hyperedges |
 | `set_rule` | attach a listener to an entity |
-| `clock(run \| pause \| step \| rate)` | world time |
+| `clock(run \| pause \| step \| rate \| turn)` | world time; `turn` makes every embodied act move the paused world by n seconds |
+| `act_as`, `say_as` | drive any entity without embodying it: the game master's NPC beat |
+| `fork_world(source, id)` | a fresh game on the same state: copy with history, nobody embodied, source untouched |
 | `mirror()` | regenerate the markdown projection |
 
 Observer: `perceive` from any entity, `history`, `find`, no mutation.
@@ -113,6 +117,10 @@ Observer: `perceive` from any entity, `history`, `find`, no mutation.
 Error shape, every time: why it failed, what is true instead, what would make it possible. "`go(hall_b)` rejected: no path from hall_a. `open(door_7)` is available to you and would connect them."
 
 The `perceive` bundle is the NPC subagent's entire context. Paired with `wait`, an NPC costs nothing while nothing happens near it, and wakes with the diff.
+
+A mind lives in the engine, not in an agent's context. The entity carries the author's `brief` and its own `memory` (always secret), `knows` edges to whoever it has met (a deterministic opinion floor nudges `standing` on gifts and blows; the last exchanges come from the log) and `known_places` from its own moves. Any agent that wakes up as Mara gets the same Mara. A dialog table is the floor: its listener carries `unless_embodied`, so an embodied mind takes the mouth and the table returns when it leaves.
+
+One server connection speaks for many principals: the playing ops take a `principal` name, and an extra principal never gets the author capability. A subagent in the same session can therefore embody an NPC properly instead of sharing the narrator's body.
 
 Lazy world building: an entity can carry `state.fidelity = "sketch"`. When an embodied principal approaches a sketch, the engine emits `approach_sketch`. An author-privileged agent subscribed to it fills the place in before the player arrives. The engine only emits and stores.
 
