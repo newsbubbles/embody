@@ -21,8 +21,9 @@ OBSERVER = "observer"
 class Engine:
     """Owns a store and the worlds in it. One per process."""
 
-    def __init__(self, path: str | Path | None = None):
+    def __init__(self, path: str | Path | None = None, mirror_root: str | Path | None = None):
         self.store = Store(path)
+        self.mirror_root = Path(mirror_root) if mirror_root else (Path(path).parent / "mirror" if path else None)
         self._worlds: dict[str, World] = {}
         self._wall: dict[str, float] = {}
         self.now: Callable[[], float] = time.monotonic
@@ -462,6 +463,15 @@ class Session:
         self._tick()
         return self.world.summary()
 
+    def mirror(self, path: str | None = None) -> dict[str, Any]:
+        """Write the markdown projection of this world to a directory (default: beside the database)."""
+        from .mirror import Mirror
+        self._tick()
+        root = Path(path) if path else (self.engine.mirror_root / self.world.id if self.engine.mirror_root else None)
+        if root is None:
+            raise Rejected("no mirror directory", hint="pass path=... or open the engine with a database file")
+        return Mirror(self.world, root).write()
+
     def act_as(self, entity: str, verb: str, target: str | None = None,
                params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Author only: make any entity act. How a GM drives an NPC without embodying it."""
@@ -492,5 +502,5 @@ OPS = [
     "perceive", "inspect", "find", "history", "act", "act_many", "say", "wait",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate",
-    "set_rule", "clear_rule", "schedule", "clock", "summary", "act_as",
+    "set_rule", "clear_rule", "schedule", "clock", "summary", "mirror", "act_as",
 ]
