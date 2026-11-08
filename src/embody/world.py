@@ -179,7 +179,7 @@ class Ctx(ScriptObject):
     _script_attrs = (
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
-        "patch", "spawn", "move", "destroy", "link", "unlink", "relate", "unrelate",
+        "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
         "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule",
     )
 
@@ -265,6 +265,9 @@ class Ctx(ScriptObject):
 
     def move(self, id: Any, parent: Any, pos: Any = None) -> None:
         self._w.move(_ev(self._w, id), _ev(self._w, parent), pos=pos, actor=self._actor, caused_by=self._caused_by)
+
+    def set_pos(self, id: Any, pos: Any) -> None:
+        self._w.set_pos(_ev(self._w, id), pos, actor=self._actor, caused_by=self._caused_by)
 
     def destroy(self, id: Any) -> None:
         self._w.destroy(_ev(self._w, id), actor=self._actor, caused_by=self._caused_by)
@@ -616,6 +619,41 @@ class World:
             return sp
         return self.schema_space(e["type"])
 
+    def _place_in_space(self, container_id: str | None, pos: Any) -> list[float] | None:
+        """Validate a position against the container's space: right number of dims, inside bounds, on the grid."""
+        sp = self.space_of(container_id)
+        if pos is None:
+            if sp and sp.get("dims") and sp.get("origin") is not None:
+                return [float(x) for x in sp["origin"]]
+            return None
+        if not sp or not sp.get("dims"):
+            raise Rejected(f"{container_id} has no space; nothing in it has a position",
+                           hint='give the container state.space = {"dims": 2, "bounds": [10, 10], "grid": true}')
+        pos = [float(x) for x in pos]
+        dims = int(sp["dims"])
+        if len(pos) != dims:
+            raise Rejected(f"{container_id} has {dims} dimensions; got a position with {len(pos)}")
+        if sp.get("grid"):
+            if any(x != int(x) for x in pos):
+                raise Rejected(f"{container_id} is a grid; positions are whole numbers")
+        bounds = sp.get("bounds")
+        if bounds:
+            for i, (x, b) in enumerate(zip(pos, bounds)):
+                if x < 0 or x >= float(b):
+                    raise Rejected(f"position {pos} is outside {container_id} (axis {i} runs 0 to {b})",
+                                   hint="stay inside the bounds, or go to a connected place")
+        return pos
+
+    def set_pos(self, id: str, pos: Any, actor: str | None = None, caused_by: int | None = None) -> None:
+        """Move within the current container."""
+        e = self.need(id)
+        new = self._place_in_space(e["parent_id"], pos)
+        old = e["pos"]
+        e["pos"] = new
+        self._touch(e)
+        self.emit("moved", actor=actor, target=id, reach=1, caused_by=caused_by,
+                  payload={"from": e["parent_id"], "to": e["parent_id"], "from_pos": old, "to_pos": new})
+
     def distance(self, a: str, b: str) -> float | None:
         """Distance between two siblings in their parent's space. None if not comparable."""
         ea, eb = self.need(a), self.need(b)
@@ -640,8 +678,7 @@ class World:
             raise Rejected("only the world root has no parent", hint="pass the parent entity id")
         st = self.schema_defaults(type)
         st.update(state or {})
-        if pos is not None:
-            pos = [float(x) for x in pos]
+        pos = self._place_in_space(parent, pos)
         eid = id or self._next_id("e")
         seq = self.store.next_seq(self.id)
         self.store.put("entity", {"world_id": self.id, "id": eid, "type": type, "parent_id": parent, "name": name,
@@ -680,7 +717,7 @@ class World:
             raise Rejected("cannot move an entity into itself")
         old = e["parent_id"]
         e["parent_id"] = parent
-        e["pos"] = [float(x) for x in pos] if pos is not None else None
+        e["pos"] = self._place_in_space(parent, pos)
         self._touch(e)
         # Two events: the old room sees a departure, the new one an arrival.
         self.emit("left", actor=actor, target=old, reach=0, caused_by=caused_by,
@@ -924,6 +961,16 @@ class World:
         s = self.script(adef["script"])
         if not s.has("apply"):
             raise Rejected(f"script {adef['script']!r} has no apply(ctx)", hint="actions need def apply(ctx)")
+        # Rules: before_act bubbles all the way up so world rules see it; a local rule may stop() or reject it.
+        payload = {"verb": verb, "params": dict(params or {}), "owner": owner}
+        if dry:
+            tgt = target_id or actor_id
+            ev = {"world_id": self.id, "seq": self.store.next_seq(self.id), "t": self.t, "kind": "before_act",
+                  "actor_id": actor_id, "target_id": tgt, "reach": -1, "payload": payload, "caused_by": None,
+                  "path": [tgt] + self.ancestors(tgt)}
+        else:
+            ev = self.emit("before_act", actor=actor_id, target=target_id or actor_id, reach=-1, payload=payload)
+        self._dispatch(ev, actor=actor_id, target=target_id, verb=verb, params=params)
         if s.has("check"):
             ctx = Ctx(self, actor=actor_id, target=target_id, owner=owner, params=params, event=None, verb=verb,
                       caused_by=None, seed=self._seed_for(self.store.next_seq(self.id), "check"))
@@ -946,10 +993,7 @@ class World:
         start_seq = self.store.next_seq(self.id) - 1
         try:
             adef, owner, s = self._prepare(actor_id, verb, target_id, params, dry=False)
-            # Rules: before_act bubbles all the way up so world rules see it; a local rule may stop() it.
-            before = self.emit("before_act", actor=actor_id, target=target_id or actor_id, reach=-1,
-                               payload={"verb": verb, "params": params, "owner": owner})
-            logs = self._dispatch_before(before, actor_id, target_id, verb, params)
+            logs: list[str] = []
             ev = self.emit("act", actor=actor_id, target=target_id or actor_id, reach=1,
                            payload={"verb": verb, "params": params, "target": target_id})
             ctx = Ctx(self, actor=actor_id, target=target_id, owner=owner, params=params, event=_event_view(ev),
@@ -979,10 +1023,6 @@ class World:
         evs = self.events(since=start_seq, limit=500)
         return {"ok": True, "verb": verb, "target": target_id, "result": result,
                 "events": [_public_event(e) for e in evs if e["kind"] not in _INTERNAL_KINDS], "logs": logs}
-
-    def _dispatch_before(self, ev: dict[str, Any], actor: str, target: str | None, verb: str,
-                         params: dict[str, Any]) -> list[str]:
-        return self._dispatch(ev, actor=actor, target=target, verb=verb, params=params)
 
     def affordances(self, actor_id: str, target_id: str | None = None) -> list[dict[str, Any]]:
         """Every verb the actor could try on itself and on reachable entities, with preconditions evaluated."""
@@ -1070,7 +1110,11 @@ class World:
             self._save_row()
             self.store.delete("scheduled", self.id, item["id"])
             if item["every"]:
-                item["t"] = float(item["t"]) + float(item["every"])
+                # A periodic item that fell behind fires once and skips ahead; it never replays a long gap.
+                nxt = float(item["t"]) + float(item["every"])
+                if nxt <= end_t:
+                    nxt = end_t + float(item["every"])
+                item["t"] = nxt
                 self.store.put("scheduled", item)
             self._deliver(item)
         self._row["t"] = end_t

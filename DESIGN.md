@@ -63,6 +63,8 @@ Code attaches to entities through their schema, the way components attach to Gam
 - **Listener**: `on(ctx, event)`, runs when an event bubbles past the entity. Rules, traps, storyline stages, a barkeep's deterministic greeting.
 - **Behavior**: `tick(ctx)`, runs on the world clock at the schema's interval. A monster's wander, fire spreading, a market repricing.
 
+Every entity is three things at once: content (its state), code (its components) and ops (its actions, as seen by whoever stands near it). Perceiving an object means seeing what you can do with it, with each precondition already evaluated. The world is a tree of scoped, constrained ops, and the agent is the bridge between those ops and the outer world. An action with `targets` (a type) is the holder's own verb, done to something of that type: `go` targets a place, `take` a thing. An action without `targets` is done to its holder: `open` on a door. Perception pairs the first kind with everything reachable of that type and lists the second kind under the object that carries it.
+
 Embodiment is a controller swap. An unembodied monster is driven by its behaviors. When a principal embodies it, behaviors yield and the principal drives. When the principal leaves, behaviors resume.
 
 Turn-based pockets inside a realtime world: a combat scene is an entity. Its listener, scoped to its subtree, admits only the current actor's actions, advances turn order per action, and fires the monster's behavior on its turn. Outside the scene the world keeps running.
