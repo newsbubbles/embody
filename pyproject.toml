@@ -1,0 +1,29 @@
+[project]
+name = "embody-engine"
+version = "0.1.0"
+description = "A deterministic world engine for agents: a DOM for worlds. Entities, actions, events, embodiment. No LLM inside."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Nathaniel Gibson" }]
+requires-python = ">=3.11"
+keywords = ["agents", "mcp", "world-model", "game-engine", "text-adventure", "digital-twin"]
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.2"]
+
+[project.scripts]
+embody = "embody.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/newsbubbles/embody"
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "embody"
+
+[dependency-groups]
+dev = ["pytest>=8"]
