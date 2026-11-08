@@ -10,7 +10,7 @@ keywords = ["agents", "mcp", "world-model", "game-engine", "text-adventure", "di
 dependencies = []
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.2"]
+mcp = ["mcp>=2,<3"]
 
 [project.scripts]
 embody = "embody.cli:main"

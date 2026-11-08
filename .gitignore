@@ -7,4 +7,6 @@ dist/
 *.db
 *.db-journal
 worlds/*/mirror/
+worlds/mirror/
+.embody.json
 .claude/settings.local.json
