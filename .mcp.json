@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "embody": {
+      "command": "uv",
+      "args": ["run", "embody", "serve", "--as", "claude", "--author"]
+    }
+  }
+}
