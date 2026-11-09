@@ -151,9 +151,9 @@ def test_turns_move_the_world_while_paused():
     assert gm.clock()["running"] is False and gm.clock()["turn"] == 3
     t0 = gm.world.t
     r = you.act("talk", "Mara", {"about": "tam"})
-    assert r["turn"] == 3 and r["t"] == pytest.approx(t0 + 3)
+    assert r["elapsed"] == 3 and r["t"] == pytest.approx(t0 + 3)
     r = you.act("go", "Pell's Mill")            # duration 5 beats the 3 s turn
-    assert r["turn"] == 5
+    assert r["elapsed"] == 5
     gm.clock(turn=0)
     t1 = gm.world.t
     r = you.act("go", "Ashford Square")
@@ -164,7 +164,7 @@ def test_dialog_matches_whole_words_aliases_and_state():
     eng, gm = ferry()
     you = eng.session("you")
     you.join("ferry-at-dusk", "Traveler")
-    r = you.act("talk", "Mara", {"about": "a tale of the pale moon"})   # no "ale" in there
+    r = you.act("talk", "Mara", {"about": "a song of the pale moon"})   # no "ale" in there
     said = [e["payload"]["text"] for e in r["events"] if e["kind"] == "say"]
     assert any("Ask me something" in s for s in said)
     r = you.act("talk", "Mara", {"about": "an ale, please"})
@@ -177,7 +177,8 @@ def test_dialog_matches_whole_words_aliases_and_state():
     assert sum(1 for h in you.perceive()["holding"] if h["name"] == "Dark ale") == 1
     you.act("drink", "Dark ale")
     r = you.act("drink", "Dark ale")
-    assert not any(h["name"] == "Dark ale" for h in you.perceive()["holding"])
+    mug = next(h for h in you.perceive()["holding"] if h["name"] == "Dark ale")
+    assert mug["state"]["left"] == 0  # the mug stays; Mara wants it back
     # the dialog table is secret to other players
     mara = next(p for p in you.perceive()["present"] if p["name"] == "Mara")
     assert "dialog" not in mara["state"] and "gives" not in mara["state"]

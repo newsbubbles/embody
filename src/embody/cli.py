@@ -138,6 +138,25 @@ def render_perceive(b: dict[str, Any]) -> str:
     return "\n".join(out)
 
 
+def render_wait(b: dict[str, Any]) -> str:
+    """The light bundle wait() returns: where, who, what happened."""
+    out = []
+    here = b.get("here")
+    head = f"== {here['name']} ({here['id']})" if here else "== nowhere"
+    head += f"  t={b['t']:g}"
+    if b.get("timed_out"):
+        head += "  (nothing happened)"
+    out.append(head)
+    if b.get("ambient"):
+        out.append("  " + ", ".join(f"{k}: {v}" for k, v in b["ambient"].items()))
+    if b.get("present"):
+        out.append("Here: " + ", ".join(f"{c['name']} ({c['id']})" for c in b["present"]))
+    for e in b.get("events", []):
+        out.append("  " + render_event(e))
+    out.append(f"cursor {b['cursor']}")
+    return "\n".join(out)
+
+
 def render_event(e: dict[str, Any]) -> str:
     p = e["payload"]
     k = e["kind"]
@@ -283,9 +302,11 @@ def main(argv: list[str] | None = None) -> int:
     c = sub.add_parser("say", help="speak; everyone in your place hears")
     c.add_argument("text")
     c.add_argument("--reach", type=int, default=1)
+    c.add_argument("--to", help="who you address (name or id); without it the room hears")
     c = sub.add_parser("wait", help="block until something happens near you")
     c.add_argument("--timeout", type=float, default=30)
     c.add_argument("--kinds", nargs="*")
+    c.add_argument("--full", action="store_true", help="return the whole perceive bundle, not the light one")
     c = sub.add_parser("clock", help="show or set the world clock (author to set)")
     c.add_argument("--run", action="store_true")
     c.add_argument("--pause", action="store_true")
@@ -346,10 +367,10 @@ def main(argv: list[str] | None = None) -> int:
             r = s.act(args.verb, args.target, parse_params(args.param))
             emit(args, r, render_act(r))
         elif args.cmd == "say":
-            emit(args, s.say(args.text, reach=args.reach), "said.")
+            emit(args, s.say(args.text, reach=args.reach, to=args.to), "said.")
         elif args.cmd == "wait":
-            b = s.wait(timeout=args.timeout, kinds=args.kinds)
-            emit(args, b, render_perceive(b))
+            b = s.wait(timeout=args.timeout, kinds=args.kinds, full=args.full)
+            emit(args, b, render_perceive(b) if args.full else render_wait(b))
         elif args.cmd == "clock":
             run = True if args.run else (False if args.pause else None)
             r = s.clock(run=run, rate=args.rate, step=args.step)

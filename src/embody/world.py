@@ -389,6 +389,22 @@ class World:
     def _save_row(self) -> None:
         self.store.put("world", self._row)
 
+    def refresh(self) -> None:
+        """Reread the world row (t, clock, counters, cursors, meta) from the store. Two processes share one
+        database (the MCP server and a CLI mind, say); each caches the row, and without this each one keeps
+        its own clock and may hand out an id the other already used. Sessions call it on every tick."""
+        row = self.store.get("world", None, self.id)
+        if row is not None:
+            self._row = row
+
+    def refresh(self) -> None:
+        """Reread the world row (t, clock, counters, cursors, meta) from the store. Two processes share one
+        database (the MCP server and a CLI mind, say); each caches the row, and without this each one keeps
+        its own clock and may hand out an id the other already used. Sessions call it on every tick."""
+        row = self.store.get("world", None, self.id)
+        if row is not None:
+            self._row = row
+
     @property
     def root_id(self) -> str:
         return self._row["root_id"]
@@ -908,13 +924,27 @@ class World:
         if kinds:
             rows = [r for r in rows if r["kind"] in kinds]
         if touching:
-            e = self.get(touching)
-            watch = {touching}
-            if e and e["parent_id"]:
-                watch.add(e["parent_id"])
-            rows = [r for r in rows if watch & set(r["path"]) or r["actor_id"] == touching]
-            rows = rows[:limit]
+            rows = self._located(touching, rows)[:limit]
         return rows
+
+    def _located(self, who: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keep the events `who` could have witnessed: its own, those on its path, and those in the place it
+        stood in at that moment. The place is reconstructed per event from its own `moved` events (payload
+        `from`/`to`), walking back from where it stands now, so walking into a square does not hand you what
+        was said there before you came."""
+        e = self.get(who)
+        here = e["parent_id"] if e else None
+        moves = self.store.query("event", "world_id=? AND kind='moved' AND actor_id=?", (self.id, who), order="seq")
+        moves = [m for m in moves if m["payload"].get("from") != m["payload"].get("to")]
+        out = []
+        for r in reversed(rows):
+            while moves and moves[-1]["seq"] > r["seq"]:
+                here = moves.pop()["payload"].get("from")
+            watch = {who, here} if here else {who}
+            if r["actor_id"] == who or watch & set(r["path"]):
+                out.append(r)
+        out.reverse()
+        return out
 
     # ---- actions -----------------------------------------------------------------
 

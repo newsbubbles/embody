@@ -88,7 +88,7 @@ def test_dialog_prefers_the_best_matching_entry():
     assert lines and "Tam" in lines[0]  # ferry|across|crossing scores above fog|weather|dark|night
     r = you.act("talk", "Mara", {"about": "tell me a tale"})
     lines = [e["payload"]["text"] for e in r["events"] if e["kind"] == "say"]
-    assert lines and "Ask me something" in lines[0]  # "tale" is not "ale"
+    assert lines and "Go on then" in lines[0]  # "tale" is not "ale"; it is the story she is owed
 
 
 def test_check_rolls_a_visible_d20():

@@ -10,7 +10,7 @@ The `embody` skill (`.claude/skills/embody/SKILL.md`) is the role reference: nar
 2. `join(world_id, entity)` to embody someone, or `use(world_id)` to stand outside as the author.
 3. `perceive()` gives the whole bundle: where you are, who and what is here, exits, what you hold, who you know, the verbs you could try and why some are not possible right now, and events since you last looked.
 4. `say(text, to=...)` for words (no `to`: said into the room), `act(verb, target, params)` for deeds. `intend` keeps your character's goals, `recall(about=...)` is the graph query around someone within what you may know. A rejection comes back as `{ok: false, reason, hint, alternatives}`. Read the reason, do not retry the same call.
-5. The world is turn-based while paused: each act moves it a turn. `wait(timeout)` blocks until something happens near you.
+5. The world is turn-based while paused: each act moves it a turn (`elapsed` in the result) and returns everything that touched you since you last looked. `wait(timeout)` blocks until something happens near you and returns a light bundle; `wait(full=true)` for the whole card.
 
 When a person is playing through you: narrate what `perceive` returns in prose, log their words with `say`, turn their intent into one `act`, then stop and let them choose. Never invent state. If the engine says the door is locked, the door is locked. What the world's `policy` calls `fixed` stays fixed; under `fill` you may spawn small things tagged `improvised: true`.
 

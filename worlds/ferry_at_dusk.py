@@ -67,6 +67,10 @@ def check(ctx):
     return True
 
 def apply(ctx):
+    # a thing that hid this one (state.hides names it) changes its face once it is gone
+    for p in ctx.peers(ctx.target.id, "thing"):
+        if p.state.hides and p.state.hides == ctx.target.name:
+            ctx.patch(p, {"hides": None, "description": p.state.description_after or p.state.description})
     ctx.move(ctx.target, ctx.actor)
     ctx.emit("taken", target=ctx.target, reach=1, by=ctx.actor.id)
 '''
@@ -140,7 +144,7 @@ def score(key, topic):
             s = s + 10 + len(a)
     return s
 
-def pick(ctx, entry, key, gave):
+def pick(ctx, entry, given):
     # an entry is a line, or a dict: {"line", "after_gift", "if_state": {k: v}, "else"}
     if not isinstance(entry, dict):
         return entry
@@ -150,9 +154,16 @@ def pick(ctx, entry, key, gave):
         for k in cond:
             if me.get(k) != cond[k]:
                 return entry.get("else", entry.get("line"))
-    if key in gave and entry.get("after_gift"):
+    if given and entry.get("after_gift"):
         return entry["after_gift"]
     return entry.get("line")
+
+def given_to(me, key):
+    # gave is {topic key: [who asked and got it]}; one gift per topic per asker, not per lifetime
+    gave = me.gave or {}
+    if isinstance(gave, list):
+        gave = {k: ["*"] for k in gave}
+    return list(gave.get(key) or [])
 
 def hand_over(ctx, g, asker):
     # a gift is a held thing named in "item" (handed over for real), or a thing spawned from the table
@@ -177,7 +188,6 @@ def on(ctx, event):
     me = ctx.self.state
     dialog = me.dialog or {}
     gives = me.gives or {}
-    gave = me.gave or []
     best = None
     best_s = 0
     for key in dialog:
@@ -188,14 +198,16 @@ def on(ctx, event):
     if best is None:
         ctx.say(me.default_line or "Hm.", to=asker)
         return
-    line = pick(ctx, dialog[best], best, gave)
+    got = given_to(me, best)
+    had = asker in got or "*" in got
+    line = pick(ctx, dialog[best], had)
     if line:
         ctx.say(line, to=asker)
-    if best in gives and best not in gave:
+    if best in gives and not had:
         g = gives[best]
         if hand_over(ctx, g, asker):
             ctx.say(g.get("line") or "Here, take the " + str(g.get("name") or g.get("item")).lower() + ".", to=asker)
-            ctx.patch(ctx.self, {"gave": gave + [best]})
+            ctx.patch(ctx.self, {"gave": {best: got + [asker]}})
         else:
             ctx.say(g.get("gone_line") or "I had one of those somewhere. Gone now.", to=asker)
 '''
@@ -219,13 +231,70 @@ def check(ctx):
 def apply(ctx):
     left = (ctx.target.state.left or 0) - 1
     ctx.target.state.left = left
-    ctx.actor.state.drinks = (ctx.actor.state.drinks or 0) + 1
+    drinks = (ctx.actor.state.drinks or 0) + 1
+    ctx.actor.state.drinks = drinks
     ctx.emit("drank", target=ctx.target, reach=1, by=ctx.actor.id, left=left)
     if left <= 0:
-        ctx.log("Empty. The mug is just a mug now.")
-        ctx.destroy(ctx.target)
+        ctx.patch(ctx.target, {"description": "An empty mug. It was " + (ctx.target.name or "a drink").lower() + "."})
+        ctx.log("Empty. Mara will want the mug back.")
     else:
         ctx.log("A long pull. Some left.")
+    if drinks >= 3 and not ctx.actor.state.tipsy:
+        ctx.actor.state.tipsy = True
+        ctx.emit("tipsy", target=ctx.actor, reach=1)
+        ctx.log("The room has taken on a lean.")
+'''
+
+WORK = '''
+def check(ctx):
+    chore = ctx.target.state.chore
+    if not chore:
+        return "nothing to be done with that"
+    if chore.get("done"):
+        return "that is done already"
+    need = chore.get("needs")
+    if need:
+        held = False
+        for k in ctx.actor.children():
+            if (k.name or "").lower() == str(need).lower():
+                held = True
+        if not held:
+            return "you need the " + str(need).lower() + " for that"
+    return True
+
+def apply(ctx):
+    chore = ctx.target.state.chore
+    ctx.emit("worked", target=ctx.target, reach=1, by=ctx.actor.id, chore=chore.get("name"))
+    ctx.log(chore.get("start") or "You set to it.")
+
+def finish(ctx):
+    chore = dict(ctx.target.state.chore or {})
+    chore["done"] = True
+    chore["by"] = ctx.actor.id
+    ctx.patch(ctx.target, {"chore": chore, "description": chore.get("after") or ctx.target.state.description})
+    ctx.emit("chore_done", target=ctx.target, reach=1, by=ctx.actor.id, chore=chore.get("name"))
+    # listeners hear only what bubbles through them; the people in the room get told
+    for p in ctx.peers(ctx.target.id, "creature"):
+        if p.id != ctx.actor.id:
+            ctx.emit("noticed", target=p, reach=0, of="chore_done", by=ctx.actor.id, thing=ctx.target.id, chore=chore.get("name"))
+    ctx.log(chore.get("after") or "Done.")
+'''
+
+HOB_ON = '''
+def on(ctx, event):
+    # work done at the mill by someone else squares whatever is owed to Hob: the village runs on favors
+    if event.payload.get("of") != "chore_done" or event.payload.get("by") == ctx.self.id:
+        return
+    thing = ctx.get(event.payload.get("thing"))
+    if thing is None or thing.parent.id != ctx.self.state.home:
+        return
+    for r in ctx.relations(ctx.self.id, "debt"):
+        if r["data"].get("owed_to") == ctx.self.id:
+            who = ctx.get(r["data"].get("owed_by"))
+            ctx.unrelate(r["id"])
+            ctx.say("That squares " + (who.name if who else "the") + "'s " + str(r["data"].get("what", "debt"))
+                    + ", far as I'm concerned. Tell him.", to=event.payload.get("by"))
+            ctx.emit("debt_settled", target=ctx.self, reach=1, by=event.payload.get("by"), was=r["data"])
 '''
 
 TIE = '''
@@ -240,7 +309,8 @@ def check(ctx):
 def apply(ctx):
     rope = [k for k in ctx.actor.children() if k.state.kind == "rope"][0]
     ctx.destroy(rope)
-    ctx.target.state.rope = True
+    ctx.patch(ctx.target, {"rope": True,
+                           "description": "Iron bell on a post. A new rope hangs from the clapper, the knot still stiff."})
     ctx.emit("tied", target=ctx.target, reach=1)
 '''
 
@@ -354,9 +424,10 @@ def apply(ctx):
     if ctx.params:
         skill = str(ctx.params.get("skill", ""))
     roll = ctx.rand.roll("1d20")
-    ctx.emit("checked", target=ctx.target, reach=1, by=ctx.actor.id, skill=skill, roll=roll)
-    ctx.log("d20: " + str(roll))
-    return roll
+    mod = -2 if ctx.actor.state.tipsy else 0
+    ctx.emit("checked", target=ctx.target, reach=1, by=ctx.actor.id, skill=skill, roll=roll, mod=mod, total=roll + mod)
+    ctx.log("d20: " + str(roll) + (" " + str(mod) + " (tipsy)" if mod else ""))
+    return roll + mod
 '''
 
 SLEEP = '''
@@ -425,6 +496,10 @@ def on(ctx, event):
         ctx.destroy(item)
         ctx.patch(ctx.self, {"friend": event.payload["by"]})
         ctx.say("wolfs it down and looks up at you. You have a dog now.")
+        for board in ctx.find(type="sign", name="Notice board"):
+            text = str(board.state.text or "")
+            if "Lost: one grey dog" in text:
+                ctx.patch(board, {"text": text.split(" Lost: one grey dog")[0] + " FOUND: the grey dog. He picked someone."})
     else:
         ctx.say("sniffs it and loses interest")
 '''
@@ -515,14 +590,15 @@ def define(s):
                      ("attack", ATTACK), ("touch", TOUCH), ("check", CHECK), ("sleep", SLEEP), ("wake", WAKE),
                      ("peace", PEACE), ("asleep_guard", ASLEEP_GUARD), ("person_on", PERSON_ON),
                      ("hob_walk", HOB_WALK), ("dog_follow", DOG_FOLLOW), ("dog_on", DOG_ON),
-                     ("landing_on", LANDING_ON), ("weather", WEATHER), ("story", STORY)]:
+                     ("landing_on", LANDING_ON), ("weather", WEATHER), ("story", STORY),
+                     ("work", WORK), ("hob_on", HOB_ON)]:
         s.define_script(sid, src)
 
     # scope keeps impossible pairs out of a player's affordances: go only to exits, drop only what you hold.
     # The dialog table is secret: a player hears a line when they ask, not the whole table in perceive.
     # person_on is skipped while an agent embodies the person: the table is the floor, a mind sits on top.
     s.define_schema("person", extends="creature", doc="Someone who can walk, carry, talk, sleep and fight.",
-                    state={"dialog": {}, "default_line": "Hm.", "gives": {}, "gave": [], "asleep": False,
+                    state={"dialog": {}, "default_line": "Hm.", "gives": {}, "gave": {}, "asleep": False,
                            "secret": ["dialog", "gives", "gave"]},
                     actions={
                         "go": {"script": "go", "doc": "Walk to a connected place", "targets": "place",
@@ -542,13 +618,16 @@ def define(s):
                         "wake": {"script": "wake", "doc": "Wake a sleeper here (or yourself)", "targets": "creature",
                                  "scope": "here", "self": True},
                         "attack": {"script": "attack", "doc": "Strike someone", "targets": "creature", "scope": "here"},
+                        "work": {"script": "work", "doc": "Do a chore here: grease the wheel, stack the sacks",
+                                 "targets": "thing", "scope": "here", "duration": 20},
                     },
                     listeners=[{"script": "person_on", "kinds": ["talked"], "unless_embodied": True}])
     s.define_schema("dog", extends="creature", doc="Follows whoever feeds it.", state={"hp": 6, "max_hp": 6, "friend": None},
                     behaviors=[{"script": "dog_follow", "every": 6}],
                     listeners=[{"script": "dog_on", "kinds": ["given", "touched"]}])
     s.define_schema("miller", extends="person", doc="Walks between the mill and the square.",
-                    behaviors=[{"script": "hob_walk", "every": 45}])
+                    behaviors=[{"script": "hob_walk", "every": 45}],
+                    listeners=[{"script": "hob_on", "kinds": ["noticed"]}])
     s.define_schema("sign", extends="thing", doc="Something with writing on it.", state={"text": "", "portable": False},
                     actions={"read": {"script": "read", "doc": "Read what is written"}})
     s.define_schema("drinkable", extends="thing", doc="A drink. Two pulls to a mug.", state={"left": 2, "portable": True},
@@ -572,7 +651,7 @@ def define(s):
 POLICY = {
     "fixed": [
         "the rails: Mara and Hob know where Tam is, the bell calls Tam, waking him in the Reeds works too, Tam rows, "
-        "the fog comes at t=90 and blinds the crossing without a lit lantern, night at t=150, dawn at t=400",
+        "fog comes with the dark and blinds the crossing without a lit lantern; timers() says when",
         "there is no money in Ashford; favors and debts instead",
         "nobody raises a hand in the square",
         "the four NPCs and the five places",
@@ -605,6 +684,9 @@ MARA = {
         "ale|drink|beer|pint": {"line": "One, mind. You've a river to cross.",
                                 "after_gift": "One was the deal. The river's waiting on you, not the other way round."},
         "pay|coin|money": "Put it away. Nobody pays coin in Ashford; you'll owe me a story when you're back this way.",
+        "story|tale|owed|promised": {"line": "Go on then. I'm listening.",
+                                    "after_gift": "You've told me yours. It was a fair one; the mugs said so."},
+        "work|chore|help|hands": "Hob's wheel wants greasing and his sacks want stacking. Ask him. Work is coin here.",
         "sleep|bed|room": "There's a bench by the fire if you must. But the river won't wait for morning, and the fog won't either.",
     },
     "default_line": "Mara wipes a mug. 'Ask me something I know about: the ferry, Tam, Hob, the fog, the light. Or have a drink.'",
@@ -614,6 +696,9 @@ MARA = {
                                  "gone_line": "Gave my spare away already. Try the mill; Hob keeps a fire going."},
         "ale|drink|beer|pint": {"type": "drinkable", "name": "Dark ale", "line": "She sets a dark ale in front of you.",
                                 "state": {"description": "A mug of dark ale, head still settling."}},
+        "story|tale|owed|promised": {"type": "drinkable", "name": "Three mugs of dark ale",
+                                    "line": "She listens to the end, then lines up three mugs without a word about the deal.",
+                                    "state": {"left": 6, "description": "Three mugs of dark ale, lined up. A story's worth."}},
     },
 }
 
@@ -630,6 +715,7 @@ HOB = {
         "reeds": "Round the back of the mill, down the bank. Mind the mud.",
         "boys|sons|bell": "My boys cut the bell rope for a lark. They'll hear about it.",
         "dog|biscuit": "That's Biscuit. Not mine. Nobody's, till somebody feeds him.",
+        "work|chore|help|hands|wheel|grease|sacks": "Wheel wants greasing; the pot's by the door. Sacks want stacking. Do either and we'll call Tam's jugs square.",
     },
     "default_line": "Hob shrugs flour off his shoulders. 'Rope, Tam, my boys. That's all I've got for you.'",
 }
@@ -642,9 +728,57 @@ TAM = {
              "three jugs and know it. You call everyone 'friend'.",
     "dialog": {"ferry|across|river": "Aye, aye. On the raft with you. I'll take you over.",
                "cross|crossing": "Say 'cross' on the raft and hold on.",
-               "hob|jugs|owe": "Three jugs. I know. He'll have them when the barley's in."},
-    "default_line": "Tam yawns. 'You found me. Let's cross before the fog thickens.'",
+               "hob|jugs|owe": "Three jugs. I know. He'll have them when the barley's in.",
+               "raft|row|current|pole": "Feet apart, hold the rope, and let the current do the arguing.",
+               "story|tale": "A story? Ask Mara, friend. She collects them. I just row."},
+    "default_line": "Tam scratches his beard. 'The river, the raft, Hob's jugs. That's what I know, friend.'",
 }
+
+
+WHEEL = {"portable": False, "description": "The great wheel, turning slow and squealing at every quarter turn.",
+         "chore": {"name": "grease the wheel", "needs": "Pot of grease",
+                   "start": "You climb down beside the axle with the pot. It is filthy work.",
+                   "after": "The great wheel, turning smooth and quiet. Fresh grease shines on the axle."}}
+GREASE = {"portable": True, "description": "A clay pot of wheel grease, a rag over it."}
+SACKS = {"portable": False, "description": "Empty flour sacks in a heap by the door.",
+         "chore": {"name": "stack the sacks", "start": "You start shaking them out and folding.",
+                   "after": "Empty flour sacks folded and stacked against the wall."}}
+
+GOALS = {
+    "Mara": [("Hear the Traveler's story", "A story is the fare in Ashford, and I am owed one"),
+             ("Keep the square peaceful", "Trouble in the square is trouble at my door")],
+    "Hob": [("Get Tam's three jugs squared", "A debt left to sit sours a village"),
+            ("Keep the wheel greased and the mill turning", "The mill is the Pells' name, and the boys have spent enough of it")],
+    "Old Tam": [("Row whoever needs across before the fog", "That is the job, and the job is all I have"),
+                ("Settle with Hob when the barley is in", "Three jugs. I know.")],
+}
+
+
+def seed_village(s, mara, hob, tam):
+    """What the villagers want and what they think of each other, so an NPC seat starts with a life, not a blank
+    card. Checked step by step: safe to run on a world that has some of it."""
+    by_id = {mara: "Mara", hob: "Hob", tam: "Old Tam"}
+    for eid, name in by_id.items():
+        have = {g["text"] for g in (s.inspect(eid)["state"].get("goals") or [])}
+        for text, why in GOALS[name]:
+            if text not in have:
+                s.intend(text, why=why, entity=eid)
+    views = {
+        (mara, hob): {"standing": 1, "note": "decent man, terrible sons"},
+        (mara, tam): {"standing": 0, "note": "drinks his fare before he earns it"},
+        (hob, mara): {"standing": 1, "note": "keeps the square honest"},
+        (hob, tam): {"standing": -1, "note": "three jugs"},
+        (tam, mara): {"standing": 1, "note": "pours fair"},
+        (tam, hob): {"standing": 1, "note": "good company, bad creditor"},
+    }
+    for (a, b), data in views.items():
+        edges = s.recall(about=b, entity=a)["edges"]
+        if not any(e["relation"] == "knows" and e["direction"] == "out" for e in edges):
+            s.link(a, b, "knows", {**data, "met_t": 0, "count": 0})
+    debts = [r for r in s.inspect(hob).get("relations", []) if r["relation"] == "debt"]
+    settled = any(e["kind"] == "debt_settled" for e in s.history(kinds=["debt_settled"], limit=10))
+    if not debts and not settled:
+        s.relate("debt", [tam, hob], {"what": "three jugs of ale", "owed_by": tam, "owed_to": hob})
 
 
 def populate(s):
@@ -677,7 +811,8 @@ def populate(s):
     s.spawn("sign", square, "Notice board", state={
         "text": "FERRY: dawn to dusk, ring for Tam. NO CROSSINGS IN FOG. Pell's Mill buying barley. Lost: one grey dog, answers to Biscuit, does not come when called."})
     s.spawn("thing", square, "Well", state={"portable": False, "description": "Stone well with a wooden lid and a bench beside it, worn pale where people sit."})
-    s.spawn("thing", square, "Bench", state={"portable": False, "description": "A plank bench by the well. Something under it."})
+    s.spawn("thing", square, "Bench", state={"portable": False, "description": "A plank bench by the well. Something under it.",
+                                             "hides": "Bone", "description_after": "A plank bench by the well, worn pale."})
     s.spawn("thing", square, "Bone", state={"kind": "food", "portable": True, "description": "A soup bone, mostly gnawed. Under the bench."})
     s.set_rule(square, "peace")
 
@@ -686,6 +821,9 @@ def populate(s):
     s.spawn("thing", mill, "Coil of rope", state={"kind": "rope", "portable": True})
     s.spawn("thing", mill, "Sack of flour", state={"portable": True, "description": "Heavy. Why would you."})
     s.spawn("dog", mill, "Biscuit", state={"description": "A grey dog with flour in his coat."})
+    s.spawn("thing", mill, "Mill wheel", state=WHEEL)
+    s.spawn("thing", mill, "Pot of grease", state=GREASE)
+    s.spawn("thing", mill, "Heap of empty sacks", state=SACKS)
 
     # the reeds
     tam = s.spawn("person", reeds, "Old Tam", state=TAM)["id"]
@@ -705,6 +843,7 @@ def populate(s):
     s.set_rule(root, "story", kinds=["arrived", "talked", "rang", "woken", "crossed"])
     s.set_rule(root, "weather", kinds=["fog", "nightfall", "dawn"])
     s.set_rule(root, "asleep_guard", kinds=["before_act"])
+    seed_village(s, mara, hob, tam)
     s.schedule(90, "fog", entity=landing, payload={"text": "Fog comes up off the water and swallows the far bank."})
     s.schedule(150, "nightfall", entity=root)
     s.schedule(400, "dawn", entity=landing)
@@ -772,6 +911,46 @@ def upgrade(s):
     if not any(c["name"] == "Tinderbox" for c in s.inspect(mara)["contents"]) and \
             "light|fire|tinderbox" not in (s.inspect(mara)["state"].get("gave") or []):
         s.spawn("thing", mara, "Tinderbox", state={"kind": "fire", "portable": True, "description": "Flint, steel and char cloth in a tin."})
+    # gifts are per asker now: whatever an older table gave, it gave to the Traveler
+    trav = by_name.get("Traveler", {}).get("id")
+    for who in (mara, hob, tam):
+        gave = s.inspect(who)["state"].get("gave")
+        if isinstance(gave, list):
+            s.patch(who, {"gave": {k: [trav] for k in gave} if trav else {}}, replace=False)
+            if not gave:
+                s.patch(who, {"gave": {}})
+    # Tam's improvised key from round three caught "mill"; the table has his real lines now
+    tdialog = s.inspect(tam)["state"].get("dialog") or {}
+    for key in list(tdialog):
+        if key.startswith("wake|up|inside"):
+            s.patch(tam, {"dialog": {key: None}})
+    # the chores: the pot and the sacks were improvised in round three, the wheel is new
+    mill_things = {e["name"]: e for e in s.find(limit=500) if e["name"] in ("Mill wheel", "Pot of grease", "Heap of empty sacks")}
+    if "Mill wheel" not in mill_things:
+        s.spawn("thing", mill, "Mill wheel", state=WHEEL)
+    if "Pot of grease" not in mill_things:
+        s.spawn("thing", mill, "Pot of grease", state=GREASE)
+    elif mill_things["Pot of grease"]["state"].get("improvised"):
+        s.patch(mill_things["Pot of grease"]["id"], {"improvised": None, "portable": True})
+    if "Heap of empty sacks" not in mill_things:
+        s.spawn("thing", mill, "Heap of empty sacks", state=SACKS)
+    elif not mill_things["Heap of empty sacks"]["state"].get("chore"):
+        s.patch(mill_things["Heap of empty sacks"]["id"], {**SACKS, "improvised": None})
+    # words that went stale when the world changed under them
+    bell = by_name.get("Landing bell")
+    if bell and bell["state"].get("rope") and "clean cut" in bell["state"].get("description", ""):
+        s.patch(bell["id"], {"description": "Iron bell on a post. A new rope hangs from the clapper, the knot still stiff."})
+    bench = by_name.get("Bench")
+    if bench and "Bone" not in by_name and "Something under it" in bench["state"].get("description", ""):
+        s.patch(bench["id"], {"hides": None, "description": "A plank bench by the well, worn pale."})
+    elif bench and "Something under it" in bench["state"].get("description", "") and not bench["state"].get("hides"):
+        s.patch(bench["id"], {"hides": "Bone", "description_after": "A plank bench by the well, worn pale."})
+    dog, board = by_name.get("Biscuit"), by_name.get("Notice board")
+    if dog and board and dog["state"].get("friend") and "Lost: one grey dog" in board["state"].get("text", ""):
+        s.patch(board["id"], {"text": board["state"]["text"].split(" Lost: one grey dog")[0] + " FOUND: the grey dog. He picked someone."})
+    want(root, {"policy": POLICY})
+    want(tam, {"default_line": TAM["default_line"]})
+    seed_village(s, mara, hob, tam)
     told = "bell" in (s.inspect(mara)["state"].get("dialog") or {}) or st.get("stage") == "bell"
     want(story, {"reeds": reeds, "tam": tam, "seen_landing": st.get("stage") != "start", "mara_told": told,
                  "crossed": st.get("stage") == "done"})

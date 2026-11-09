@@ -228,12 +228,16 @@ def build_server(session: Session, db: Path, engine: Engine | None = None):
         return s.timers()
 
     @tool()
-    async def wait(timeout: float = 30.0, kinds: list[str] | None = None, principal: str | None = None) -> dict[str, Any]:
-        """Block until an event touches you or your place (or the timeout, max 120 s), then perceive. A mind loops on this."""
+    async def wait(timeout: float = 30.0, kinds: list[str] | None = None, full: bool = False,
+                   principal: str | None = None) -> dict[str, Any]:
+        """Block until an event touches you or your place (or the timeout, max 120 s). Returns the light bundle
+        (t, ambient, here, who is present, the new events, cursor); `full=true` returns perceive() instead.
+        A mind loops on this."""
         import anyio
         sess = S(principal)
         try:
-            return await anyio.to_thread.run_sync(lambda: sess.wait(timeout=min(float(timeout), 120.0), kinds=kinds))
+            return await anyio.to_thread.run_sync(
+                lambda: sess.wait(timeout=min(float(timeout), 120.0), kinds=kinds, full=full))
         except Rejected as r:
             return r.to_dict()
 

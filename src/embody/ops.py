@@ -141,6 +141,7 @@ class Session:
 
     def _tick(self) -> None:
         if self.world_id:
+            self.world.refresh()
             self.engine.sync_clock(self.world_id)
 
     # ---- choosing a world -----------------------------------------------------
@@ -259,7 +260,7 @@ class Session:
     def _events_for(self, me: str | None, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """The public view of events for one viewer. Authors and observers see everything but the internal
         kinds. An embodied viewer never sees another entity's private events (remembered, intended) and sees
-        `patched` only with that entity's secret keys taken out; a patch that was all secret is dropped."""
+        `patched` only on itself; an author's edit to another entity is not news, its result is in perceive."""
         w = self.world
         out = []
         full = self._privileged()
@@ -270,15 +271,9 @@ class Session:
                 if e["kind"] in _PRIVATE_KINDS:
                     continue
                 if e["kind"] == "patched":
-                    t = w.get(e["target_id"]) if e["target_id"] else None
-                    secret = set((t["state"].get("secret") or []) if t else []) | _ALWAYS_SECRET
-                    p = e["payload"]
-                    changes = {k: v for k, v in (p.get("changes") or {}).items() if k not in secret}
-                    if not changes:
-                        continue
-                    e = dict(e)
-                    e["payload"] = {**p, "changes": changes,
-                                    "before": {k: v for k, v in (p.get("before") or {}).items() if k not in secret}}
+                    # an author's edit to someone else is the world changing under you, not news you heard;
+                    # what it changed shows in the next perceive, the raw diff stays with the author
+                    continue
             out.append(_public_event(e))
         return out
 
@@ -414,15 +409,20 @@ class Session:
     # ---- acting -----------------------------------------------------------------------
 
     def act(self, verb: str, target: str | None = None, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """One deed. The result carries every event that touched you since you last looked: what the act
+        caused, what the turn brought, and what others did near you in between (a line addressed to you
+        while you were deciding), so a player or a mind never has to perceive again to catch up."""
         self._tick()
         me = self._me()
+        p = self._principal()
+        since = p["cursor_seq"] if p else self.world.store.next_seq(self.world.id) - 1
         tid = self._resolve(target) if target else None
         r = self.world.act(me, verb, tid, params, principal_id=self.pid)
         r = self._turn(r)
-        if r.get("events"):
-            rows = [{"kind": e["kind"], "target_id": e["target"], "seq": e["seq"], "payload": e["payload"],
-                     "actor_id": e["actor"], "t": e["t"], "caused_by": e["caused_by"]} for e in r["events"]]
-            r["events"] = self._events_for(me, rows)
+        w = self.world
+        r["events"] = self._events_for(me, w.events(since=since, touching=me, limit=200))
+        r["cursor"] = w.store.next_seq(w.id) - 1
+        w.set_cursor(self.pid, r["cursor"])
         return r
 
     def _turn(self, r: dict[str, Any]) -> dict[str, Any]:
@@ -437,9 +437,8 @@ class Session:
         evs = w.step(dt)
         if evs:
             r["events"] = list(r.get("events", [])) + evs
-        r["turn"] = dt
+        r["elapsed"] = dt
         r["t"] = w.t
-        w._bump_cursor(self.pid)
         return r
 
     def act_many(self, steps: list[dict[str, Any]]) -> dict[str, Any]:
@@ -563,21 +562,34 @@ class Session:
                 "between": between[-limit:], "notes": notes[-limit:], "goals": goals,
                 "here": o["parent_id"] == ent["parent_id"]}
 
-    def wait(self, timeout: float = 30.0, kinds: list[str] | None = None, poll: float = 0.1,
+    def wait(self, timeout: float = 30.0, kinds: list[str] | None = None, poll: float = 0.1, full: bool = False,
              clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
-        """Block until an event touches me (or the timeout). Returns perceive() with the new events."""
+        """Block until an event touches me (or the timeout). Returns the light bundle: the hour, where I am,
+        who is here and the new events, with the cursor moved past them. `full=True` returns perceive()
+        instead. A mind loops on this, so a quiet minute costs a few lines, not the whole card."""
         me = self._me()
         p = self._principal()
         start = clock()
         while True:
             self._tick()
-            evs = [e for e in self._events_for(me, self.world.events(since=p["cursor_seq"], touching=me, limit=50))
+            w = self.world
+            evs = [e for e in self._events_for(me, w.events(since=p["cursor_seq"], touching=me, limit=50))
                    if not kinds or e["kind"] in kinds]
-            if evs:
-                return self.perceive()
-            if clock() - start >= timeout:
-                b = self.perceive()
-                b["timed_out"] = True
+            timed_out = clock() - start >= timeout
+            if evs or timed_out:
+                if full:
+                    b = self.perceive()
+                else:
+                    ent = w.need(me)
+                    here = w.get(ent["parent_id"]) if ent["parent_id"] else None
+                    b = {"world": w.id, "t": w.t, "ambient": self._ambient(here),
+                         "here": {"id": here["id"], "name": here["name"]} if here else None,
+                         "present": [{"id": c["id"], "name": c["name"]} for c in w.children(ent["parent_id"])
+                                     if c["id"] != me and not c["state"].get("hidden")] if here else [],
+                         "events": evs, "cursor": w.store.next_seq(w.id) - 1}
+                    w.set_cursor(self.pid, b["cursor"])
+                if timed_out:
+                    b["timed_out"] = True
                 return b
             sleep(poll)
 

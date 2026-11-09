@@ -12,13 +12,13 @@ Status: alpha. The first vertical slice was built in one day (2026-11-08) and pl
 4. Worlds grow from play. What a narrator improvises is logged, reviewed and promoted to canon by the author, or dropped.
 5. Every harness is a first-class door: MCP, CLI, library. Instructions are written in engine terms with a per-harness table.
 
-## What exists (2026-11-08)
+## What exists (2026-11-09)
 
 - Engine: entity graph with containment, schemas with `extends`, actions with check and apply, events that bubble with reach, listeners along the bubble path, behaviors on the clock, rules via `set_rule`, relations as edges and hyperedges, event-sourced SQLite, deterministic state hash, seeded rand, a Python-subset interpreter for scripts.
-- Ops: 41 of them behind a Session with capabilities (author, observer, embodied). CLI and MCP server expose the same table. `wait` blocks on events. The MCP server holds many principals behind one connection (`principal=` on the playing tools).
+- Ops: 41 of them behind a Session with capabilities (author, observer, embodied). CLI and MCP server expose the same table. `wait` blocks on events and returns a light bundle. `act` returns everything that touched you since you last looked. One clock and one id counter however many processes share the database. The MCP server holds many principals behind one connection (`principal=` on the playing tools).
 - Minds in the engine: secret `memory`, `brief` and `goals` (`intend`), `recall` as the permission-aware graph query, per-entity cursors, `knows` edges with an opinion floor and the last exchanges, `known_places`, addressed speech (`say(to=...)`, `say_as`) and speech into the room, `fork_world`, turn-based play (`clock(turn=n)`), deep-merging `patch`, scoped affordances, per-viewer event filtering, `ambient` facts and `clock` in every perceive, `timers` and `unschedule`.
-- Content: `worlds/ferry_at_dusk.py` (five places, four NPCs, a storyline that checks facts with two routes to the ferryman, fog, night and dawn on timers, sleep and wake, followers; split into define/populate/upgrade so a live world takes new code and additions), `worlds/two_rooms.py`.
-- Tooling: 54 tests, markdown mirror, `tools/watch.py` live graph viewer with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
+- Content: `worlds/ferry_at_dusk.py` (five places, four NPCs with goals and opinions of each other, a storyline that checks facts with two routes to the ferryman, fog, night and dawn on timers, sleep and wake, followers, chores with durations that settle a debt relation, drink and tipsiness; split into define/populate/upgrade so a live world takes new code and additions), `worlds/two_rooms.py`.
+- Tooling: 67 tests, markdown mirror, `tools/watch.py` live graph viewer with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
 
 ## Found in the first playtest
 
@@ -71,6 +71,34 @@ Gaps
 - [x] (round 3) A world file could renew code but not add a place to a live world. `upgrade(s)` in the file, run by `load_world(upgrade=true)` after `define`; `set_rule` is idempotent so it runs twice without change.
 - [ ] The narrator's prose still has to be reminded to stay in character; the skill now says so, the next playtest tells whether it holds.
 - [ ] An `overheard` tail and NPC-to-NPC talk on their own (Hob and Mara trading lines when nobody is there) are still open.
+
+## Found in the third playtest
+
+Source: worlds/notes/ferry-at-dusk-3-2026-11-08.md (the narrator, with Nate as Hob the miller) and worlds/notes/ferry-at-dusk-3-traveler-mind-2026-11-08.md (the Traveler, a CLI mind in another process).
+
+Bugs
+
+- [x] (round 4, 2026-11-09 "engine: one clock across processes, located witnessing, act carries the news") Two processes, two clocks. The MCP server and the CLI mind each cached the world row, so events ran backwards in the log and ids could collide. `World.refresh()` rereads the row on every tick.
+- [x] (round 4) A line said to you while you were deciding was invisible: act results carried only what the act caused. `act` now returns every event that touched you since your cursor, and moves the cursor.
+- [x] (round 4) Walking into the square handed you what was said there before you came. Events are filtered by where you stood at that moment, reconstructed from your own `moved` events.
+- [x] (round 4) Raw `patched` diffs of other entities reached players' feeds. An author's edit to someone else is not news; its result is in the next perceive.
+- [x] (round 4) `wait` returned the whole card every time. It returns a light bundle (hour, place, who is here, the new events, cursor); `full=true` for the card. The CLI has `wait --full` and `say --to`.
+- [x] (round 4) `turn` on an act result was really the time elapsed; renamed `elapsed`.
+- [x] (round 4, ferry world) `gave` on a dialog entry was global: Hob got "One was the deal" about the Traveler's ale. It is keyed per asker now, one gift per topic per asker.
+- [x] (round 4, ferry world) Stale words: the notice board kept saying the dog was lost, the bench hid a bone that was gone, the policy named the first night's timings. Verbs patch the prose they change; the policy points at `timers()`.
+
+Gaps
+
+- [x] (round 4, ferry world) An NPC seat had no stakes: Hob had a brief but no goals, and neighbours of years met as strangers. Villagers are seeded with goals and `knows` edges with a standing and a note.
+- [x] (round 4, ferry world) A bargain lived in two `say` lines. Tam's jugs are a `debt` relation; a day's work at the mill (`work` on the wheel or the sacks, with durations and a needed tool) settles it through a listener on Hob.
+- [x] (round 4, ferry world) Nothing in the mill could be worked. Mill wheel, pot of grease and the heap of sacks are entities with chores.
+- [x] (round 4, ferry world) The Traveler's story debt had no topic in Mara's table. "story" pays the fare in ale; the mug stays when it is empty; four drinks make you `tipsy`, which costs 2 on every `check`.
+- [ ] Ambient never moved over a long morning. Only timers change it; a slow drift of the hour, or a few lines per span, is still open.
+- [ ] A mind facing a human seat released after eight acts of silence. The mind role in the skill should say a human is slow; an engine-side `embodied_by` hint (human or mind) would let a mind choose its patience.
+- [ ] Minds talked in idiom ("are the jugs square?") that did not land with a phone player. Plain words with a human; a note for the mind role.
+- [ ] The narrator voiced a human seat's words from a stated intent. Decide whether the narrator may write the line or the player gives the exact words.
+- [ ] `check` has no difficulty and no consequence; the narrator decides what a 16 means. The desert world will carry rules for that (DC, opposed rolls, wounds), as world scripts first, engine conventions if they hold.
+- [ ] `sleep` lists creatures as targets; a holder verb that should be `self` only.
 
 ## Directions from the design talks
 
@@ -139,6 +167,7 @@ Direction from Nate on 2026-11-08, after the second round shipped: a hosted embo
 1. (done, round 2) Fix pass, minds in the engine, roles in the skill, canon policy, many principals, forks.
 2. (done, round 2) Second playtest on the forked ferry world with turn-based play and a subagent mind for Mara.
 2b. (done, round 3) Fix pass from the second playtest: the leak, goals and `recall` for minds, ambient facts, timers, the ferry world on facts with the Reeds route, night and dawn. Third playtest on `ferry-at-dusk-3` with a mind playing the Traveler and the narrator as Hob.
+2c. (done, round 4) Fix pass from the third playtest: one clock across processes, located witnessing, act results that carry the news, light `wait`, the ferry village with goals, chores and a debt. Next: the desert world with TTRPG rules as actions.
 3. The lint for names in prose that match no entity; an engine default duration per verb; the `overheard` tail.
 4. Workspace split (`embody init`, sample worlds inside the package), then the release.
 5. Hosted, many players: grants and claims in the engine, the network transport and `wait` over it, then the client without an agent, accounts and rosters, and the security audit before anything is public.

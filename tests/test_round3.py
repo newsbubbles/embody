@@ -39,9 +39,9 @@ def test_author_ops_while_embodied_do_not_leak_into_the_players_feed():
         if e["kind"] == "patched":
             assert "dialog" not in e["payload"]["changes"], e
             assert e["target"] != gm.world.find(name="Story")[0]["id"]
-    # the public part of the patch on Mara still shows; the spawn shows and names no character as its doer
-    pub = [e for e in b["events"] if e["kind"] == "patched" and e["payload"]["changes"].get("mood")]
-    assert pub and pub[0]["actor"] is None
+    # an author's edit to Mara is not news to the player at all (its result is in her card); the spawn shows
+    # and names no character as its doer
+    assert not any(e["kind"] == "patched" for e in b["events"])
     sp = [e for e in b["events"] if e["kind"] == "spawned" and e["payload"]["name"] == "Stray cat"]
     assert sp and sp[0]["actor"] is None
     # Tam's own mind sees its own note
@@ -82,7 +82,7 @@ def test_opinion_event_names_whose_edge_moved():
     you.act("give", "Hob", {"item": "Sack of flour"})
     me = gm.world.find(name="Traveler")[0]["id"]
     hob = gm.world.find(name="Hob")[0]["id"]
-    ops = [e for e in gm.history(kinds=["opinion"], limit=100) if e["payload"]["kind"] == "given"]
+    ops = [e for e in gm.history(kinds=["opinion"], limit=500) if e["payload"]["kind"] == "given"]
     assert ops
     edges = ops[-1]["payload"]["edges"]
     assert {"holder": hob, "of": me, "delta": 2, "standing": 2} in edges
@@ -141,10 +141,10 @@ def test_goals_are_secret_and_managed_by_the_mind():
     mb = mara.perceive(cursor=0, events=500)
     trav = next(c for c in mb["present"] if c["name"] == "Traveler")
     assert "goals" not in trav["state"]
-    assert not any(e["kind"] == "intended" for e in mb["events"])
+    assert not any(e["kind"] == "intended" and e["target"] == trav["id"] for e in mb["events"])
     # authors set goals for NPC minds
     gm.intend("Keep the Traveler drinking so he misses the raft", why="Tam owes me", entity="Mara")
-    assert mara.perceive()["goals"][0]["why"] == "Tam owes me"
+    assert mara.perceive()["goals"][-1]["why"] == "Tam owes me"
 
 
 def test_recall_is_a_graph_query_within_the_minds_permissions():
