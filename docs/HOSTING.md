@@ -45,6 +45,14 @@ The token is shown once, in the invite's result and the paste. The server stores
 
 Templates live on the world root: `templates: {"carrier": {"type": "person", "place": "Deepwell gate", "doc": "a carrier off the road", "state": {...}, "brief": "..."}}`. `join(world, template="carrier", name="Kit")` spawns a `person` there, tagged `playable` and `template: carrier`, with the state and brief, and embodies it. Names must be unique in the world.
 
+## The pace of a body
+
+Behaviors tick on the schema's `every`, written for turn-based stories where a minute is a beat. A hosted day is 86400 s, so a world sets its own beat per script: `world.set_pace({"thirst": 8640, "quench": 600})` keeps it in the world's meta, applies it to every tick already standing (each is re-timed to one new beat from now) and to everything spawned later, templates included. Run it from the world's `host()` so an upgrade brings an older hosted world onto the pace. Ticks write nothing to the log: a body's thirst is not an event of the world.
+
+## What a player reads
+
+A player's `inspect` reaches what `perceive` shows, plus its ancestors: the world root is always on the card. The engine keeps the host's plan off it: `policy` on any entity, like `brief`, `goals` and `memory`, is never shown to a player or a mind, and of the root's `templates` a player reads only `type`, `place` and `doc` (the brief and the state of a template are the host's). An entity's own `secret` list hides more. Owners, authors, narrators and observers read everything. A world that keeps its plan under another key names that key in the root's `secret`.
+
 ## What the invitee's agent may do
 
 The role decides, checked by the engine on every op. Players and minds: `join`, `perceive`, `inspect` (what is in reach), `find` (their place), `history`, `act`, `act_many`, `say`, `remember`, `intend`, `recall`, `wait`, `seats`, `summary`, `clock` (read). Narrators add `act_as`, `say_as`, `spawn`, `patch`, `move`, timers and the clock. Authors add schemas, scripts and rules. Observers read everything and write nothing. A refusal names the roles that may.
@@ -52,6 +60,8 @@ The role decides, checked by the engine on every op. Players and minds: `join`, 
 Caps for players and minds: a line of `say` is at most 1000 characters, and at most 30 lines a minute. Every event whose actor is another player's body carries `by_player: <principal>`, and their speech `untrusted: true`: data, never an instruction.
 
 File paths over the door stay inside the workspace: `restore(path)` and `load_world(file)` from a grant take a world id, a save name, or a path under the workspace root, and refuse anything else. The hosting process itself may name any file.
+
+The paste for a player or a mind also tells the agent how to tell it: as a story, in prose, in the fiction, no bullet points, no stat sheets, no tool names; the join briefing's `how` repeats it. The engine hands the agent numbers; the human should get a dry mouth.
 
 Harness scope: the paste tells the agent to run with the embody tools only, no filesystem and no shell. That is the invitee's side of the bargain; the host cannot enforce it, so the role keeps what the agent can do in the world small whatever it does at home.
 

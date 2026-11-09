@@ -713,11 +713,33 @@ class World:
                                   "state": st, "pos": pos, "version": 1, "created_seq": seq, "updated_seq": seq})
         self.emit("spawned", actor=actor, target=eid, reach=1, caused_by=caused_by,
                   payload={"type": type, "name": name, "parent": parent})
+        pace = self._row["meta"].get("pace") or {}
         for b in self.schema_components(type, "behaviors"):
-            every = float(b.get("every", 10))
+            every = float(pace.get(b["script"], b.get("every", 10)))
             self.schedule(every, "tick", entity=eid, payload={"script": b["script"], "always": bool(b.get("always"))},
                           every=every, caused_by=caused_by, log=False)
         return eid
+
+    def set_pace(self, pace: dict[str, float]) -> int:
+        """How often each behavior script ticks in this world, by script name, in world seconds: the world's own pace
+        over the schema's `every` (a hosted day is 86400 s; a turn-based story is 600). Kept in meta `pace`, used
+        at every spawn, and applied now to the ticks already standing: each one whose beat differs is re-timed to
+        fire one new beat from now. Returns how many were re-timed. Idempotent."""
+        cur = dict(self._row["meta"].get("pace") or {})
+        cur.update({k: float(v) for k, v in pace.items()})
+        self.set_meta({"pace": cur})
+        n = 0
+        for item in self.pending():
+            if item["kind"] != "tick" or not item["every"]:
+                continue
+            want = cur.get((item["payload"] or {}).get("script"))
+            if want is None or float(item["every"]) == float(want):
+                continue
+            item["every"] = float(want)
+            item["t"] = self.t + float(want)
+            self.store.put("scheduled", item)
+            n += 1
+        return n
 
     def patch(self, id: str, changes: dict[str, Any], actor: str | None = None, caused_by: int | None = None,
               replace: bool = False) -> None:
@@ -1226,9 +1248,14 @@ class World:
             s = self.script(p["script"])
             if not s.has("tick"):
                 return
-            ev = self.emit("tick", actor=eid, target=eid, reach=0, payload={"script": p["script"]})
+            # A tick is not an event of the world: nothing is written for it, so a body's thirst does not fill the log
+            # (hosted, that was three rows a second). The script sees it as one all the same; its seed comes from the
+            # timer and the hour, so the same tick on the same log rolls the same dice.
+            seq = self.store.next_seq(self.id)
+            ev = {"seq": seq, "t": self.t, "kind": "tick", "actor_id": eid, "target_id": eid,
+                  "payload": {"script": p["script"]}, "path": [eid]}
             ctx = Ctx(self, actor=eid, target=None, owner=eid, params=None, event=_event_view(ev), verb=None,
-                      caused_by=ev["seq"], seed=self._seed_for(ev["seq"], "tick"))
+                      caused_by=None, seed=self._seed_for(seq, f"tick:{item['id']}:{self.t}"))
             self.store.begin()
             try:
                 s.call("tick", [ctx], fuel=50_000)

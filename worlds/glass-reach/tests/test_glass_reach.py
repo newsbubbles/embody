@@ -346,3 +346,39 @@ def test_word_left_for_anyone_and_a_name_and_the_check():
     load_world(gm, "glass-reach", upgrade=True)
     ruhl = gm.inspect("Captain Ruhl")["id"]
     assert gm.world.get(ruhl)["state"]["secret"] == ["dialog", "gives", "gave", "word_left"]
+
+
+def test_hosted_bodies_thirst_at_the_pace_of_the_day():
+    # one point of water every 2.4 world hours, a look for water every ten minutes; fights keep their six seconds
+    eng = Engine(workspace=REPO)
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    load_world(gm, "glass-reach", hosted=True)
+
+    def state(name):
+        return gm.inspect(name)["state"]
+
+    def beats(name=None):
+        out = {}
+        for p in gm.world.pending():
+            if p["kind"] == "tick" and (name is None or p["entity_id"] == gm.inspect(name)["id"]):
+                out.setdefault(p["payload"]["script"], set()).add(p["every"])
+        return out
+
+    assert beats() == {"thirst": {8640}, "quench": {600}, "fighter_tick": {6}}
+    kit = eng.session_for_token(gm.invite("player", label="Kit")["token"])
+    kit.join(template="guard", name="Kit")
+    assert beats("Kit") == {"thirst": {8640}, "quench": {600}}
+    # a Reach hosted before the pace was set takes it on with the next upgrade
+    gm.world.set_pace({"thirst": 60})
+    load_world(gm, "glass-reach", upgrade=True, hosted=True)
+    assert beats()["thirst"] == {8640}
+    # Ruhl thirsts through most of a day in the yard, walks to the cistern, drinks, and is back on his post
+    yard = gm.inspect("The Gate Yard")["id"]
+    for _ in range(7):
+        gm.clock(step=8640)  # the hosted clock moves a second at a time; one long step would fire each beat once
+    assert state("Captain Ruhl")["water"] == 3
+    for _ in range(3):
+        gm.clock(step=600)  # to the cistern, a drink, back
+    ruhl = state("Captain Ruhl")
+    assert ruhl["water"] >= 6 and gm.inspect("Captain Ruhl")["parent"] == yard
+    assert not gm.world.events(0, kinds=["tick"], limit=5000)

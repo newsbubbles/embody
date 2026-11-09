@@ -1,3 +1,4 @@
+use("common")
 def check(ctx):
     if ctx.target.parent.id != ctx.actor.id and ctx.target.parent.id != ctx.actor.parent.id:
         return "it is not within reach"
@@ -17,4 +18,5 @@ def apply(ctx):
     ctx.patch(me, changes)
     ctx.patch(ctx.target, {"left": left, "description": (ctx.target.state.description_empty or "Empty.") if left <= 0 else ctx.target.state.description})
     ctx.emit("drank", target=ctx.target, reach=1, by=me.id, left=left, water=water)
+    revive(ctx, me, water)
     ctx.log("water " + str(water) + ", " + str(left) + " left in it")

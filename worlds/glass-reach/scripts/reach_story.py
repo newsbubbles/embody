@@ -41,6 +41,8 @@ def on(ctx, event):
                 ctx.patch(dram, {"waiting": False})
                 ctx.emit("challenged", target=reeve, reach=1, by=dram.id, place=dram.parent.id, ring=True)
                 scene(ctx, dram.parent, "Dram Hollis turns in the ring and draws. 'Reeve Varrick. Dram Hollis, of the Carriers' book, lately of other books. Step in, or be known for stepping back.'")
+        if p.get("quiet"):
+            return  # a crawl, or a body walking itself to water: no first sight of anything
         if p.get("place") == st.ridge and not st.seen_ridge:
             ctx.patch(story, {"seen_ridge": True})
             scene(ctx, st.ridge, "From up here the Reach is a sheet of black glass with red dunes walking across it. The Hold is a thumbprint to the south. Nothing moves, except one thin line of smoke from somewhere under the rock.")

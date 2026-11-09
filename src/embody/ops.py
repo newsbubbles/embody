@@ -31,7 +31,11 @@ _SAY_MAX = 1000
 _SAY_BURST = 30
 _SAY_WINDOW = 60.0
 # State keys only the entity itself (its mind) and authors ever see.
-_ALWAYS_SECRET = frozenset({"memory", "brief", "goals"})
+# State keys nobody but the host reads: a mind's memory, its brief and goals, and the host's plan for the world
+# (`policy` on the root). The `secret` list on an entity adds its own.
+_ALWAYS_SECRET = frozenset({"memory", "brief", "goals", "policy"})
+# Of a template on the root, what a newcomer may read: enough to pick one. The brief and the state are the host's.
+_TEMPLATE_PUBLIC = ("type", "place", "doc")
 # Relations whose edge data is world structure, readable by anyone who sees the edge.
 _PUBLIC_RELATIONS = frozenset({"connects_to"})
 
@@ -505,7 +509,8 @@ class Session:
             pace = "the world is paused between acts: each of yours moves it a turn"
         how = ["perceive() is your eyes; act(verb, target) your hands; say(text, to=...) your voice",
                "wait(timeout) blocks until something happens near you",
-               "a refusal says why and what would work; do not retry the same call"]
+               "a refusal says why and what would work; do not retry the same call",
+               "tell the human what happens as a story, in prose, in the fiction: no bullets, no stat sheets, no tool names"]
         if self.role == MIND:
             how.insert(0, "your card carries the secret brief: who you are and what you want; remember() and intend() keep your notes")
         out = {"role": self.role, "role_doc": ROLE_DOC.get(self.role, ""), "world": w.name, "you": ent["name"] if ent else eid,
@@ -736,6 +741,9 @@ class Session:
                 continue
             if not full and k in secret:
                 continue
+            if not full and k == "templates" and isinstance(v, dict):
+                v = {name: {kk: vv for kk, vv in t.items() if kk in _TEMPLATE_PUBLIC}
+                     for name, t in v.items() if isinstance(t, dict)}
             out[k] = v
         return out
 

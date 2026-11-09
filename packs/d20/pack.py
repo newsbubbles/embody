@@ -26,11 +26,16 @@ The numbers, so a narrator can explain a roll:
 - `threaten` is opposed will (resolve) with +2 for a weapon in hand and +2 for friends at the target's side.
   Cowed people give way in the dialog tables. `parley` is wits + parley against will + resolve; success emits
   `agreed` with the offer and the world decides what that buys.
-- Water: `water` (0 to 10) falls by 1 per minute under shade and 2 on open ground, nothing beside a source (a
-  place with `water_source`, or a cask or cistern here with something `left`). At 3 you are thirsty; at 0 you
-  lose vigor instead. `drink` from a waterskin (+4), `fill` one at a source. A body nobody embodies drinks on
-  its own when it is thirsty and water is in reach (the `quench` behavior): a skin in hand first, then a source
-  here, filling its skin while it is there. An embodied seat decides for itself.
+- Water: `water` (0 to 10) falls by 1 a beat under shade and 2 on open ground, nothing beside a source (a
+  place with `water_source`, or a cask or cistern here with something `left`). The beat is a minute in a
+  turn-based story; a hosted world sets its own with `set_pace` (the Reach: one point every 2.4 world hours).
+  At 3 you are thirsty; at 0 you lose vigor instead, down to 0 and no further: thirst puts a body down
+  (`downed_by: thirst`), it never kills, and a drink brings it back up (`rose`). `drink` from a waterskin (+4),
+  `fill` one at a source. A body nobody embodies looks after itself (the `quench` behavior): thirsty, it drinks
+  from a skin in hand, else from a source here, filling its skin while it is there; with nothing here it walks
+  one step to a connected place with water that it knows the way to (hidden places only for their own
+  faction), drinks, and walks back to its `post`. The walks arrive `quiet`. A body that is down drinks what is
+  put in its hand. An embodied seat decides for itself.
 - A gift (`given`) is worth 1 with the receiver's faction only if they keep it: something they trade away on
   the spot, or something that was theirs to begin with (`given_by` on the thing names who handed it over),
   moves nothing.

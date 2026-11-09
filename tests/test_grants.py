@@ -386,3 +386,26 @@ def test_file_paths_over_the_door_stay_inside_the_workspace(tmp_path):
     with pytest.raises(Rejected) as r:
         gm.restore(str(outside))
     assert "not an embody save" in r.value.reason, "the host's own process reaches the file and is told what it is"
+
+
+def test_a_player_reads_no_plan_off_the_root_and_the_paste_asks_for_prose():
+    # the root is every player's ancestor, so inspect(root) is always allowed: the host's plan must not be on the card
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.patch(w.root_id, {"policy": {"fixed": ["the Warden turns at t=240"]},
+                         "templates": {"newcomer": {"type": "person", "place": "Hall", "doc": "a stranger off the road",
+                                                    "state": {"coins": 3}, "brief": "You are the Warden's man."}},
+                         "briefing": "Two rooms and a locked door."})
+    inv = gm.invite("player", label="kit")
+    assert "as a story, in prose" in inv["paste"]
+    assert "as a story, in prose" not in gm.invite("observer", label="eye")["paste"]
+    p = eng.session_for_token(inv["token"])
+    b = p.join(template="newcomer", name="Kit")
+    assert any("no bullets" in line for line in b["briefing"]["how"])
+    root = p.inspect(w.root_id)["state"]
+    assert "policy" not in root and root["briefing"] == "Two rooms and a locked door."
+    assert root["templates"] == {"newcomer": {"type": "person", "place": "Hall", "doc": "a stranger off the road"}}
+    full = gm.inspect(w.root_id)["state"]
+    assert full["policy"]["fixed"] == ["the Warden turns at t=240"]
+    assert full["templates"]["newcomer"]["brief"] == "You are the Warden's man."
+    assert full["templates"]["newcomer"]["state"] == {"coins": 3}

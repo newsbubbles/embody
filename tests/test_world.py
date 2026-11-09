@@ -260,3 +260,23 @@ def test_persists_to_a_file_and_reopens(tmp_path):
     w2 = World.open(Store(path), "two-rooms")
     assert w2.state_hash() == h
     assert w2.get(i["Rusty key"])["parent_id"] == i["Prisoner"]
+
+
+def test_ticks_leave_no_rows_and_a_world_sets_its_own_pace():
+    w = build(Store())
+    i = ids(w)
+    rat = w.spawn("rat", i["Cell"], "Rat")
+    evs = w.step(5)
+    assert w.get(rat)["parent_id"] == i["Hall"]  # the behavior ran
+    assert not w.events(0, kinds=["tick"], limit=5000) and all(e["kind"] != "tick" for e in evs)
+    # the world's pace over the schema's every: the standing ticks are re-timed, new spawns take it, a second call is quiet
+    assert w.set_pace({"wander": 50}) == 1
+    tick = [p for p in w.pending() if p["kind"] == "tick"][0]
+    assert tick["every"] == 50 and tick["t"] == w.t + 50
+    w.spawn("rat", i["Cell"], "Rat two")
+    assert {p["every"] for p in w.pending() if p["kind"] == "tick"} == {50}
+    assert w.set_pace({"wander": 50}) == 0 and w.meta()["pace"] == {"wander": 50}
+    w.step(49)
+    assert w.get(rat)["parent_id"] == i["Hall"]
+    w.step(1)
+    assert w.get(rat)["parent_id"] == i["Cell"]

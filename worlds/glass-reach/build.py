@@ -192,6 +192,9 @@ STORY_KINDS = ["arrived", "checked", "talked", "agreed", "dram_moves", "downed",
 
 # the spine at 4x real time, in world seconds: a day is 86400 (six real hours); every=86400 repeats daily
 HOSTED = {"rate": 4, "claim_lapse": 900,
+          # a body's water in the hosted day: one point every 2.4 world hours (36 real minutes of play at 4x), a look for
+          # water every ten world minutes; the turn-based story keeps the pack's 60 s
+          "pace": {"thirst": 8640, "quench": 600},
           "spine": [("heat", 21600, 86400), ("dram_moves", 28800, None), ("dusk", 43200, 86400),
                     ("night", 54000, 86400), ("cistern_cracks", 64800, None), ("dawn", 86400, 86400)]}
 
@@ -424,6 +427,7 @@ def host(s):
     daily. Runs once: a second call renews the settings and leaves the timers where the first put them."""
     root = s.summary()["root"]
     s.world.set_meta({"claim_lapse": HOSTED["claim_lapse"], "run_when_occupied": True})
+    s.world.set_pace(HOSTED["pace"])
     s.clock(run=False, rate=HOSTED["rate"], turn=0)
     if s.world.meta().get("hosted"):
         return

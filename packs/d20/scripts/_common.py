@@ -33,6 +33,25 @@ def water_here(ctx, place):
             return p
     return None
 
+def water_near(ctx, who, here):
+    # a connected place with water, one step away, that this body knows the way to
+    for e in ctx.edges(here, "connects_to", "out"):
+        t = ctx.get(e["target"])
+        if t is None:
+            continue
+        if t.state.hidden and t.state.known_to != who.state.faction:
+            continue
+        if water_here(ctx, t) is not None:
+            return t
+    return None
+
+def revive(ctx, who, water):
+    # a body thirst put down gets up when it has drunk; a blade's work stays done until someone sees to it
+    st = who.state
+    if st.down and st.downed_by == "thirst" and water > 3:
+        ctx.patch(who, {"down": False, "downed_by": None, "vigor": max(1, int(st.vigor or 0))})
+        ctx.emit("rose", target=who, reach=1, by="water")
+
 def settle(ctx, who, cause):
     # derive the conditions from vigor and say what changed
     st = who.state

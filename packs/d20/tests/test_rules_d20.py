@@ -473,3 +473,57 @@ def test_show_follow_stay_and_watch():
     gm.act_as("Dram Hollis", "stay")
     you.act("go", "Scar Gate, the Hold")
     assert gm.inspect("Dram Hollis")["parent"] == gm.inspect("The Gate Yard")["id"]
+
+
+def test_thirst_puts_a_body_down_and_no_further_and_water_brings_it_up():
+    # Nico on the ridge, dry: vigor falls to the floor and stays there; a skin put in his hand gets him up
+    eng, gm, you = reach()
+    gm.patch("Nico", {"water": 0, "vigor": 1, "thirsty": True})
+    gm.clock(step=60)
+    nico = state(gm, "Nico")
+    assert nico["down"] and nico["vigor"] == 0 and nico["downed_by"] == "thirst"
+    gm.clock(step=60)
+    gm.clock(step=60)
+    nico = state(gm, "Nico")
+    assert nico["vigor"] == 0 and not nico["dead"] and gm.inspect("Nico")["parent"] == gm.inspect("Red Ridge")["id"]
+    nico_id = gm.inspect("Nico")["id"]
+    assert len([e for e in gm.world.events(0, kinds=["parched"], limit=5000) if e["target_id"] == nico_id]) == 1
+    gm.spawn("waterskin", "Nico", "Gift skin", state={"left": 2})
+    gm.clock(step=60)
+    nico = state(gm, "Nico")
+    assert not nico["down"] and nico["vigor"] == 1 and nico["water"] == 4 and nico.get("downed_by") is None
+    assert any(e["target_id"] == nico_id for e in gm.world.events(0, kinds=["rose"], limit=5000))
+    # a blade's work is not undone by water
+    gm.patch("Captain Ruhl", {"vigor": 0, "down": True, "wounded": True, "water": 2, "thirsty": True})
+    gm.spawn("waterskin", "Captain Ruhl", "Ruhl's skin", state={"left": 2})
+    gm.clock(step=60)
+    ruhl = state(gm, "Captain Ruhl")
+    assert ruhl["down"] and ruhl["water"] == 5  # 2, less the yard, plus a drink
+
+
+def test_a_thirsty_body_walks_to_water_one_known_step_away_and_back_to_its_post():
+    # Ruhl in the yard, no skin, the cistern one room away: he goes, drinks, and comes back to the yard
+    eng, gm, you = reach()
+    yard, hold = gm.inspect("The Gate Yard")["id"], gm.inspect("Scar Gate, the Hold")["id"]
+    gm.patch("Captain Ruhl", {"water": 3, "thirsty": True})
+    gm.clock(step=60)
+    assert gm.inspect("Captain Ruhl")["parent"] == hold and state(gm, "Captain Ruhl")["post"] == yard
+    gm.clock(step=60)
+    ruhl = state(gm, "Captain Ruhl")
+    assert ruhl["water"] == 6 and ruhl["thirsty"] is False and state(gm, "The cistern")["left"] == 11
+    gm.clock(step=60)
+    assert gm.inspect("Captain Ruhl")["parent"] == yard and state(gm, "Captain Ruhl").get("post") is None
+    ruhl_id = gm.inspect("Captain Ruhl")["id"]
+    walks = [e["payload"] for e in gm.world.events(0, kinds=["arrived"], limit=5000) if e["payload"].get("who") == ruhl_id]
+    assert [x["for_water"] for x in walks] == [True, False] and all(x["quiet"] for x in walks)
+    # Sefa knows the way down to the hidden Deepwell; she goes when her skin is dry and comes back with it full
+    ridge, well = gm.inspect("Red Ridge")["id"], gm.inspect("The Deepwell")["id"]
+    gm.patch("Sefa's skin", {"left": 0})
+    gm.patch("Sefa of the Keth", {"water": 2, "thirsty": True})
+    gm.clock(step=60)
+    assert gm.inspect("Sefa of the Keth")["parent"] == well
+    gm.clock(step=60)
+    assert state(gm, "Sefa's skin")["left"] == 3 and state(gm, "Sefa of the Keth")["water"] == 5
+    gm.clock(step=60)
+    assert gm.inspect("Sefa of the Keth")["parent"] == ridge
+    assert not gm.find(type="story")[0]["state"].get("seen_ridge")  # her quiet return is no first sight of the ridge
