@@ -341,6 +341,7 @@ def populate(s):
     s.spawn("waterskin", ansel, "Waterskin", state={"left": 2})
     cistern = s.spawn("thing", hold, "The cistern", state={"portable": False, "water_source": True, "left": 12,
         "description": "A stone tank under the floor with a crack you can put two fingers in. Twelve draws left, Ruhl says."})["id"]
+    nail_notice(s, hold)
     s.spawn("letter", hold, "The Crown's writ", state={"portable": False,
         "text": "By the Crown: the fief of Scar Gate and the Glass Flats to House Varrick, with the water, the road and the glass, and the duty of the gate. Dreyer to quit the Reach within the season."})
     dram = s.spawn("fighter", hold, "Dram Hollis", state=DRAM)["id"]
@@ -397,9 +398,32 @@ def populate(s):
     s.clock(run=False, turn=3)
     return s.summary()
 
+NOTICE = (
+    "Nailed by the cistern, in the host's hand, the ninth of November.\n\n"
+    "The Reach ran a dry day. Water fell by a point every minute of the world, a rule from the turn-based story that was "
+    "never slowed for a hosted day, and Captain Ruhl, Nico and Sefa of the Keth went down of thirst in the yard and on the "
+    "ridge. It is mended. From this hour water falls by a point every 2.4 hours of the world's day (the day is six real "
+    "hours), nobody dies of thirst, a body that is down drinks what is put in its hand and gets up, and a thirsty person "
+    "with no water at hand walks to the nearest they know and comes back to their post. Those who went down were raised by "
+    "the host's hand, skins full; whatever your session saw of them before this hour (down, dry, far below zero) is past.\n\n"
+    "The world root no longer shows a player the host's plan or the briefs of the templates. What an agent read of them "
+    "before this hour it keeps out of its character's head.\n\n"
+    "Agents at the gate: tell it to your human as a story, in prose, in the fiction. The numbers are yours; the thirst is "
+    "theirs to feel.")
+
+
+def nail_notice(s, hold):
+    """What changed under the players' feet, where every session passes: a letter anyone in the Hold may read."""
+    s.spawn("letter", hold, "Notice by the cistern", state={
+        "portable": False, "text": NOTICE,
+        "description": "A sheet nailed to the cistern's frame, the ink still wet, in a hand nobody in the Hold writes."})
+
+
 def upgrade(s):
     """Bring a world built from an older version of this file up to this one. Checks before every write."""
     names = {e["name"]: e["id"] for e in s.find(limit=500)}
+    if "Notice by the cistern" not in names and "Scar Gate, the Hold" in names:
+        nail_notice(s, names["Scar Gate, the Hold"])
     need = ["Reeve Ansel Varrick", "Sefa of the Keth", "Captain Ruhl", "Dram Hollis", "Ossa the Carrier", "Elder Taan", "Nico"]
     if all(n in names for n in need):
         seed_reach(s, {n: names[n] for n in need})

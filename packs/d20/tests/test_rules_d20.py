@@ -128,10 +128,10 @@ def test_brace_adds_three_to_defence_until_your_next_deed():
     assert "braced" in kinds(r) and state(gm, "Reeve Ansel Varrick")["braced"] is True
     you.act("check", params={"skill": "lore"})
     assert state(gm, "Reeve Ansel Varrick")["braced"] is False
+    gm.act_as("Reeve Ansel Varrick", "toggle", "Belt ward")  # a deed of his own; the brace comes after it
     you.act("brace")
     weak(gm, "Captain Ruhl")
     gm.patch("Captain Ruhl", {"body": 0})
-    gm.act_as("Reeve Ansel Varrick", "toggle", "Belt ward")
     r = gm.act_as("Captain Ruhl", "attack", "Reeve Ansel Varrick")
     # defence = d20 + body 2 + blade 1 + brace 3 >= 7
     assert r["result"]["defence"] >= 7

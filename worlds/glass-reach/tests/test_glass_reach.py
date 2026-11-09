@@ -382,3 +382,17 @@ def test_hosted_bodies_thirst_at_the_pace_of_the_day():
     ruhl = state("Captain Ruhl")
     assert ruhl["water"] >= 6 and gm.inspect("Captain Ruhl")["parent"] == yard
     assert not gm.world.events(0, kinds=["tick"], limit=5000)
+
+
+def test_the_upgrade_nails_the_notice_by_the_cistern_once():
+    eng, gm, you = reach()
+    hold = gm.inspect("Scar Gate, the Hold")["id"]
+    gm.destroy(gm.find(type="letter", name="Notice by the cistern")[0]["id"])  # a Reach built before the notice
+    load_world(gm, "glass-reach", upgrade=True)
+    load_world(gm, "glass-reach", upgrade=True)
+    notes = gm.find(type="letter", name="Notice by the cistern")
+    assert notes[0]["id"] in [c["id"] for c in gm.inspect(hold)["contents"]]
+    assert len(notes) == 1 and notes[0]["state"]["text"].startswith("Nailed by the cistern")
+    r = you.act("read", "Notice by the cistern")
+    assert any("water falls by a point every 2.4 hours" in str(e["payload"]) for e in r["events"])
+
