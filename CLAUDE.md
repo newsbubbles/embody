@@ -20,7 +20,7 @@ They answer from their dialog tables and act on behaviors on their own. When one
 
 ## Building a world
 
-Read `guide()` (docs/SCRIPTING.md) before writing scripts. `worlds/ferry_at_dusk.py` is the worked example: `define(s)` for scripts and schemas, `populate(s)` for the rest, `build(s)` for a new world. `load_world(file, upgrade=true)` renews a live world's code. `fork_world(source, id)` starts a fresh game on the same state.
+Read `guide()` (docs/SCRIPTING.md) before writing scripts. `worlds/ferry_at_dusk.py` is the worked example of a village (talk, chores, a storyline on facts) and `worlds/glass_reach.py` with `worlds/rules_d20.py` the worked example of a world with rules as verbs (dice, wounds, duels, factions): `define(s)` for scripts and schemas, `populate(s)` for the rest, `build(s)` for a new world. `load_world(file, upgrade=true)` renews a live world's code. `fork_world(source, id)` starts a fresh game on the same state.
 
 ## Working on the engine
 

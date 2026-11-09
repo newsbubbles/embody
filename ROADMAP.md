@@ -14,11 +14,11 @@ Status: alpha. The first vertical slice was built in one day (2026-11-08) and pl
 
 ## What exists (2026-11-09)
 
-- Engine: entity graph with containment, schemas with `extends`, actions with check and apply, events that bubble with reach, listeners along the bubble path, behaviors on the clock, rules via `set_rule`, relations as edges and hyperedges, event-sourced SQLite, deterministic state hash, seeded rand, a Python-subset interpreter for scripts.
+- Engine: entity graph with containment, schemas with `extends`, actions with check and apply, events that bubble with reach, listeners along the bubble path, behaviors on the clock (`always` ones tick on embodied seats too), rules via `set_rule` that hear everything under their entity whatever the reach, relations as edges and hyperedges, event-sourced SQLite, deterministic state hash, seeded rand, a Python-subset interpreter for scripts.
 - Ops: 41 of them behind a Session with capabilities (author, observer, embodied). CLI and MCP server expose the same table. `wait` blocks on events and returns a light bundle. `act` returns everything that touched you since you last looked. One clock and one id counter however many processes share the database. The MCP server holds many principals behind one connection (`principal=` on the playing tools).
 - Minds in the engine: secret `memory`, `brief` and `goals` (`intend`), `recall` as the permission-aware graph query, per-entity cursors, `knows` edges with an opinion floor and the last exchanges, `known_places`, addressed speech (`say(to=...)`, `say_as`) and speech into the room, `fork_world`, turn-based play (`clock(turn=n)`), deep-merging `patch`, scoped affordances, per-viewer event filtering, `ambient` facts and `clock` in every perceive, `timers` and `unschedule`.
-- Content: `worlds/ferry_at_dusk.py` (five places, four NPCs with goals and opinions of each other, a storyline that checks facts with two routes to the ferryman, fog, night and dawn on timers, sleep and wake, followers, chores with durations that settle a debt relation, drink and tipsiness; split into define/populate/upgrade so a live world takes new code and additions), `worlds/two_rooms.py`.
-- Tooling: 67 tests, markdown mirror, `tools/watch.py` live graph viewer with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
+- Content: `worlds/ferry_at_dusk.py` (five places, four NPCs with goals and opinions of each other, a storyline that checks facts with two routes to the ferryman, fog, night and dawn on timers, sleep and wake, followers, chores with durations that settle a debt relation, drink and tipsiness; split into define/populate/upgrade so a live world takes new code and additions), `worlds/glass_reach.py` on `worlds/rules_d20.py` (a desert hold, a hidden well, three factions with standings, a reusable d20 rule set where every rule is a verb: `check` against a DC, `attack` with wounds, down and dead, wards, `yield` and honor, duels that a root rule turns into a ring, `threaten` and `parley` as opposed rolls, thirst as a body behavior, fighters that fight without a mind, a thresher under the glass, a storyline with a truce or a lost ending), `worlds/two_rooms.py`.
+- Tooling: 95 tests, markdown mirror, `tools/watch.py` live graph viewer with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
 
 ## Found in the first playtest
 
@@ -97,8 +97,8 @@ Gaps
 - [ ] A mind facing a human seat released after eight acts of silence. The mind role in the skill should say a human is slow; an engine-side `embodied_by` hint (human or mind) would let a mind choose its patience.
 - [ ] Minds talked in idiom ("are the jugs square?") that did not land with a phone player. Plain words with a human; a note for the mind role.
 - [ ] The narrator voiced a human seat's words from a stated intent. Decide whether the narrator may write the line or the player gives the exact words.
-- [ ] `check` has no difficulty and no consequence; the narrator decides what a 16 means. The desert world will carry rules for that (DC, opposed rolls, wounds), as world scripts first, engine conventions if they hold.
-- [ ] `sleep` lists creatures as targets; a holder verb that should be `self` only.
+- [x] (round 5, the Glass Reach) `check` has no difficulty and no consequence; the narrator decides what a 16 means. `worlds/rules_d20.py` carries the rules as verbs (`check` against a DC with a `checked` event, opposed rolls for `threaten` and `parley`, `attack` with wounds, down and dead), world scripts first, engine conventions if they hold.
+- [x] (round 5) `sleep` lists creatures as targets; a holder verb that should be `self` only. Affordances no longer pair a creature's own targetless verbs (`sleep`, `brace`, `check`) with the creatures around the actor.
 
 ## Directions from the design talks
 
@@ -167,7 +167,8 @@ Direction from Nate on 2026-11-08, after the second round shipped: a hosted embo
 1. (done, round 2) Fix pass, minds in the engine, roles in the skill, canon policy, many principals, forks.
 2. (done, round 2) Second playtest on the forked ferry world with turn-based play and a subagent mind for Mara.
 2b. (done, round 3) Fix pass from the second playtest: the leak, goals and `recall` for minds, ambient facts, timers, the ferry world on facts with the Reeds route, night and dawn. Third playtest on `ferry-at-dusk-3` with a mind playing the Traveler and the narrator as Hob.
-2c. (done, round 4) Fix pass from the third playtest: one clock across processes, located witnessing, act results that carry the news, light `wait`, the ferry village with goals, chores and a debt. Next: the desert world with TTRPG rules as actions.
+2c. (done, round 4) Fix pass from the third playtest: one clock across processes, located witnessing, act results that carry the news, light `wait`, the ferry village with goals, chores and a debt.
+2d. (done, round 5) The desert world with TTRPG rules as actions: `worlds/rules_d20.py` and `worlds/glass_reach.py`, rules that hear everything under their entity, `always` behaviors, self verbs listed once. Next: a playtest of the Glass Reach from the phone, with a mind on Dram or Taan.
 3. The lint for names in prose that match no entity; an engine default duration per verb; the `overheard` tail.
 4. Workspace split (`embody init`, sample worlds inside the package), then the release.
 5. Hosted, many players: grants and claims in the engine, the network transport and `wait` over it, then the client without an agent, accounts and rosters, and the security audit before anything is public.

@@ -715,8 +715,8 @@ class World:
                   payload={"type": type, "name": name, "parent": parent})
         for b in self.schema_components(type, "behaviors"):
             every = float(b.get("every", 10))
-            self.schedule(every, "tick", entity=eid, payload={"script": b["script"]}, every=every,
-                          caused_by=caused_by, log=False)
+            self.schedule(every, "tick", entity=eid, payload={"script": b["script"], "always": bool(b.get("always"))},
+                          every=every, caused_by=caused_by, log=False)
         return eid
 
     def patch(self, id: str, changes: dict[str, Any], actor: str | None = None, caused_by: int | None = None,
@@ -871,20 +871,27 @@ class World:
                 self._opinion_floor(ev)
         return ev
 
-    def _listeners_for(self, entity_id: str) -> list[dict[str, Any]]:
+    def _listeners_for(self, entity_id: str, rules_only: bool = False) -> list[dict[str, Any]]:
         e = self.get(entity_id)
         if e is None:
             return []
-        out = list(self.schema_components(e["type"], "listeners"))
+        out = [] if rules_only else list(self.schema_components(e["type"], "listeners"))
         out.extend(e["state"].get("rules", []))
         return out
 
     def _dispatch(self, ev: dict[str, Any], actor: str | None = None, target: str | None = None,
                   verb: str | None = None, params: dict[str, Any] | None = None) -> list[str]:
-        """Run listeners along the path, target first. A listener may reject or stop."""
+        """Run listeners along the path, target first, then the rules of every ancestor above the path. A schema
+        listener hears what bubbles to its entity (the event's reach); a rule set on an entity hears everything
+        that happens under it, however short the reach, so a rule on the root is the table's rule. A listener may
+        reject or stop."""
         logs: list[str] = []
-        for node in ev["path"]:
-            for lst in self._listeners_for(node):
+        path = list(ev["path"])
+        above = []
+        if ev["target_id"] and ev["reach"] >= 0:
+            above = [a for a in self.ancestors(ev["target_id"]) if a not in path]
+        for node in path + above:
+            for lst in self._listeners_for(node, rules_only=node not in path):
                 kinds = lst.get("kinds") or []
                 if kinds and ev["kind"] not in kinds:
                     continue
@@ -1136,12 +1143,13 @@ class World:
                 ent = self.get(cid)
                 if ent and (tt == "any" or self.is_a(ent["type"], tt)):
                     add(verb, adef, cid)
-        # Verbs the things around the actor carry: every object is also its ops.
+        # Verbs the things around the actor carry: every object is also its ops. A creature's own targetless
+        # verbs (brace, check, sleep) are things it does, not things done to it, so they are not listed against it.
         for cid in candidates:
             if cid == actor_id:
                 continue
             ent = self.get(cid)
-            if ent is None:
+            if ent is None or self.is_a(ent["type"], "creature"):
                 continue
             for verb, adef in self.schema_actions(ent["type"]).items():
                 if adef.get("targets") is None:  # an action with `targets` is the holder's own verb, not one done to it
@@ -1212,8 +1220,9 @@ class World:
         if eid and self.get(eid) is None:
             return
         if kind == "tick":
-            if eid is None or self.embodied(eid):
-                return  # controller swap: an embodied entity is driven by its principal
+            if eid is None or (self.embodied(eid) and not p.get("always")):
+                return  # controller swap: an embodied entity is driven by its principal; `always` behaviors are
+                        # the body, not the mind (thirst, bleeding), and run on an embodied seat too
             s = self.script(p["script"])
             if not s.has("tick"):
                 return

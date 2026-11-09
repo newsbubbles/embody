@@ -137,3 +137,10 @@ def test_upgrade_converts_an_old_gave_list_and_promotes_improvised_chores():
     assert gm.world.find(name="Mill wheel")
     r = you.act("talk", "Mara", {"about": "ale"})
     assert any(t and t.startswith("One was the deal") for t in texts(r))
+
+def test_sleep_is_your_own_verb_not_one_done_to_the_people_here():
+    eng, gm, you = ferry()
+    aff = [(a["verb"], a["target"]) for a in you.perceive()["affordances"]]
+    assert ("sleep", None) in aff
+    assert not any(v == "sleep" and t is not None for v, t in aff)
+

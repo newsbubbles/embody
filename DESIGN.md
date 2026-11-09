@@ -37,7 +37,7 @@ Building a world engine by hand keeps recreating the browser DOM. embody borrows
 
 Perception is bubbling. A sound in a room is an event on the room; it bubbles to the building and the region; anything embodied under those nodes with the right sense receives it. Walls, range and darkness are filters on the path.
 
-Rules are the cascade. "No combat in the tavern" is a listener on the tavern that rejects attack actions in its subtree.
+Rules are the cascade. "No combat in the tavern" is a listener on the tavern that rejects attack actions in its subtree. A rule installed on an entity hears every event under it, whatever the reach the emitter chose: a rule on the root is the table's rule. Schema listeners hear only what bubbles past them.
 
 ## 4. Data model
 
