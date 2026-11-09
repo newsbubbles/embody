@@ -20,15 +20,14 @@ COPY packs ./packs
 COPY worlds ./worlds
 COPY deploy ./deploy
 
-# the database lives on a volume mounted at /data; the hosting principal is `host`
+# the database lives on the platform volume mounted at /data; the hosting principal is `host`
 ENV PATH=/app/.venv/bin:$PATH \
     EMBODY_DB=/data/embody.db \
     EMBODY_WORKSPACE=/app \
     EMBODY_AS=host \
     EMBODY_WORLD=glass-reach \
     PORT=8900
-RUN mkdir -p /data
-VOLUME ["/data"]
+RUN mkdir -p /data   # the platform mounts its volume here (a Docker VOLUME line is refused by Railway)
 EXPOSE 8900
 
 CMD ["sh", "deploy/start.sh"]
