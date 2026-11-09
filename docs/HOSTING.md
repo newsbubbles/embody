@@ -4,13 +4,25 @@ One machine runs the world; friends come in through their own agents. The host k
 
 ## The path
 
-1. Build or load the world as usual, locally: `uv run embody --as host --author load glass-reach`.
-2. Make it a place, not a spine. Tag the entities a newcomer may become with `playable: true` in their state. Put `templates` on the world root for new characters (see below). Put a `briefing` paragraph on the root: it is what `join` hands every newcomer. Optionally set `claim_lapse` in the world's meta (seconds of silence before an invitee's seat is released; default 900).
-3. Start the clock: `uv run embody --as host --author --world glass-reach clock --run --rate 4`. The Glass Reach runs at four times real time: a game day every six real hours, four chances a day for a night-only trigger. A paused world is turn-based, which does not synchronize players.
-4. Serve: `uv run embody serve --http --host 0.0.0.0 --port 8900 --url https://your.host/mcp`. The same tools as the stdio server, at `/mcp`, behind a bearer check: every request needs `Authorization: Bearer <token>` for a live grant or gets a 401 in the engine's own refusal shape. The server ticks once a second: running clocks advance and lapsed seats are released whether or not anyone is calling.
-5. Invite: `EMBODY_URL=https://your.host/mcp uv run embody --as host --author --world glass-reach invite player --entity reeve --label "Sam Pike"`. It prints the paste. Send that text to Sam; Sam drops it into their agent, the agent adds the server, calls `join()` and is the reeve.
+1. Make it a place, not a spine. Tag the entities a newcomer may become with `playable: true` in their state. Put `templates` on the world root for new characters (see below). Put a `briefing` paragraph on the root: it is what `join` hands every newcomer. Give the build a `host(s)` function: how the world differs as a hosted place. The Glass Reach's sets the clock to 4x real time, `claim_lapse` to 900 seconds of silence, `run_when_occupied` so the clock runs while a guest is in a body and waits when none is, and a spine of timers in world seconds (heat at noon, dusk, night, dawn, every day; the cistern on its day). A build without `host` is hosted as it is.
+2. Load it hosted: `uv run embody --as host --author load glass-reach --hosted`. `load --upgrade --hosted` renews a world that is already there: the current code against the same state, the timers left where they are. The Glass Reach's clock then runs at four times real time whenever anyone is in: a game day every six real hours, four chances a day for a night-only trigger. A paused world is turn-based, which does not synchronize players.
+3. Serve: `uv run embody serve --http --host 0.0.0.0 --port 8900 --url https://your.host/mcp`. The same tools as the stdio server, at `/mcp`, behind a bearer check: every request needs `Authorization: Bearer <token>` for a live grant or gets a 401 in the engine's own refusal shape. `GET /health` answers 200 without a grant, for the platform's probe. The server ticks once a second: running clocks advance, lapsed seats are released, and a world that runs while occupied starts and stops with its guests, whether or not anyone is calling.
+4. Invite: `EMBODY_URL=https://your.host/mcp uv run embody --as host --author --world glass-reach invite player --entity reeve --label "Sam Pike"`. It prints the paste. Send that text to Sam; Sam drops it into their agent, the agent adds the server, calls `join()` and is the reeve.
 
-Testing from this machine: serve on 127.0.0.1 and put a tunnel in front (`cloudflared tunnel --url http://127.0.0.1:8900` prints a public https URL; pass it as `--url`). The bearer token is the guard, not the Host header, so the server runs with DNS rebinding protection off. Always put TLS in front of a public host: the token travels in a header.
+Always put TLS in front of a public host: the token travels in a header. The bearer token is the guard, not the Host header, so the server runs with DNS rebinding protection off.
+
+## On Railway
+
+The repository is one container: `Dockerfile` (the package, the packs and the worlds, served by `deploy/start.sh`), `railway.json` (Dockerfile builder, `/health` as the health check, restart on failure, never asleep). `start.sh` builds the world named by `EMBODY_WORLD` into the database on the volume on the first boot (`load --hosted`) and renews it on every later one (`load --upgrade --hosted`), then serves on `$PORT`. Nothing in the image is a secret: tokens are made after the deploy, against the live database.
+
+1. `railway login`, then in the repository `railway init` (a new project) or `railway link` (an existing one).
+2. `railway volume add -m /data`: the database survives deploys. Without the volume every deploy is a fresh world and every grant is gone.
+3. `railway up`. The build is the Dockerfile; the first boot prints `building glass-reach into /data/embody.db`, later boots `renewing ...`.
+4. `railway domain` for a public `https://<name>.up.railway.app`. The server reads `RAILWAY_PUBLIC_DOMAIN` and prints `https://<domain>/mcp` into invites; set `EMBODY_URL` to override it (a custom domain).
+5. `curl https://<domain>/health` answers `{"ok": true, "embody": "up"}`.
+6. Invite from inside the container, so the grant lands in the live database: `railway ssh -- embody --author --world glass-reach invite player --entity "Reeve Ansel Varrick" --label "Sam Pike"`. It prints the paste with the token; the token is shown once and is never in the image, the logs or this repository. `railway ssh -- embody --author --world glass-reach grants` lists them, `revoke <id>` ends one, `seats` shows what is open.
+
+Environment the image sets: `EMBODY_DB=/data/embody.db`, `EMBODY_WORKSPACE=/app` (the folder with `worlds/` and `packs/`, since the database is not beside them), `EMBODY_AS=host`, `EMBODY_WORLD=glass-reach`, `PORT=8900` (Railway sets its own `PORT`; the server listens on whatever it is given). Change `EMBODY_WORLD` in the service's variables to host another world from this repository.
 
 ## Invites
 

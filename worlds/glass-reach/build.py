@@ -31,6 +31,13 @@ back to Taan). The story checks facts, not a stage:
 
 Timers: heat at 200, Dram at 240, dusk at 500, the cistern fails at 600. Play is turn-based, three seconds a turn.
 
+Hosted (`embody load glass-reach --hosted`, docs/HOSTING.md): six seats are playable (Ansel, Sefa, Ruhl, Dram, Ossa,
+Nico; Taan stays the Keth's own), four templates make a newcomer per side (a carrier at the Landing, a guard in the
+yard, a Keth on the ridge, a Dreyer agent on the road), the root carries the briefing every newcomer gets, and
+host(s) rescales the spine to real time at 4x: a game day every six real hours, heat and dusk and night and dawn
+every day, Dram two real hours after the first guest sits down, the cistern at four and a half. The clock runs
+while a guest is in the world and waits when none is, so the spine starts with the first player, not the deploy.
+
 Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on and reach_story; take, drop, give, talk,
 read and person_on come from packs/village, the rules from packs/d20), define(s), populate(s), upgrade(s).
 """
@@ -64,22 +71,25 @@ AMBIENT = {"time_of_day": "morning", "weather": "clear, the heat already buildin
 
 FACTIONS = ["House Varrick", "the Keth", "House Dreyer", "the Carriers"]
 
-ANSEL = {"role": "reeve", "faction": "House Varrick", "body": 2, "wits": 3, "will": 3,
+ANSEL = {"role": "reeve", "faction": "House Varrick", "playable": True, "body": 2, "wits": 3, "will": 3,
          "skills": {"blade": 1, "parley": 2, "lore": 1, "resolve": 1},
          "description": "Reeve of Scar Gate by the Crown's writ, nine days in the post, sand in everything already.",
          "brief": "You are Ansel Varrick, reeve of a fief your house was handed and nobody wanted. The cistern is cracked. "
                   "The Keth have the water and no reason to share it. Somebody Dreyer left behind is in your walls. "
                   "You have a blade you can use a little, a tongue you can use well, a ward, and Captain Ruhl."}
 
-SEFA = {"role": "scout", "faction": "the Keth", "body": 3, "wits": 3, "will": 2,
+SEFA = {"role": "scout", "faction": "the Keth", "playable": True, "body": 3, "wits": 3, "will": 2,
         "skills": {"blade": 2, "stealth": 2, "survival": 3},
         "description": "A Keth scout in sand-colored cloth, a knife at the small of her back, eyes on the Hold.",
         "brief": "You are Sefa of the Keth. Taan sent you up the ridge to watch the new reeve. Dreyer poisoned the old well "
                  "and the Keth have not shared water with the Hold since. The Deepwell is yours to keep secret or to show. "
                  "You know the Flats and how to walk them quiet."}
 
-RUHL = {"faction": "House Varrick", "body": 4, "wits": 2, "will": 3, "skills": {"blade": 3, "resolve": 2}, "vigor": 8, "max_vigor": 8,
+RUHL = {"faction": "House Varrick", "playable": True, "body": 4, "wits": 2, "will": 3, "skills": {"blade": 3, "resolve": 2}, "vigor": 8, "max_vigor": 8,
         "description": "Captain of the Hold's guard. Grey, square, a scar across the knuckles of the sword hand.",
+        "brief": "You are Captain Ruhl. Nine men, a wall that wants twenty, a reeve who talks well and has not bled yet, and a "
+                 "clerk inside your gate who stands like a blade. Keep the reeve alive. In the ring you hold the ring; outside it "
+                 "the Hold's blades are his if he says the word.",
         "default_line": "Ruhl grunts. 'Reeve's business, not mine. Ask me about the walls or the men.'",
         "dialog": {
             "wall|walls|gate|hold|defend": "'Walls are sound. Water is not. Twelve days of it in the cistern if nobody washes, and nobody washes.'",
@@ -93,9 +103,12 @@ RUHL = {"faction": "House Varrick", "body": 4, "wits": 2, "will": 3, "skills": {
             "back|stand|support|help|side|behind": "'In the ring I hold the ring, Reeve. I do not step into it. Outside the ring, say the word and the Hold's blades are yours. That is the law, and it is what I would do anyway.'",
         }}
 
-DRAM = {"faction": "House Dreyer", "body": 3, "wits": 3, "will": 3, "skills": {"blade": 3, "stealth": 1, "resolve": 2}, "vigor": 7, "max_vigor": 7,
-        "secret": ["dialog", "gives", "gave", "faction", "orders"], "orders": "the reeve, in the ring, before the moon turns",
+DRAM = {"faction": "House Dreyer", "playable": True, "body": 3, "wits": 3, "will": 3, "skills": {"blade": 3, "stealth": 1, "resolve": 2}, "vigor": 7, "max_vigor": 7,
+        "secret": ["dialog", "gives", "gave", "faction", "orders", "brief"], "orders": "the reeve, in the ring, before the moon turns",
         "waiting": False,
+        "brief": "You are Dram Hollis, Dreyer's blade under a Carrier's papers. Your orders: the reeve, in the ring, before the moon "
+                 "turns, and the Keth kept thirsty. The yard is a ring by old law and a reeve called out in it must answer. Nobody "
+                 "here knows what you are except, maybe, the Carrier who took your glass. Choose your moment, or let the timer choose it.",
         "description": "The Carriers' clerk, a lean man with ink on two fingers and no ink on the rest.",
         "default_line": "Hollis smiles with the lower half of his face. 'Guild business, Reeve. Dull as dust.'",
         "dialog": {
@@ -105,9 +118,12 @@ DRAM = {"faction": "House Dreyer", "body": 3, "wits": 3, "will": 3, "skills": {"
             "convoy|stay|stayed|why|here|left": "'Why stay? The Guild left a tally to keep and a clerk to keep it. A man stays where the counting is.' He does not blink.",
         }}
 
-OSSA = {"faction": "the Carriers", "body": 2, "wits": 4, "will": 3, "skills": {"parley": 3, "lore": 2, "resolve": 1},
+OSSA = {"faction": "the Carriers", "playable": True, "body": 2, "wits": 4, "will": 3, "skills": {"parley": 3, "lore": 2, "resolve": 1},
         "ember_bought": 0,
         "description": "Ossa the Carrier, broad and brown, a ledger on a cord round her neck and a water-tally on the other.",
+        "brief": "You are Ossa of the Carriers' Guild. Water in, glass out, the Guild's cut on both. You carried for Dreyer eleven "
+                 "years and you carry for Varrick now; the Guild carries for whoever holds the gate. The clerk in the Hold came on "
+                 "Dreyer's paper and you took his glass and said nothing. Whoever gets terms with the Keth owns this road.",
         "default_line": "Ossa taps the ledger. 'Water in, glass out. Talk to me in those two words and we understand each other.'",
         "dialog": {
             "water|skin|drink|buy|price": "'Water is a full skin for one shard of glass. Hand me the glass and the skin is yours. No glass, no water; the Guild does not run a well.'",
@@ -129,8 +145,11 @@ TAAN = {"faction": "the Keth", "body": 1, "wits": 4, "will": 5, "skills": {"lore
             "sefa|scout|nico": "'My scouts watch you from the ridge. If you are here, one of them let you be here. Remember that.'",
         }}
 
-NICO = {"faction": "the Keth", "body": 2, "wits": 3, "will": 2, "skills": {"stealth": 3, "survival": 3, "blade": 1},
+NICO = {"faction": "the Keth", "playable": True, "body": 2, "wits": 3, "will": 2, "skills": {"stealth": 3, "survival": 3, "blade": 1},
         "description": "A Keth scout, young, cross-legged on the rock with a long glass in one hand, watching the Hold.",
+        "brief": "You are Nico of the Keth, Taan's eyes on the ridge. Watch the Hold and tell her careful or afraid. The Deepwell "
+                 "is under the rock behind you; a friend of the Keth who asks about water may be shown the way, a Hold man never. "
+                 "You know the broken step that the Thresher does not hear.",
         "default_line": "Nico does not take the glass from his eye. 'Hm.'",
         "dialog": {
             "water|well|deepwell|cistern|keth": "'Water is for the Keth and the Keth's friends.' He lowers the glass. 'Are you a friend? Friends bring something.'",
@@ -138,6 +157,43 @@ NICO = {"faction": "the Keth", "body": 2, "wits": 3, "will": 2, "skills": {"stea
             "thresher|flats|sand|glass": "'Loud step, two, three, and it turns. Broken step and you are wind. You hear the hum, you run for rock and you do not look back.'",
             "dram|clerk|carrier": "'The one in the yard who watches the drill? He walks like a blade. He is nobody's clerk.'",
         }}
+
+BRIEFING = (
+    "The Glass Reach: a hard desert fief of black glass and red dunes. House Varrick has held Scar Gate nine days by the Crown's "
+    "writ; its cistern is cracked and holds a week of water. The Keth keep the Deepwell under Red Ridge and have shared nothing "
+    "with the Hold since House Dreyer poisoned a well. The Carriers' Guild sells water at the Landing for emberglass, which lies "
+    "in veins on the Flats, and digging it loud wakes the Thresher under the sand. Four sides, one road, one week of water. "
+    "The rules are on the table (d20 plus stat plus skill against a difficulty; a ward stops the fast blade and the slow one "
+    "passes it; the ring in the yard holds by old law). The engine rolls; you decide; your agent tells it.")
+
+TEMPLATES = {
+    "carrier": {"type": "person", "place": "The Carriers' Landing", "doc": "a Guild carrier off the last convoy, at the Landing",
+                "state": {"faction": "the Carriers", "body": 3, "wits": 3, "will": 2, "skills": {"parley": 1, "survival": 1, "lore": 1}},
+                "brief": "You came in with the water convoy and stayed when it left. The Guild carries for whoever holds the gate; "
+                         "Ossa keeps the tally. Water is a skin for a shard. Whatever else you are here for is yours to decide."},
+    "guard": {"type": "person", "place": "The Gate Yard", "doc": "one of Ruhl's nine, in the Gate Yard",
+              "state": {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "vigor": 6, "max_vigor": 6},
+              "brief": "You hold a blade for House Varrick under Captain Ruhl: nine men for a wall that wants twenty, a new reeve, "
+                       "a week of water, and a clerk who watches the drill like a man counting."},
+    "keth": {"type": "person", "place": "Red Ridge", "doc": "a Keth of Taan's camp, on Red Ridge",
+             "state": {"faction": "the Keth", "body": 3, "wits": 3, "will": 2, "skills": {"stealth": 2, "survival": 2, "blade": 1}},
+             "brief": "You are Keth. The Deepwell is yours and the Low Well is a grave. You walk the Flats with the broken step and "
+                      "the Thresher does not hear you. The Hold has a new reeve; Taan wants to know careful or afraid."},
+    "dreyer": {"type": "person", "place": "The Salt Road", "doc": "a House Dreyer agent come up the Salt Road under another name",
+               "state": {"faction": "House Dreyer", "secret": ["dialog", "gives", "gave", "faction", "brief"],
+                         "body": 3, "wits": 3, "will": 3, "skills": {"blade": 1, "stealth": 2, "parley": 2}},
+               "brief": "You are Dreyer's, under another name. The house lost the writ, the Hold and the water and means to have "
+                        "them back: the Keth kept thirsty, the reeve kept weak, the Flats empty for the taking. Dram Hollis is in the "
+                        "Hold on the same business; he does not know you are coming."},
+}
+
+STORY_KINDS = ["arrived", "checked", "talked", "agreed", "dram_moves", "downed", "killed", "yielded",
+               "heat", "dusk", "night", "dawn", "cistern_cracks"]
+
+# the spine at 4x real time, in world seconds: a day is 86400 (six real hours); every=86400 repeats daily
+HOSTED = {"rate": 4, "claim_lapse": 900,
+          "spine": [("heat", 21600, 86400), ("dram_moves", 28800, None), ("dusk", 43200, 86400),
+                    ("night", 54000, 86400), ("cistern_cracks", 64800, None), ("dawn", 86400, 86400)]}
 
 GOALS = {
     "Reeve Ansel Varrick": [
@@ -237,7 +293,7 @@ def define(s):
 def populate(s):
     """Places, people, things, rules and the clock."""
     root = s.summary()["root"]
-    s.patch(root, {"policy": POLICY, "ambient": AMBIENT})
+    s.patch(root, {"policy": POLICY, "ambient": AMBIENT, "briefing": BRIEFING, "templates": TEMPLATES})
 
     hold = s.spawn("place", root, "Scar Gate, the Hold", state={
         "description": "A squat stone hold wedged into the only gap in the Scar. A cracked cistern under the floor, a hall "
@@ -322,8 +378,7 @@ def populate(s):
                                            "ansel": ansel, "sefa": sefa, "ruhl": ruhl, "dram": dram, "ossa": ossa, "taan": taan,
                                            "nico": nico, "worm": worm, "keth": factions["the Keth"], "varrick": factions["House Varrick"]})
     install_rules(s, root)
-    s.set_rule(root, "reach_story", kinds=["arrived", "checked", "talked", "agreed", "dram_moves", "downed", "killed", "yielded",
-                                            "heat", "dusk", "cistern_cracks"])
+    s.set_rule(root, "reach_story", kinds=STORY_KINDS)
     by_name = {"Reeve Ansel Varrick": ansel, "Sefa of the Keth": sefa, "Captain Ruhl": ruhl, "Dram Hollis": dram,
                "Ossa the Carrier": ossa, "Elder Taan": taan, "Nico": nico}
     seed_reach(s, by_name)
@@ -340,9 +395,34 @@ def upgrade(s):
     need = ["Reeve Ansel Varrick", "Sefa of the Keth", "Captain Ruhl", "Dram Hollis", "Ossa the Carrier", "Elder Taan", "Nico"]
     if all(n in names for n in need):
         seed_reach(s, {n: names[n] for n in need})
+    seats = {"Reeve Ansel Varrick": ANSEL, "Sefa of the Keth": SEFA, "Captain Ruhl": RUHL, "Dram Hollis": DRAM,
+             "Ossa the Carrier": OSSA, "Nico": NICO}
+    for who, table in seats.items():
+        if who in names:
+            st = s.inspect(names[who])["state"]
+            want = {k: table[k] for k in ("playable", "brief", "secret") if k in table and st.get(k) != table[k]}
+            if want:
+                s.patch(names[who], want)
     root = s.summary()["root"]
     install_rules(s, root)
-    s.set_rule(root, "reach_story", kinds=["arrived", "checked", "talked", "agreed", "dram_moves", "downed", "killed", "yielded",
-                                            "heat", "dusk", "cistern_cracks"])
-    s.patch(root, {"policy": POLICY})
+    s.set_rule(root, "reach_story", kinds=STORY_KINDS)
+    s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
+
+
+def host(s):
+    """The Reach as a hosted place (`embody load glass-reach --hosted`). Seats lapse after fifteen quiet minutes; the clock
+    runs at 4x while a guest is in the world and waits when none is; the spine is rescaled to real time and repeats
+    daily. Runs once: a second call renews the settings and leaves the timers where the first put them."""
+    root = s.summary()["root"]
+    s.world.set_meta({"claim_lapse": HOSTED["claim_lapse"], "run_when_occupied": True})
+    s.clock(run=False, rate=HOSTED["rate"], turn=0)
+    if s.world.meta().get("hosted"):
+        return
+    spine = {kind for kind, _, _ in HOSTED["spine"]}
+    for t in s.timers():
+        if t["kind"] in spine:
+            s.unschedule(t["id"])
+    for kind, at, every in HOSTED["spine"]:
+        s.schedule(at, kind, entity=root, every=every)
+    s.world.set_meta({"hosted": True})
 

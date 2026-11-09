@@ -322,13 +322,17 @@ def install_pack(session: "Session", ws: Workspace, name: str, known: dict[str, 
     return {"pack": name, "scripts": scripts}
 
 
-def load_world(session: "Session", ref: str | Path, upgrade: bool = False, workspace: Workspace | None = None) -> dict[str, Any]:
+def load_world(session: "Session", ref: str | Path, upgrade: bool = False, workspace: Workspace | None = None,
+               hosted: bool = False) -> dict[str, Any]:
     """Build a world from its folder (or renew a live one with upgrade=True).
 
     A folder's build.py carries a WORLD manifest (id, name, seed, description, requires), `define(s)` for schemas,
     `populate(s)` for entities and `upgrade(s)` for additions. Scripts are the files in scripts/. Packs named in
     `requires` are installed first. A build replays changes.jsonl after populate. Upgrade runs the packs' define,
     the scripts, define and upgrade against the world the session points at: new code, same state and history.
+
+    hosted=True also runs the folder's `host(s)` after populate or upgrade: how this world differs as a hosted
+    place (its pace, its seats' lapse, timers scaled to real time). A build without one hosts as it is.
 
     A legacy single file with `build(session)` (or define/populate/upgrade) still loads as before."""
     ws = workspace or session.engine.workspace or Workspace(Path.cwd())
@@ -350,8 +354,10 @@ def load_world(session: "Session", ref: str | Path, upgrade: bool = False, works
                 mod.define(session)
             if hasattr(mod, "upgrade"):
                 mod.upgrade(session)
+            if hosted and hasattr(mod, "host"):
+                mod.host(session)
             r = session.summary()
-            r.update(upgraded=True, folder=str(folder), packs=[p["pack"] for p in packs], scripts=scripts)
+            r.update(upgraded=True, hosted=hosted, folder=str(folder), packs=[p["pack"] for p in packs], scripts=scripts)
             return r
         if manifest is None:
             if not hasattr(mod, "build"):
@@ -372,9 +378,11 @@ def load_world(session: "Session", ref: str | Path, upgrade: bool = False, works
         if hasattr(mod, "populate"):
             mod.populate(session)
         replayed, errors = replay_changes(session, ws, wid)
+        if hosted and hasattr(mod, "host"):
+            mod.host(session)
     git = ws.git_init(folder)
     r = session.summary()
-    r.update(folder=str(folder), packs=[p["pack"] for p in packs], scripts=scripts, replayed=replayed, git=git)
+    r.update(folder=str(folder), hosted=hosted, packs=[p["pack"] for p in packs], scripts=scripts, replayed=replayed, git=git)
     if errors:
         r["replay_errors"] = errors
     return r

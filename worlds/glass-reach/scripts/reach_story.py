@@ -114,6 +114,12 @@ def on(ctx, event):
     elif k == "dusk":
         ctx.patch(ctx.root(), {"ambient": {"time_of_day": "dusk", "weather": "the heat going out of the air fast", "light": "red, long shadows"}})
         scene(ctx, st.hold, "The sun drops behind Red Ridge and the Hold's walls start to tick as they cool.")
+    elif k == "night":
+        ctx.patch(ctx.root(), {"ambient": {"time_of_day": "night", "weather": "cold, the glass giving back the day's heat", "light": "starlight, the dunes pale"}})
+        scene(ctx, st.flats, "Night comes down on the Flats all at once. The glass ticks as it cools, and somewhere under the dunes something answers the ticking.")
+    elif k == "dawn":
+        ctx.patch(ctx.root(), {"ambient": {"time_of_day": "morning", "weather": "clear, the heat already building", "light": "hard white"}})
+        scene(ctx, st.hold, "Grey light, then red, up the face of the Scar. Another day on the tally.")
     elif k == "cistern_cracks":
         cistern = ctx.get(st.cistern)
         if cistern is not None and int(cistern.state.left or 0) > 0:

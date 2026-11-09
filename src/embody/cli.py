@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .grants import default_url
 from .ops import AUTHOR, OBSERVER, OPS, Engine, Rejected, Session, call
 from .workspace import Workspace
 from .workspace import load_world as _load_world
@@ -66,7 +67,7 @@ def save_state(db: Path, st: dict[str, Any]) -> None:
 
 def open_session(args: argparse.Namespace) -> tuple[Engine, Session, dict[str, Any]]:
     db = db_path(args)
-    eng = Engine(db)
+    eng = Engine(db, workspace=os.environ.get("EMBODY_WORKSPACE"))  # the folder with worlds/ and packs/; default: the database's
     st = load_state(db)
     principal = getattr(args, "as_", None) or os.environ.get("EMBODY_AS") or st.get("principal") or "cli"
     caps = list(st.get("capabilities", {}).get(principal, []))
@@ -231,13 +232,13 @@ def parse_params(items: list[str] | None) -> dict[str, Any]:
 # ---- world files -------------------------------------------------------------------
 
 
-def load_world(session: Session, ref: str | Path, upgrade: bool = False) -> dict[str, Any]:
+def load_world(session: Session, ref: str | Path, upgrade: bool = False, hosted: bool = False) -> dict[str, Any]:
     """Build a world from its folder under <workspace>/worlds, or renew a live one with upgrade=True.
 
     `ref` is a world id (the folder name), a folder, a build.py, or a legacy single-file world. The folder's
     build.py carries a WORLD manifest and define/populate/upgrade; scripts are the files in its scripts/; packs it
-    `requires` come from <workspace>/packs. See embody.workspace."""
-    return _load_world(session, ref, upgrade=upgrade)
+    `requires` come from <workspace>/packs. hosted=True also runs the build's host(s). See embody.workspace."""
+    return _load_world(session, ref, upgrade=upgrade, hosted=hosted)
 
 
 def load_world_file(session: Session, path: Path, upgrade: bool = False) -> dict[str, Any]:
@@ -296,6 +297,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("ref", help="a world id, a world folder, or a world file")
     c.add_argument("--upgrade", action="store_true",
                    help="run the packs, scripts, define and upgrade against the current world: new code, same state")
+    c.add_argument("--hosted", action="store_true",
+                   help="also run the build's host(s): the world as a hosted place (pace, lapse, real-time timers)")
     c = sub.add_parser("init", help="make this folder a workspace: worlds/, packs/, .gitignore, .mcp.json")
     c = sub.add_parser("save", help="write this world's state to worlds/<id>/saves/<name>.json (author)")
     c.add_argument("name", nargs="?")
@@ -391,8 +394,9 @@ def main(argv: list[str] | None = None) -> int:
             r = s.create_world(args.name, seed=args.seed, id=args.id, description=args.description)
             emit(args, r, f"created {r['id']} ({r['name']}), root {r['root']}")
         elif args.cmd == "load":
-            r = load_world(s, args.ref, upgrade=args.upgrade)
-            emit(args, r, f"{'upgraded' if args.upgrade else 'loaded'} {s.world_id}: {json.dumps(r, default=str)[:400]}")
+            r = load_world(s, args.ref, upgrade=args.upgrade, hosted=args.hosted)
+            emit(args, r, f"{'upgraded' if args.upgrade else 'loaded'}{' (hosted)' if args.hosted else ''} {s.world_id}: "
+                          f"{json.dumps(r, default=str)[:400]}")
         elif args.cmd == "init":
             r = init_workspace(Path.cwd())
             emit(args, r, f"workspace at {r['root']}: made {len(r['made'])} item(s); worlds {r['worlds'] or 'none'}, packs {r['packs'] or 'none'}")
@@ -408,7 +412,7 @@ def main(argv: list[str] | None = None) -> int:
             b = s.join(args.world_id, args.entity)
             emit(args, b, render_perceive(b))
         elif args.cmd == "invite":
-            eng.public_url = args.url or os.environ.get("EMBODY_URL")
+            eng.public_url = args.url or default_url()
             r = s.invite(args.role, entity=args.entity, template=args.template, label=args.label, expires=args.expires,
                          principal=args.principal, scope=args.scope)
             emit(args, r, f"grant {r['id']} for {r['principal']} ({r['role']}). Send them this:\n\n{r['paste']}")

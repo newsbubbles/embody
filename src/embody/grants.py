@@ -8,6 +8,7 @@ sees the token again after it is made, only its hash.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import secrets
 import time
@@ -103,8 +104,17 @@ _ADD_LINES = """Add the server (pick your harness; the URL and token are the sam
   Anything else that speaks MCP: streamable HTTP at {url} with the header  Authorization: Bearer {token}"""
 
 
+def default_url() -> str | None:
+    """The public URL for invites when none is given: $EMBODY_URL, else https://<Railway public domain>/mcp."""
+    url = os.environ.get("EMBODY_URL")
+    if url:
+        return url
+    domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+    return f"https://{domain}/mcp" if domain else None
+
+
 def paste(world_name: str, role: str, url: str, token: str, seat: str | None = None,
-          scope_names: list[str] | None = None, rate: float = 1.0, briefing: str = "") -> str:
+          scope_names: list[str] | None = None, rate: float = 1.0, briefing: str = "", waits: bool = False) -> str:
     """The block of text a friend drops into their agent. It orients the agent, adds the server and says how to begin."""
     url = url or "<server url>"
     head = (f"You are invited into {world_name}, a world running on embody: a deterministic world engine where the "
@@ -129,6 +139,9 @@ def paste(world_name: str, role: str, url: str, token: str, seat: str | None = N
                  "drive any NPC; clock() reads and sets the time; seats() shows who is in and what is open.")
     if not rate:
         pace = "The world is paused between acts: each act of yours moves it a turn, and nothing happens while you are away."
+    elif waits:
+        pace = (f"The world's clock runs at {rate:g}x real time while anyone is in it and waits, paused, when the last "
+                f"player leaves: things happen while you are away, and wait() is how you keep up.")
     elif rate == 1:
         pace = "The world's clock runs in real time: things happen while you are away, and wait() is how you keep up."
     else:

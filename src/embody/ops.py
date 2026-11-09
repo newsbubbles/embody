@@ -131,18 +131,32 @@ class Engine:
         dt = (now - last) * w.clock()["rate"]
         return w.step(dt) if dt > 0 else []
 
+    def settle_clock(self, w: World) -> bool:
+        """A world whose meta says `run_when_occupied` runs while a grant holder is in a body and waits, paused, when
+        none is. The host's own sessions do not count: they are the keyboard, not a guest. Returns running."""
+        if not w.meta().get("run_when_occupied"):
+            return bool(w.clock()["running"])
+        occupied = any(p.get("grant_id") and p.get("entity_id") for p in w.principals())
+        if occupied != bool(w.clock()["running"]):
+            w.set_clock(running=occupied)
+            if occupied:
+                self._wall[w.id] = self.now()  # the pause is not elapsed time
+        return occupied
+
     def tick_all(self) -> dict[str, Any]:
-        """What a server does once a second: running clocks advance, lapsed seats are released."""
+        """What a server does once a second: running clocks advance, lapsed seats are released, and a world that
+        runs only while occupied starts or stops with its guests."""
         out: dict[str, Any] = {"stepped": [], "released": {}}
         now = self.wall()
         for row in self.store.list_worlds():
             w = self.world(row["id"])
-            if w.clock()["running"]:
-                self.sync_clock(w.id)
-                out["stepped"].append(w.id)
             gone = w.release_lapsed(now)
             if gone:
                 out["released"][w.id] = gone
+            self.settle_clock(w)
+            if w.clock()["running"]:
+                self.sync_clock(w.id)
+                out["stepped"].append(w.id)
         return out
 
     def session(self, principal_id: str, world_id: str | None = None, capabilities: list[str] | None = None,
@@ -343,6 +357,7 @@ class Session:
             except Exception:
                 w.store.rollback()
                 raise
+            self.engine.settle_clock(w)
         b = self.perceive()
         b["briefing"] = self._briefing(eid)
         return b
@@ -456,8 +471,12 @@ class Session:
         root = w.get(w.root_id)
         ent = w.get(eid)
         ck = w.clock()
-        pace = (f"the clock runs at {ck['rate']:g}x real time; things happen while you are away, wait() keeps up"
-                if ck["running"] else "the world is paused between acts: each of yours moves it a turn")
+        waits = bool(w.meta().get("run_when_occupied"))
+        if ck["running"] or waits:
+            pace = (f"the clock runs at {ck['rate']:g}x real time" + (" while anyone is in the world" if waits else "")
+                    + "; things happen while you are away, wait() keeps up")
+        else:
+            pace = "the world is paused between acts: each of yours moves it a turn"
         how = ["perceive() is your eyes; act(verb, target) your hands; say(text, to=...) your voice",
                "wait(timeout) blocks until something happens near you",
                "a refusal says why and what would work; do not retry the same call"]
@@ -508,9 +527,10 @@ class Session:
         w.store.put("grants", row)
         ck = w.clock()
         names = [w.get(x)["name"] for x in sc if w.get(x)]
+        waits = bool(w.meta().get("run_when_occupied"))
         text = paste(w.name, role, self.engine.public_url or "", token,
                      seat=(w.get(eid)["name"] if eid and role != MIND else None), scope_names=names,
-                     rate=ck["rate"] if ck["running"] else 0.0)
+                     rate=ck["rate"] if ck["running"] or waits else 0.0, waits=waits)
         return {"ok": True, "id": row["id"], "principal": pid, "role": role, "entity": eid, "scope": sc,
                 "template": template, "expires": row["expires"], "token": token, "url": self.engine.public_url,
                 "paste": text, "hint": "the token is shown once; grants() lists grants without it"}

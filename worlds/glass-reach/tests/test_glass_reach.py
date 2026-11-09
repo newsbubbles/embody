@@ -200,6 +200,52 @@ def test_heat_dusk_and_the_cistern_on_timers():
         you.act("fill", "Waterskin")
 
 
+def test_hosted_reach_has_seats_templates_and_a_day_that_turns_with_its_guests():
+    eng = Engine(workspace=REPO)
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    r = load_world(gm, "glass-reach", hosted=True)
+    assert r["hosted"]
+    seats = gm.seats()
+    names = {x["name"] for x in seats["seats"]}
+    assert {"Reeve Ansel Varrick", "Sefa of the Keth", "Captain Ruhl", "Dram Hollis", "Ossa the Carrier", "Nico"} <= names
+    assert "Elder Taan" not in names
+    assert {t["template"] for t in seats["templates"]} == {"carrier", "guard", "keth", "dreyer"}
+    ck = gm.clock()
+    assert not ck["running"] and ck["rate"] == 4 and ck["turn"] is None
+    timers = {t["kind"]: t for t in gm.timers()}
+    assert timers["dram_moves"]["in"] == 28800 and timers["dawn"]["in"] == 86400 and timers["heat"]["in"] == 21600
+    # a guest sits down: the clock runs and the briefing says so; the day turns; the guest leaves and the world waits
+    eng.public_url = "https://reach.example/mcp"
+    inv = gm.invite("player", entity="Reeve Ansel Varrick", label="Sam")
+    assert "4x real time while anyone is in it" in inv["paste"] and "Glass Reach" in inv["paste"]
+    sam = eng.session_for_token(inv["token"])
+    b = sam.join()
+    assert b["briefing"]["text"].startswith("The Glass Reach") and "while anyone is in the world" in b["briefing"]["pace"]
+    assert gm.clock()["running"]
+    gm.clock(step=21600)
+    assert sam.perceive()["ambient"]["time_of_day"] == "noon"
+    gm.clock(step=54000 - 21600)
+    assert sam.perceive()["ambient"]["time_of_day"] == "night"  # after dusk at 43200
+    gm.clock(step=86400 - 54000)
+    assert sam.perceive()["ambient"]["time_of_day"] == "morning"  # dawn
+    gm.clock(step=21600)
+    assert sam.perceive()["ambient"]["time_of_day"] == "noon"  # the heat comes back every day
+    assert gm.inspect("The cistern")["state"]["left"] == 0  # one-shot, 64800 in
+    assert any("walls start to tick" in t for t in scenes(sam.perceive(cursor=0, events=800)["events"]))  # dusk, at the Hold
+    sam.leave()
+    eng.tick_all()
+    assert not gm.clock()["running"]
+    # a newcomer from a template stands where the template says
+    kit = eng.session_for_token(gm.invite("player", label="Kit")["token"])
+    b = kit.join(template="keth", name="Kit")
+    assert b["here"]["name"] == "Red Ridge" and gm.inspect("Kit")["state"]["faction"] == "the Keth"
+    assert gm.clock()["running"]
+    # hosting again renews the settings and leaves the timers alone
+    n = len(gm.timers())
+    load_world(gm, "glass-reach", upgrade=True, hosted=True)
+    assert len(gm.timers()) == n and gm.clock()["rate"] == 4
+
+
 def test_upgrade_is_idempotent():
     eng, gm, you = reach()
     before = {e["id"]: e["state"] for e in gm.find(limit=500)}

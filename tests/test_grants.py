@@ -237,6 +237,8 @@ def test_http_door_needs_a_bearer_and_serves_the_grants_session():
     assert server.started
     try:
         url = eng.public_url
+        with urllib.request.urlopen(url.replace("/mcp", "/health"), timeout=10) as r:
+            assert r.status == 200 and json.loads(r.read())["ok"] is True
         status, body = _post(url, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         assert status == 401 and body["ok"] is False and "grant" in body["reason"]
         status, body = _post(url, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token="nope")
