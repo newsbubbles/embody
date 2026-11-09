@@ -206,18 +206,28 @@ class Session:
             r["hint"] = "the world's code lives in that folder: build.py for schemas and entities, scripts/ for verbs and rules"
         return r
 
+    def _meta_of(self, world_id: str) -> dict[str, Any] | None:
+        row = self.engine.store.get("world", None, world_id)
+        return dict(row.get("meta") or {}) if row else None
+
     def save(self, name: str | None = None) -> dict[str, Any]:
-        """(author) Write everything the database holds about this world to worlds/<id>/saves/<name>.json."""
+        """(author) Write everything the database holds about this world to worlds/<id>/saves/<name>.json.
+        A fork or a restored game saves into the folder of the world it came from, as <id>-<time>.json."""
         self._need(AUTHOR)
         ws = self.engine.workspace or Workspace(Path.cwd())
-        return save_world(self.engine, self.world.id, ws.save_path(self.world.id, name))
+        home = ws.home(self.world.id, self._meta_of)
+        r = save_world(self.engine, self.world.id, ws.save_path(self.world.id, name, home))
+        if home != self.world.id:
+            r["home"] = home
+        return r
 
     def restore(self, path: str, id: str | None = None) -> dict[str, Any]:
         """(author) A world from a save file, under its own id or a new one. Point this session at it afterwards."""
         self._need(AUTHOR)
         p = Path(path)
         if not p.exists() and self.engine.workspace is not None and self.world_id:
-            cand = self.engine.workspace.save_path(self.world_id, p.stem)
+            ws = self.engine.workspace
+            cand = ws.save_path(self.world_id, p.stem, ws.home(self.world_id, self._meta_of))
             if cand.exists():
                 p = cand
         if not p.exists():

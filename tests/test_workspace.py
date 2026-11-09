@@ -57,6 +57,14 @@ def test_live_authoring_writes_the_folder_and_a_fresh_build_replays_it(tmp_path)
     assert gm2.inspect("Echo")["state"]["mood"] == "loud" and gm2.inspect("Echo")["type"] == "shouter"
     # the build itself was not recorded again
     assert len((tmp_path / "worlds" / "the-pit" / "changes.jsonl").read_text().splitlines()) == 4
+    # a fork has no folder: it saves into its source's folder under its own id, and saves are not ignored by git
+    gm.fork_world("the-pit", "pit-2")
+    gm.use("pit-2")
+    r = gm.save()
+    assert r["home"] == "the-pit" and Path(r["path"]).parent == tmp_path / "worlds" / "the-pit" / "saves"
+    assert Path(r["path"]).name.startswith("pit-2-")
+    assert Path(gm.save("x")["path"]).name == "pit-2-x.json"
+    assert "saves" not in (tmp_path / "worlds" / "the-pit" / ".gitignore").read_text()
     # in memory nothing is written
     eng3 = Engine(workspace=tmp_path)
     gm3 = eng3.session("gm", capabilities=[AUTHOR])

@@ -30,7 +30,7 @@ worlds/<id>/
   build.py        WORLD = {"id", "name", "seed", "description", "requires"}; define(s), populate(s), upgrade(s)
   scripts/*.py    one script per file, the file stem is the script id
   changes.jsonl   live authoring, one op per line, replayed by a fresh build
-  saves/*.json    save(name) writes here; ignored by git unless you keep one
+  saves/*.json    save(name) writes here; commit the ones worth keeping
   notes/          playtest notes, the handoff to the next author round
   tests/          pytest finds them
 packs/<name>/
@@ -44,7 +44,7 @@ Scripts share code with `use("name")` on a line of its own: the file `scripts/_n
 
 Live authoring lands in the folder too. `create_world(name, id=...)` makes `worlds/<id>/` with a build.py skeleton and starts a git repository there (unless the folder already sits inside one). `define_script` writes `scripts/<id>.py`; `define_schema`, `spawn`, `patch`, `connect`, `set_rule`, `schedule` and the other author ops append to `changes.jsonl` with the arguments as you gave them. Name things, then: `spawn("thing", "Pell's Mill", "Hat")` replays on a fresh build, an entity id would not. When the world settles, move what changes.jsonl holds into `populate` or `upgrade` and start the file over.
 
-`save(name)` writes the whole world (entities, events, scripts, schemas, timers) to `saves/<name>.json`; `restore(path, id=...)` brings it back under its own id or a new one. Versions, forks and backups of the code are git's job: commit the folder, branch it, tag it. The engine's `fork_world` is for a fresh game on the same state, not for versions.
+`save(name)` writes the whole world (entities, events, scripts, schemas, timers) to `saves/<name>.json`; `restore(path, id=...)` brings it back under its own id or a new one. A fork, or a game restored under a new id, has no folder of its own: it runs its source's code, so it saves into the source's folder as `saves/<id>-<time>.json`. Saves are the archive of a game; the database is only where the live ones run. Versions, forks and backups of the code are git's job: commit the folder, branch it, tag it. The engine's `fork_world` is for a fresh game on the same state, not for versions.
 
 ## Holder verbs and object verbs
 

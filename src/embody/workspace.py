@@ -30,7 +30,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from .world import Rejected
 
@@ -65,7 +65,7 @@ def upgrade(s):
     """What an older build of this world lacks. Every step checks before it acts, so it runs twice without change."""
 '''
 
-WORLD_GITIGNORE = "saves/\nmirror/\n__pycache__/\n"
+WORLD_GITIGNORE = "mirror/\n__pycache__/\n"
 
 
 class Workspace:
@@ -194,10 +194,32 @@ class Workspace:
 
     # ---- saves ---------------------------------------------------------------------------
 
-    def save_path(self, world_id: str, name: str | None = None) -> Path:
-        d = self.world_dir(world_id) if (self.world_dir(world_id) / "build.py").exists() else self.root / "saves" / world_id
+    def home(self, world_id: str, meta_of: Callable[[str], dict[str, Any] | None]) -> str:
+        """The world whose folder a game belongs to: itself, or up the forked_from / restored_from chain to the
+        first world that has a folder here. A fork runs its source's code, so its saves live with the source."""
+        seen: set[str] = set()
+        wid = world_id
+        while wid not in seen:
+            seen.add(wid)
+            if (self.world_dir(wid) / "build.py").exists():
+                return wid
+            meta = meta_of(wid) or {}
+            src = (meta.get("forked_from") or meta.get("restored_from") or {}).get("world")
+            if not src:
+                break
+            wid = src
+        return world_id
+
+    def save_path(self, world_id: str, name: str | None = None, home: str | None = None) -> Path:
+        """worlds/<home>/saves/<name>.json; home is the world whose folder this game belongs to (see home()).
+        A game with no folder anywhere saves under saves/<id>/ at the root. The default name is the time; a game
+        saving into another world's folder gets its own id in front of the name."""
+        home = home or world_id
+        d = self.world_dir(home) if (self.world_dir(home) / "build.py").exists() else self.root / "saves" / world_id
         (d / "saves").mkdir(parents=True, exist_ok=True)
         name = name or _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+        if home != world_id:
+            name = f"{world_id}-{name}"
         return d / "saves" / f"{name}.json"
 
 

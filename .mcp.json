@@ -2,7 +2,7 @@
   "mcpServers": {
     "embody": {
       "command": "uv",
-      "args": ["run", "embody", "serve", "--as", "claude", "--author"]
+      "args": ["run", "--no-sync", "embody", "serve", "--as", "claude", "--author"]
     }
   }
 }

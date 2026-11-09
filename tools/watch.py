@@ -68,9 +68,24 @@ class Reader:
         self.db = db
         self.root = root or workspace_of(db)
 
-    def folder(self, world_id: str) -> str | None:
-        d = self.root / "worlds" / world_id
-        return f"worlds/{world_id}" if (d / "build.py").exists() else None
+    def folder(self, world_id: str, metas: dict[str, dict] | None = None) -> str | None:
+        """The world's folder: its own, or up the forked_from / restored_from chain (a fork runs its source's code)."""
+        seen: set[str] = set()
+        wid = world_id
+        while wid not in seen:
+            seen.add(wid)
+            if (self.root / "worlds" / wid / "build.py").exists():
+                return f"worlds/{wid}"
+            meta = (metas or {}).get(wid)
+            if meta is None and metas is None and self.db.exists():
+                with self.conn() as c:
+                    r = c.execute("SELECT meta FROM world WHERE id=?", (wid,)).fetchone()
+                meta = (_loads(r["meta"]) or {}) if r else {}
+            src = ((meta or {}).get("forked_from") or (meta or {}).get("restored_from") or {}).get("world")
+            if not src:
+                return None
+            wid = src
+        return None
 
     def conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(f"file:{self.db.as_posix()}?mode=ro", uri=True, timeout=2.0)
@@ -82,11 +97,13 @@ class Reader:
         out = []
         if self.db.exists():
             with self.conn() as c:
-                for r in c.execute("SELECT id, name, t, clock_running, clock_rate, meta FROM world ORDER BY rowid DESC"):
-                    meta = _loads(r["meta"]) or {}
-                    out.append({"id": r["id"], "name": r["name"], "t": r["t"], "running": bool(r["clock_running"]),
-                                "rate": r["clock_rate"], "forked_from": meta.get("forked_from"),
-                                "turn": meta.get("turn_seconds"), "built": True, "folder": self.folder(r["id"])})
+                rows = c.execute("SELECT id, name, t, clock_running, clock_rate, meta FROM world ORDER BY rowid DESC").fetchall()
+            metas = {r["id"]: (_loads(r["meta"]) or {}) for r in rows}
+            for r in rows:
+                meta = metas[r["id"]]
+                out.append({"id": r["id"], "name": r["name"], "t": r["t"], "running": bool(r["clock_running"]),
+                            "rate": r["clock_rate"], "forked_from": meta.get("forked_from"),
+                            "turn": meta.get("turn_seconds"), "built": True, "folder": self.folder(r["id"], metas)})
         # then the folders under worlds/ nobody has built into this database yet
         built = {w["id"] for w in out}
         wd = self.root / "worlds"
