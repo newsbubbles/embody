@@ -262,3 +262,61 @@ def test_http_door_needs_a_bearer_and_serves_the_grants_session():
     finally:
         server.should_exit = True
         t.join(timeout=5)
+
+
+def _get(url: str, token: str | None = None) -> tuple[int, str, bytes]:
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"} if token else {})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, r.headers.get("content-type", ""), r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers.get("content-type", ""), e.read()
+
+
+def test_viewer_is_mounted_behind_the_door_for_watching_roles_only():
+    uvicorn = pytest.importorskip("uvicorn")
+    from embody.mcp_server import build_server, http_app
+    eng, w, i = engine_with_two_rooms()
+    port = _free_port()
+    eng.public_url = f"http://127.0.0.1:{port}/mcp"
+    gm = owner(eng)
+    gm.patch("Prisoner", {"playable": True})
+    player = gm.invite("player", entity="Prisoner", label="Sam")
+    eye = gm.invite("observer", label="Eye")
+    assert "/watch" in eye["paste"] and "/watch" not in player["paste"]  # only roles the viewer admits are told about it
+    told = gm.invite("player", template=None, label="Ana", brief="Find the Prisoner before the Warden does.")
+    assert "Find the Prisoner" in told["paste"]
+    sess = eng.session_for_token(told["token"])
+    assert sess._briefing(i["Prisoner"])["from_the_host"].startswith("Find the Prisoner")
+    assert "from_the_host" not in eng.session_for_token(player["token"])._briefing(i["Prisoner"])
+    srv = build_server(gm, None, eng, http_only=True)
+    server = uvicorn.Server(uvicorn.Config(http_app(srv), host="127.0.0.1", port=port, log_level="error"))
+    t = threading.Thread(target=server.run, daemon=True)
+    t.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    assert server.started
+    try:
+        base = f"http://127.0.0.1:{port}/watch"
+        status, ctype, body = _get(base)
+        assert status == 200 and ctype.startswith("text/html") and b"embody watch" in body  # the page needs no grant
+        status, _, body = _get(base + "/state.json")
+        assert status == 401 and json.loads(body)["ok"] is False
+        status, _, body = _get(base + "/state.json", token=player["token"])
+        assert status == 403 and "observer" in json.loads(body)["reason"]
+        status, _, body = _get(base + "/state.json?limit=5", token=eye["token"])
+        assert status == 200, body
+        d = json.loads(body)
+        assert d["ok"] and d["world"]["id"] == "two-rooms" and {e["id"] for e in d["entities"]} >= {i["Cell"], i["Prisoner"]}
+        assert len(d["events"]) <= 5
+        status, _, body = _get(base + "/state.json?world=some-other-world", token=eye["token"])
+        assert json.loads(body)["world"]["id"] == "two-rooms"  # a grant sees its own world whatever it asks for
+        status, _, body = _get(base + "/worlds.json", token=eye["token"])
+        assert [x["id"] for x in json.loads(body)] == ["two-rooms"]
+        status, _, body = _get(base + "/nothing.json", token=eye["token"])
+        assert status == 404
+    finally:
+        server.should_exit = True
+        t.join(timeout=5)

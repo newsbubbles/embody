@@ -482,9 +482,12 @@ class Session:
                "a refusal says why and what would work; do not retry the same call"]
         if self.role == MIND:
             how.insert(0, "your card carries the secret brief: who you are and what you want; remember() and intend() keep your notes")
-        return {"role": self.role, "role_doc": ROLE_DOC.get(self.role, ""), "world": w.name, "you": ent["name"] if ent else eid,
-                "text": (root["state"].get("briefing") if root else None) or w.summary()["description"],
-                "pace": pace, "how": how}
+        out = {"role": self.role, "role_doc": ROLE_DOC.get(self.role, ""), "world": w.name, "you": ent["name"] if ent else eid,
+               "text": (root["state"].get("briefing") if root else None) or w.summary()["description"],
+               "pace": pace, "how": how}
+        if self.grant and self.grant.get("brief"):
+            out["from_the_host"] = self.grant["brief"]  # this guest's own orders; nobody else's briefing carries them
+        return out
 
     def leave(self) -> dict[str, Any]:
         if self.world_id and self.world.principal(self.pid):
@@ -495,10 +498,11 @@ class Session:
 
     def invite(self, role: str, entity: str | None = None, template: str | None = None, label: str = "",
                expires: float | None = None, principal: str | None = None,
-               scope: list[str] | None = None) -> dict[str, Any]:
+               scope: list[str] | None = None, brief: str = "") -> dict[str, Any]:
         """(owner) A grant that travels as a token. role: author, narrator, player, mind or observer. entity: the
         seat kept for this invite (player) or the NPC it holds (mind; scope=[...] for more). template: the character
-        it may make. expires: hours. Returns the token once, with the paste for the invitee's agent."""
+        it may make. expires: hours. brief: the host's word to this guest alone (their orders, their first goal); it
+        rides the paste and the briefing join() returns. Returns the token once, with the paste for the invitee's agent."""
         self._tick()
         w = self.world
         if role not in ROLES:
@@ -523,14 +527,15 @@ class Session:
         row = {"world_id": w.id, "id": "g" + secrets.token_hex(4), "principal_id": pid, "role": role, "scope": sc,
                "entity_id": eid, "template": template, "label": label, "token_hash": token_hash(token),
                "created": now, "expires": (now + float(expires) * 3600.0) if expires else None, "revoked": 0,
-               "last_used": None}
+               "last_used": None, "brief": brief or None}
         w.store.put("grants", row)
         ck = w.clock()
         names = [w.get(x)["name"] for x in sc if w.get(x)]
         waits = bool(w.meta().get("run_when_occupied"))
         text = paste(w.name, role, self.engine.public_url or "", token,
                      seat=(w.get(eid)["name"] if eid and role != MIND else None), scope_names=names,
-                     rate=ck["rate"] if ck["running"] or waits else 0.0, waits=waits)
+                     rate=ck["rate"] if ck["running"] or waits else 0.0, waits=waits,
+                     briefing=(f"From the host, for you alone: {brief}" if brief else ""))
         return {"ok": True, "id": row["id"], "principal": pid, "role": role, "entity": eid, "scope": sc,
                 "template": template, "expires": row["expires"], "token": token, "url": self.engine.public_url,
                 "paste": text, "hint": "the token is shown once; grants() lists grants without it"}

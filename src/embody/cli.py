@@ -359,8 +359,9 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--log-level", dest="log_level", default=None)
 
     c = sub.add_parser("invite", help="(owner) make a grant and print the paste: embody --author --world W invite player --entity reeve --label Sam")
-    c.add_argument("role", help="author, narrator, player, mind or observer")
+    c.add_argument("role", help="owner (the host's own agent), author, narrator, player, mind or observer")
     c.add_argument("--entity", help="the seat kept for them (player) or the NPC they hold (mind)")
+    c.add_argument("--brief", default="", help="your word to this guest alone: orders, a first goal; rides the paste and their join()")
     c.add_argument("--scope", nargs="*", default=None, help="(mind) more entities they hold")
     c.add_argument("--template", help="the template their new character may use")
     c.add_argument("--label", default="", help="who this is for; becomes their principal id")
@@ -414,7 +415,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "invite":
             eng.public_url = args.url or default_url()
             r = s.invite(args.role, entity=args.entity, template=args.template, label=args.label, expires=args.expires,
-                         principal=args.principal, scope=args.scope)
+                         principal=args.principal, scope=args.scope, brief=args.brief)
             emit(args, r, f"grant {r['id']} for {r['principal']} ({r['role']}). Send them this:\n\n{r['paste']}")
         elif args.cmd == "grants":
             r = s.grants()

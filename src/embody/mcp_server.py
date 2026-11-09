@@ -12,6 +12,7 @@ Every tool returns a dict; a failure is {"ok": false, "reason", "hint", "alterna
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextvars
 import functools
 import inspect
@@ -21,6 +22,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs
 
 from .grants import AUTHOR_ROLE, MIND, NARRATOR, OWNER, active, default_url, token_hash
 from .ops import AUTHOR, OBSERVER, Engine, Rejected, Session
@@ -226,12 +228,13 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @_wrap
     def invite(role: str, entity: str | None = None, template: str | None = None, label: str = "",
                expires: float | None = None, scope: list[str] | None = None,
-               as_principal: str | None = None) -> dict[str, Any]:
+               as_principal: str | None = None, brief: str = "") -> dict[str, Any]:
         """(owner) Make a grant that travels as a token and return the paste for the invitee's agent. role: author,
         narrator, player, mind or observer. entity keeps a seat (player) or names the NPC held (mind; scope=[...]
-        for more). template: the character it may make. expires: hours. The token is shown once."""
+        for more). template: the character it may make. expires: hours. brief: your word to this guest alone (their
+        orders, a first goal); it rides the paste and the briefing their join() returns. The token is shown once."""
         return S(None).invite(role, entity=entity, template=template, label=label, expires=expires,
-                              principal=as_principal, scope=scope)
+                              principal=as_principal, scope=scope, brief=brief)
 
     @tool()
     @_wrap
@@ -516,40 +519,86 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     return srv
 
 
+async def _reply(send: Any, status: int, body: Any, ctype: str = "application/json",
+                 extra: tuple[tuple[bytes, bytes], ...] = ()) -> None:
+    """One whole HTTP response from the middleware: a dict goes out as JSON, bytes as they are."""
+    data = body if isinstance(body, (bytes, bytearray)) else json.dumps(body).encode()
+    await send({"type": "http.response.start", "status": status,
+                "headers": [(b"content-type", ctype.encode()), (b"content-length", str(len(data)).encode()),
+                            (b"cache-control", b"no-store"), *extra]})
+    await send({"type": "http.response.body", "body": bytes(data)})
+
+
+_NO_GRANT = {"ok": False, "reason": "no valid grant on this request",
+             "hint": "send the bearer token from your invite; expired or revoked tokens stop here"}
+
+
 class Bearer:
     """ASGI middleware: every HTTP request carries `Authorization: Bearer <token>` for a live grant, or gets a
-    401 in the engine's own refusal shape. The grant's session rides the request's context into the tools."""
+    401 in the engine's own refusal shape. The grant's session rides the request's context into the tools.
+    Two paths stand outside the MCP door: GET /health (the platform's probe, no grant) and /watch (the live
+    viewer: its page is public, its data needs a grant that may read everything, and shows that grant's world)."""
 
     def __init__(self, app: Any, hub: Hub):
         self.app = app
         self.hub = hub
 
+    def _session(self, scope: dict[str, Any]) -> Session | None:
+        auth = dict(scope.get("headers") or []).get(b"authorization", b"").decode("latin-1")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        return self.hub.for_token(token) if token else None
+
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        if scope.get("path") == "/health" and scope.get("method") == "GET":
-            body = json.dumps({"ok": True, "embody": "up"}).encode()  # the platform's probe; no world data, no grant
-            await send({"type": "http.response.start", "status": 200,
-                        "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})
-            await send({"type": "http.response.body", "body": body})
+        path = scope.get("path") or ""
+        if path == "/health" and scope.get("method") == "GET":
+            await _reply(send, 200, {"ok": True, "embody": "up"})  # no world data, no grant
             return
-        auth = dict(scope.get("headers") or []).get(b"authorization", b"").decode("latin-1")
-        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-        sess = self.hub.for_token(token) if token else None
+        if path == "/watch" or path.startswith("/watch/"):
+            await self._watch(scope, path[len("/watch"):], send)
+            return
+        sess = self._session(scope)
         if sess is None:
-            body = json.dumps({"ok": False, "reason": "no valid grant on this request",
-                               "hint": "send the bearer token from your invite; expired or revoked tokens stop here"}).encode()
-            await send({"type": "http.response.start", "status": 401,
-                        "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()),
-                                    (b"www-authenticate", b"Bearer")]})
-            await send({"type": "http.response.body", "body": body})
+            await _reply(send, 401, _NO_GRANT, extra=((b"www-authenticate", b"Bearer"),))
             return
         tok = _current.set(sess)
         try:
             await self.app(scope, receive, send)
         finally:
             _current.reset(tok)
+
+    async def _watch(self, scope: dict[str, Any], sub: str, send: Any) -> None:
+        """The viewer. sub is the path under /watch: "" or "/" is the page, the rest its data."""
+        from .watch import PAGE, WATCH_ROLES, Reader
+        if scope.get("method") != "GET":
+            await _reply(send, 405, {"ok": False, "reason": "the viewer answers GET only", "hint": "the MCP door is /mcp"})
+            return
+        if sub in ("", "/"):
+            await _reply(send, 200, PAGE.read_bytes(), ctype="text/html; charset=utf-8")
+            return
+        sess = self._session(scope)
+        if sess is None:
+            await _reply(send, 401, _NO_GRANT, extra=((b"www-authenticate", b"Bearer"),))
+            return
+        if sess.role not in WATCH_ROLES:
+            await _reply(send, 403, {"ok": False,
+                                     "reason": f"the viewer is not open to a {sess.role}; it needs the "
+                                               f"{', '.join(WATCH_ROLES[:-1])} or {WATCH_ROLES[-1]} role",
+                                     "hint": "a player sees the world through perceive(); an observer invite watches it whole"})
+            return
+        eng = self.hub.engine
+        query = parse_qs((scope.get("query_string") or b"").decode("latin-1"))
+        world_id = sess.grant["world_id"] if sess.grant else None  # over HTTP every session is a grant's
+        root = eng.workspace.root if eng.workspace is not None else None
+
+        def read() -> tuple[int, str, bytes]:
+            with eng.lock:  # the store's own connection, so a WAL checkpoint or an in-memory test database is no concern
+                return Reader(Path(eng.store.path), root, conn=eng.store.conn).answer(sub, query, only=world_id)
+
+        code, ctype, body = await asyncio.to_thread(read)
+        await _reply(send, code, body, ctype=ctype)
 
 
 def http_app(srv: Any, host: str = "127.0.0.1") -> Bearer:

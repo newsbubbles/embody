@@ -128,7 +128,8 @@ CREATE INDEX IF NOT EXISTS grants_token ON grants (token_hash);
 """
 
 # Columns added after a table was first shipped: a database from before gets them on open.
-_ADDED_COLS = {"principal": (("role", "TEXT"), ("grant_id", "TEXT"), ("last_seen", "REAL"))}
+_ADDED_COLS = {"principal": (("role", "TEXT"), ("grant_id", "TEXT"), ("last_seen", "REAL")),
+               "grants": (("brief", "TEXT"),)}
 
 JSON_COLS = {
     "world": {"counters", "meta"},

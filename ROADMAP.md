@@ -19,7 +19,7 @@ Status: alpha. The first vertical slice was built in one day (2026-11-08) and pl
 - Minds in the engine: secret `memory`, `brief` and `goals` (`intend`), `recall` as the permission-aware graph query, per-entity cursors, `knows` edges with an opinion floor and the last exchanges, `known_places`, addressed speech (`say(to=...)`, `say_as`) and speech into the room, `fork_world`, turn-based play (`clock(turn=n)`), deep-merging `patch`, scoped affordances, per-viewer event filtering, `ambient` facts and `clock` in every perceive, `timers` and `unschedule`.
 - Content: `worlds/ferry-at-dusk/` on the `village` pack (five places, four NPCs with goals and opinions of each other, a storyline that checks facts with two routes to the ferryman, fog, night and dawn on timers, sleep and wake, followers, chores with durations that settle a debt relation, drink and tipsiness; split into define/populate/upgrade so a live world takes new code and additions), `worlds/glass-reach/` on `packs/d20/` (a desert hold, a hidden well, three factions with standings, a reusable d20 rule set where every rule is a verb: `check` against a DC, `attack` with wounds, down and dead, wards, `yield` and honor, duels that a root rule turns into a ring, `threaten` and `parley` as opposed rolls, thirst as a body behavior, fighters that fight without a mind, a thresher under the glass, a storyline with a truce or a lost ending), `worlds/two-rooms/` (a legacy single-file world).
 - Workspace (round 6): a world is a folder, `worlds/<id>/` with `build.py` (manifest, define, populate, upgrade), `scripts/` as files with `use()` includes, `changes.jsonl` written by live authoring and replayed by a fresh build, `saves/`, `notes/`, `tests/`; packs under `packs/`; `create_world` scaffolds the folder and starts a git repository; `save` and `restore`; `embody init`; the database at the workspace root.
-- Tooling: 111 tests, markdown mirror, `tools/watch.py` live graph viewer with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
+- Tooling: 111 tests, markdown mirror, `embody.watch` live graph viewer (run by `tools/watch.py`, served hosted at `/watch`) with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
 
 ## Found in the first playtest
 
@@ -181,7 +181,8 @@ Decisions from Nate on 2026-11-09: an invite is a block of text a friend pastes 
 - [x] Provenance: an event whose actor is another principal's body carries `by_player`, and their speech `untrusted: true`. Accounts are not a thing yet.
 - [ ] Hosted role references: narrator and mind for a remote world, with the harness profile they must run under (no filesystem, no shell, only the embody tools), and the server-run sandboxed mind as the recommended option for NPCs.
 - [ ] Web client without an agent: room, people, exits, inventory and the evaluated affordances as text and buttons, `say` as a box. Reads the same bundle.
-- [ ] Accounts, rosters, world listings, invitations, a per-world page with the live graph (today's `tools/watch.py` behind a grant).
+- [ ] Accounts, rosters, world listings, invitations.
+- [x] A per-world page with the live graph: the viewer lives in the package (`embody.watch`) and the hosted server serves it at `/watch` behind the bearer door, the grant's world only, for the roles that read everything; `tools/watch.py` stays the local way to run it.
 - [ ] Security audit before any public world: auth, grants, the script sandbox under hostile authors, rate limits, abuse of `fill`, what a captured mind token can do.
 
 ### Later

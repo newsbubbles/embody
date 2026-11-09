@@ -24,7 +24,8 @@ svg { display:block; width:100%; height:100%; }
 #zoom { position:absolute; right:10px; top:10px; display:flex; gap:4px; }
 #zoom button { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:3px 9px; font-size:12px; cursor:pointer; }
 #zoom button:hover { border-color:var(--dim); }
-header select { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:3px 6px; font-size:13px; }
+header select, header input, header button { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:3px 6px; font-size:13px; }
+header button { cursor:pointer; } header button:hover { border-color:var(--dim); }
 header .fork { color:var(--other); }
 aside { border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); border-bottom:1px solid var(--line); }
@@ -62,6 +63,7 @@ aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; tex
   <span class="dim" id="counts"></span>
   <span class="dim" id="sched"></span>
   <span class="dim" id="err"></span>
+  <span id="auth" hidden><input id="tok" type="password" placeholder="your invite token" size="30" autocomplete="off"> <button id="tokgo">watch</button></span>
   <span class="dim" id="where" title="database · workspace"></span>
 </header>
 <div id="graph"><svg id="svg"><g id="view"></g></svg>
@@ -76,8 +78,34 @@ aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; tex
 <script>
 const BOX_W = 150, BOX_H = 44, GAP_X = 14, GAP_Y = 84, PAD = 24, TOP = 70;
 let lastSeq = -1, lastVersions = "", pinned = null, data = null, seenSeq = 0;
+// Standalone (tools/watch.py) the page is the root of its own server and needs no token. Hosted, the MCP server
+// serves it at /watch and its data answers only to a grant's bearer token, kept in this tab once given.
+const BASE = /\/watch\/?$/.test(location.pathname) ? location.pathname.replace(/\/$/, "") : "";
+let token = null;
+try { token = sessionStorage.getItem("embody-token"); } catch (e) {}
+if (location.hash.startsWith("#token=")) {      // an invite's viewer link: keep the token in the tab, drop it from the address
+  token = decodeURIComponent(location.hash.slice(7));
+  try { sessionStorage.setItem("embody-token", token); } catch (e) {}
+  history.replaceState(null, "", location.pathname + location.search);
+}
 let watching = location.hash ? location.hash.slice(1) : null, knownWorlds = "";
 const $ = id => document.getElementById(id);
+async function get(path) {
+  const r = await fetch(BASE + path, { cache: "no-store", headers: token ? { "Authorization": "Bearer " + token } : {} });
+  if (r.status === 401 || r.status === 403) {
+    const b = await r.json().catch(() => ({}));
+    $("auth").hidden = false;
+    $("err").textContent = r.status === 401 ? (token ? "that token does not open this world; paste a live one" : "this viewer wants your invite token") : (b.reason || "this grant may not watch");
+    const e = new Error(b.reason || ("HTTP " + r.status)); e.auth = true; throw e;
+  }
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+function useToken() {
+  token = $("tok").value.trim(); if (!token) return;
+  try { sessionStorage.setItem("embody-token", token); } catch (e) {}
+  $("tok").value = ""; $("auth").hidden = true; $("err").textContent = ""; lastSeq = -1; knownWorlds = ""; poll();
+}
 
 // ---- zoom and pan: one transform on the <g id="view">, kept across redraws, reset by fit
 const cam = { k: 1, x: 0, y: 0, fitted: false, w: 0, h: 0 };
@@ -106,7 +134,8 @@ function zoomAt(f, px, py) {
   $("zout").onclick = () => zoomAt(1 / 1.3, g.clientWidth / 2, g.clientHeight / 2);
   $("zfit").onclick = fit;
   window.addEventListener("resize", () => { if (cam.fitted) fit(); });
-  fetch("/info.json").then(r => r.json()).then(i => { $("where").textContent = i.db + " · " + i.root; }).catch(() => {});
+  $("tokgo").onclick = useToken; $("tok").addEventListener("keydown", ev => { if (ev.key === "Enter") useToken(); });
+  get("/info.json").then(i => { $("where").textContent = [i.db, i.root].filter(Boolean).join(" · "); }).catch(() => {});
   $("wsel").onchange = () => { watching = $("wsel").value; location.hash = watching; lastSeq = -1; cam.fitted = false; cam.w = 0; pinned = null; poll(); };
   window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (h && h !== watching) { watching = h; lastSeq = -1; cam.w = 0; poll(); } });
 })();
@@ -205,7 +234,7 @@ function render(d, changed) {
 }
 
 async function refreshWorlds() {
-  const r = await fetch("/worlds.json"); const ws = await r.json();
+  const ws = await get("/worlds.json");
   const key = ws.map(w => w.id + ":" + w.name + ":" + w.built).join("|");
   if (key === knownWorlds) return ws;
   knownWorlds = key;
@@ -242,9 +271,9 @@ async function poll() {
   try {
     await refreshWorlds();
     const want = watching;
-    const r = await fetch("/state.json?limit=80" + (want ? "&world=" + encodeURIComponent(want) : ""));
-    const d = await r.json();
+    const d = await get("/state.json?limit=80" + (want ? "&world=" + encodeURIComponent(want) : ""));
     if (!d.ok) { $("err").textContent = d.reason; return; }
+    if (BASE) $("where").textContent = "";       // hosted: one world behind a token; the first fetch may have shown it
     if (watching !== want) return;              // the user switched worlds while this poll was in flight
     $("err").textContent = "";
     const versions = d.entities.map(e => e.id + ":" + e.version + ":" + e.parent).join(",");
@@ -262,7 +291,7 @@ async function poll() {
       data = d; render(d, changed); renderEvents(d); showDetail();
       seenSeq = d.max_seq; lastSeq = d.max_seq; lastVersions = versions;
     }
-  } catch (e) { $("err").textContent = "no server: " + e.message; }
+  } catch (e) { if (!e.auth) $("err").textContent = "no server: " + e.message; }
 }
 poll(); setInterval(poll, 1000);
 </script>
