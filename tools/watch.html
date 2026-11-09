@@ -57,10 +57,12 @@ aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; tex
   <b>embody watch</b>
   <select id="wsel" title="which world to watch"></select>
   <span id="fork" class="fork"></span>
+  <span class="dim" id="folder" title="the world's folder in the workspace"></span>
   <span><span id="dot" class="dot"></span><span id="clock"></span></span>
   <span class="dim" id="counts"></span>
   <span class="dim" id="sched"></span>
   <span class="dim" id="err"></span>
+  <span class="dim" id="where" title="database · workspace"></span>
 </header>
 <div id="graph"><svg id="svg"><g id="view"></g></svg>
   <div id="zoom"><button id="zin" title="zoom in">+</button><button id="zout" title="zoom out">−</button><button id="zfit" title="fit the whole world (or double-click the graph)">fit</button></div>
@@ -104,6 +106,7 @@ function zoomAt(f, px, py) {
   $("zout").onclick = () => zoomAt(1 / 1.3, g.clientWidth / 2, g.clientHeight / 2);
   $("zfit").onclick = fit;
   window.addEventListener("resize", () => { if (cam.fitted) fit(); });
+  fetch("/info.json").then(r => r.json()).then(i => { $("where").textContent = i.db + " · " + i.root; }).catch(() => {});
   $("wsel").onchange = () => { watching = $("wsel").value; location.hash = watching; lastSeq = -1; cam.fitted = false; cam.w = 0; pinned = null; poll(); };
   window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (h && h !== watching) { watching = h; lastSeq = -1; cam.w = 0; poll(); } });
 })();
@@ -203,10 +206,10 @@ function render(d, changed) {
 
 async function refreshWorlds() {
   const r = await fetch("/worlds.json"); const ws = await r.json();
-  const key = ws.map(w => w.id + ":" + w.name).join("|");
+  const key = ws.map(w => w.id + ":" + w.name + ":" + w.built).join("|");
   if (key === knownWorlds) return ws;
   knownWorlds = key;
-  $("wsel").innerHTML = ws.map(w => `<option value="${esc(w.id)}">${esc(w.name)} (${esc(w.id)})${w.forked_from ? " ⑂" : ""}</option>`).join("");
+  $("wsel").innerHTML = ws.map(w => `<option value="${esc(w.id)}"${w.built === false ? " disabled" : ""}>${esc(w.name)} (${esc(w.id)})${w.forked_from ? " ⑂" : ""}${w.built === false ? " · not built: load_world(id)" : ""}</option>`).join("");
   return ws;
 }
 
@@ -249,6 +252,7 @@ async function poll() {
     if (!want) { watching = w.id; }             // no pick yet: the server chose the newest world
     if ($("wsel").value !== w.id) $("wsel").value = w.id;
     $("fork").textContent = w.forked_from ? "forked from " + w.forked_from.world + " at t=" + Number(w.forked_from.t).toFixed(1) + " (seq " + w.forked_from.seq + ")" : "";
+    $("folder").textContent = w.folder || "";
     $("clock").textContent = "t=" + w.t.toFixed(1) + (w.running ? " running x" + w.rate : (" paused" + (w.turn ? " · turn " + w.turn + "s" : "")));
     $("dot").className = "dot" + (w.running ? " run" : "");
     $("counts").textContent = d.entities.length + " entities · " + d.edges.length + " edges · " + d.max_seq + " events · " + d.principals.length + (d.principals.length === 1 ? " principal" : " principals");

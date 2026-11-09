@@ -1,6 +1,10 @@
 """Live world graph: a read-only web view of an embody database.
 
-    uv run python tools/watch.py --db worlds/embody.db --port 8765
+    uv run python tools/watch.py --port 8765
+
+Without --db it watches the workspace's database the way the CLI finds it: $EMBODY_DB, then embody.db in the
+current folder, then a workspace from before the folders with its database at worlds/embody.db. The world list
+also shows the folders under worlds/ that are not built yet.
 
 Opens the database read-only (SQLite WAL lets it read while the engine writes),
 serves one page that polls /state.json and redraws when the event log grows.
@@ -10,7 +14,9 @@ Nothing here imports the engine or writes anything; it is a window, not a hand.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
+import os
 import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -28,9 +34,43 @@ def _loads(v):
         return v
 
 
+def find_db(root: Path = Path(".")) -> Path:
+    """The CLI's rule for the database when none is given, looked for under root."""
+    env = os.environ.get("EMBODY_DB")
+    if env:
+        return Path(env)
+    if not (root / "embody.db").exists() and (root / "worlds" / "embody.db").exists():
+        return root / "worlds" / "embody.db"
+    return root / "embody.db"
+
+
+def workspace_of(db: Path) -> Path:
+    """The folder of worlds/ and packs/ a database belongs to: its own, or the one above a legacy worlds/embody.db."""
+    p = db.resolve().parent
+    return p.parent if p.name == "worlds" else p
+
+
+def manifest(build_py: Path) -> dict:
+    """The WORLD dict of a build.py, read without running it."""
+    try:
+        tree = ast.parse(build_py.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "WORLD" for t in node.targets):
+                m = ast.literal_eval(node.value)
+                return m if isinstance(m, dict) else {}
+    except (OSError, SyntaxError, ValueError):
+        pass
+    return {}
+
+
 class Reader:
-    def __init__(self, db: Path):
+    def __init__(self, db: Path, root: Path | None = None):
         self.db = db
+        self.root = root or workspace_of(db)
+
+    def folder(self, world_id: str) -> str | None:
+        d = self.root / "worlds" / world_id
+        return f"worlds/{world_id}" if (d / "build.py").exists() else None
 
     def conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(f"file:{self.db.as_posix()}?mode=ro", uri=True, timeout=2.0)
@@ -39,14 +79,24 @@ class Reader:
 
     def worlds(self) -> list[dict]:
         # newest first: a fork made a moment ago is what the watcher wants to see
-        with self.conn() as c:
-            out = []
-            for r in c.execute("SELECT id, name, t, clock_running, clock_rate, meta FROM world ORDER BY rowid DESC"):
-                meta = _loads(r["meta"]) or {}
-                out.append({"id": r["id"], "name": r["name"], "t": r["t"], "running": bool(r["clock_running"]),
-                            "rate": r["clock_rate"], "forked_from": meta.get("forked_from"),
-                            "turn": meta.get("turn_seconds")})
-            return out
+        out = []
+        if self.db.exists():
+            with self.conn() as c:
+                for r in c.execute("SELECT id, name, t, clock_running, clock_rate, meta FROM world ORDER BY rowid DESC"):
+                    meta = _loads(r["meta"]) or {}
+                    out.append({"id": r["id"], "name": r["name"], "t": r["t"], "running": bool(r["clock_running"]),
+                                "rate": r["clock_rate"], "forked_from": meta.get("forked_from"),
+                                "turn": meta.get("turn_seconds"), "built": True, "folder": self.folder(r["id"])})
+        # then the folders under worlds/ nobody has built into this database yet
+        built = {w["id"] for w in out}
+        wd = self.root / "worlds"
+        if wd.is_dir():
+            for d in sorted(p for p in wd.iterdir() if p.is_dir() and (p / "build.py").exists()):
+                if d.name not in built:
+                    m = manifest(d / "build.py")
+                    out.append({"id": d.name, "name": m.get("name") or d.name, "t": None, "running": False, "rate": None,
+                                "forked_from": None, "turn": None, "built": False, "folder": f"worlds/{d.name}"})
+        return out
 
     def state(self, world_id: str | None, since: int, limit: int) -> dict:
         with self.conn() as c:
@@ -85,7 +135,7 @@ class Reader:
         return {"ok": True, "world": {"id": w["id"], "name": w["name"], "root": w["root_id"], "t": w["t"],
                                       "running": bool(w["clock_running"]), "rate": w["clock_rate"],
                                       "turn": meta.get("turn_seconds"), "forked_from": meta.get("forked_from"),
-                                      "policy": None},
+                                      "policy": None, "folder": self.folder(w["id"])},
                 "entities": ents, "edges": edges, "hyperedges": hyper, "principals": prin, "scheduled": sched,
                 "schemas": schemas, "max_seq": maxseq, "events": list(reversed(evs))}
 
@@ -110,6 +160,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path == "/":
                 self._send(200, (HERE / "watch.html").read_bytes(), "text/html; charset=utf-8")
+            elif u.path == "/info.json":
+                self._send(200, json.dumps({"db": str(self.reader.db), "root": str(self.reader.root)}).encode(), "application/json")
             elif u.path == "/worlds.json":
                 self._send(200, json.dumps(self.reader.worlds()).encode(), "application/json")
             elif u.path == "/state.json":
@@ -125,13 +177,15 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--db", default="embody.db" if Path("embody.db").exists() or not Path("worlds/embody.db").exists() else "worlds/embody.db")
+    ap.add_argument("--db", default=None, help="the database; default: $EMBODY_DB, embody.db, or a legacy worlds/embody.db")
+    ap.add_argument("--workspace", default=None, help="the folder of worlds/ and packs/; default: the database's")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     a = ap.parse_args()
-    Handler.reader = Reader(Path(a.db))
+    db = Path(a.db) if a.db else find_db(Path(a.workspace) if a.workspace else Path("."))
+    Handler.reader = Reader(db, Path(a.workspace) if a.workspace else None)
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
-    print(f"embody watch: http://{a.host}:{a.port}/  db={a.db}", flush=True)
+    print(f"embody watch: http://{a.host}:{a.port}/  db={db}  workspace={Handler.reader.root}", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

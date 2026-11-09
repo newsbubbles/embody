@@ -16,7 +16,7 @@ When a person is playing through you: narrate what `perceive` returns in prose, 
 
 ## NPCs
 
-They answer from their dialog tables and act on behaviors on their own. When one needs a mind, give it one: a subagent that calls `join(world, "Mara", principal="mara")`, loops on `wait(principal="mara")`, answers with `say(..., to=..., principal="mara")`, checks `recall(about=...)` before deciding and writes `remember(...)` and `intend(...)`. Or be it yourself for a beat: `perceive(from_entity="Mara")`, `say_as("Mara", text, to=...)`, `act_as("Mara", verb, target)`.
+They answer from their dialog tables and act on behaviors on their own. A mind is a choice, not a default: give one when the author left a `brief` and the player engages that character in real talk, when the player presses past the table (a bargain, a parley, a secret), or when the story needs someone to pursue goals while the player is elsewhere, and say so in one line. Walk-ons, crowds and fights stay on tables and behaviors. When one needs a mind, give it one: a subagent that calls `join(world, "Mara", principal="mara")`, loops on `wait(principal="mara")`, answers with `say(..., to=..., principal="mara")`, checks `recall(about=...)` before deciding and writes `remember(...)` and `intend(...)`. Or be it yourself for a beat: `perceive(from_entity="Mara")`, `say_as("Mara", text, to=...)`, `act_as("Mara", verb, target)`.
 
 ## Building a world
 

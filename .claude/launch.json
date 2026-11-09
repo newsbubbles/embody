@@ -4,7 +4,14 @@
     {
       "name": "watch",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "python", "tools/watch.py", "--port", "8765"],
+      "runtimeArgs": [
+        "run",
+        "--no-sync",
+        "python",
+        "tools/watch.py",
+        "--port",
+        "8765"
+      ],
       "port": 8765
     }
   ]
