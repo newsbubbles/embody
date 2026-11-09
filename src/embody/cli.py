@@ -358,7 +358,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--url", help="the public URL printed into invites (default http://host:port/mcp, or $EMBODY_URL)")
     c.add_argument("--log-level", dest="log_level", default=None)
 
-    c = sub.add_parser("invite", help="(owner) make a grant and print the paste: embody --author --world W invite player --entity reeve --label Sam")
+    c = sub.add_parser("invite", help="(owner) make a grant and print the link to send: embody --author --world W invite player --entity reeve --label Sam")
     c.add_argument("role", help="owner (the host's own agent), author, narrator, player, mind or observer")
     c.add_argument("--entity", help="the seat kept for them (player) or the NPC they hold (mind)")
     c.add_argument("--brief", default="", help="your word to this guest alone: orders, a first goal; rides the paste and their join()")
@@ -416,7 +416,8 @@ def main(argv: list[str] | None = None) -> int:
             eng.public_url = args.url or default_url()
             r = s.invite(args.role, entity=args.entity, template=args.template, label=args.label, expires=args.expires,
                          principal=args.principal, scope=args.scope, brief=args.brief)
-            emit(args, r, f"grant {r['id']} for {r['principal']} ({r['role']}). Send them this:\n\n{r['paste']}")
+            emit(args, r, f"grant {r['id']} for {r['principal']} ({r['role']}). Send them this:\n\n{r['paste']}"
+                 + (f"\n\n(What the link serves, in case they cannot fetch it:\n\n{r['page']})" if r.get("link") else ""))
         elif args.cmd == "grants":
             r = s.grants()
             emit(args, r, "\n".join(f"{g['id']:10} {g['role']:9} {g['principal_id']:24} seat={g['entity_id'] or '-':8} "

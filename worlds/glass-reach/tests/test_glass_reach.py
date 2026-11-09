@@ -218,7 +218,7 @@ def test_hosted_reach_has_seats_templates_and_a_day_that_turns_with_its_guests()
     # a guest sits down: the clock runs and the briefing says so; the day turns; the guest leaves and the world waits
     eng.public_url = "https://reach.example/mcp"
     inv = gm.invite("player", entity="Reeve Ansel Varrick", label="Sam")
-    assert "4x real time while anyone is in it" in inv["paste"] and "Glass Reach" in inv["paste"]
+    assert "4x real time while anyone is in it" in inv["page"] and "Glass Reach" in inv["paste"]
     sam = eng.session_for_token(inv["token"])
     b = sam.join()
     assert b["briefing"]["text"].startswith("The Glass Reach") and "while anyone is in the world" in b["briefing"]["pace"]

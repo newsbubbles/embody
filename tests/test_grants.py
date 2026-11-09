@@ -58,7 +58,8 @@ def test_named_seat_invite_joins_bare_and_returns_a_briefing():
     gm.patch("Prisoner", {"playable": True})
     inv = gm.invite("player", entity="Prisoner", label="Sam Pike")
     assert inv["principal"].startswith("sam-pike-") and inv["url"] == eng.public_url
-    assert "claude mcp add" in inv["paste"] and inv["token"] in inv["paste"] and "Prisoner" in inv["paste"]
+    assert "claude mcp add" in inv["page"] and inv["token"] in inv["page"] and "Prisoner" in inv["page"]
+    assert inv["link"].startswith("https://reach.example/i/") and inv["link"] in inv["paste"] and inv["token"] not in inv["paste"]
     assert eng.session_for_token("not-a-token") is None
     sam = eng.session_for_token(inv["token"])
     assert sam.role == "player" and sam.world_id == "two-rooms"
@@ -283,9 +284,9 @@ def test_viewer_is_mounted_behind_the_door_for_watching_roles_only():
     gm.patch("Prisoner", {"playable": True})
     player = gm.invite("player", entity="Prisoner", label="Sam")
     eye = gm.invite("observer", label="Eye")
-    assert "/watch" in eye["paste"] and "/watch" not in player["paste"]  # only roles the viewer admits are told about it
+    assert "/watch" in eye["page"] and "/watch" not in player["page"]  # only roles the viewer admits are told about it
     told = gm.invite("player", template=None, label="Ana", brief="Find the Prisoner before the Warden does.")
-    assert "Find the Prisoner" in told["paste"]
+    assert "Find the Prisoner" in told["page"] and "Find the Prisoner" not in told["paste"]
     sess = eng.session_for_token(told["token"])
     assert sess._briefing(i["Prisoner"])["from_the_host"].startswith("Find the Prisoner")
     assert "from_the_host" not in eng.session_for_token(player["token"])._briefing(i["Prisoner"])
@@ -397,8 +398,8 @@ def test_a_player_reads_no_plan_off_the_root_and_the_paste_asks_for_prose():
                                                     "state": {"coins": 3}, "brief": "You are the Warden's man."}},
                          "briefing": "Two rooms and a locked door."})
     inv = gm.invite("player", label="kit")
-    assert "as a story, in prose" in inv["paste"]
-    assert "as a story, in prose" not in gm.invite("observer", label="eye")["paste"]
+    assert "as a story, in prose" not in inv["page"] and "Say nothing of the setup" in inv["page"]
+    assert "Say nothing of the setup" not in gm.invite("observer", label="eye")["page"]
     p = eng.session_for_token(inv["token"])
     b = p.join(template="newcomer", name="Kit")
     assert any("no bullets" in line for line in b["briefing"]["how"])
@@ -409,3 +410,77 @@ def test_a_player_reads_no_plan_off_the_root_and_the_paste_asks_for_prose():
     assert full["policy"]["fixed"] == ["the Warden turns at t=240"]
     assert full["templates"]["newcomer"]["brief"] == "You are the Warden's man."
     assert full["templates"]["newcomer"]["state"] == {"coins": 3}
+
+
+def _get_ua(url: str, ua: str) -> tuple[int, str, bytes]:
+    req = urllib.request.Request(url, headers={"User-Agent": ua})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status, r.headers.get("content-type", ""), r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers.get("content-type", ""), e.read()
+
+
+def test_an_invite_is_a_link_whose_page_hands_the_agent_its_token_once():
+    uvicorn = pytest.importorskip("uvicorn")
+    from embody.mcp_server import build_server, http_app
+    eng, w, i = engine_with_two_rooms()
+    port = _free_port()
+    eng.public_url = f"http://127.0.0.1:{port}/mcp"
+    gm = owner(eng)
+    gm.patch("Prisoner", {"playable": True})
+    inv = gm.invite("player", entity="Prisoner", label="Sam", brief="Get out before dawn.")
+    # the paste is the link and a line; the token, the add-server lines and the brief live on the page
+    assert inv["link"] == f"http://127.0.0.1:{port}/i/" + inv["link"].rsplit("/", 1)[1]
+    assert inv["link"] in inv["paste"] and inv["token"] not in inv["paste"] and "Get out" not in inv["paste"]
+    assert inv["token"] in inv["page"] and "Prisoner" in inv["page"] and "Get out before dawn" in inv["page"]
+    assert "Say nothing of the setup" in inv["page"] and "ask what they do" in inv["page"]
+    assert inv["link_expires"] <= eng.wall() + 24 * 3600 + 1
+    g = [x for x in gm.grants() if x["id"] == inv["id"]][0]
+    assert g["link_unread"] and "page" not in g and "code_hash" not in g  # the owner's list never shows the token
+    srv = build_server(gm, None, eng, http_only=True)
+    server = uvicorn.Server(uvicorn.Config(http_app(srv), host="127.0.0.1", port=port, log_level="error"))
+    t = threading.Thread(target=server.run, daemon=True)
+    t.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    assert server.started
+    try:
+        # a chat app's preview crawler gets a stub without the token and does not spend the link
+        status, _, body = _get_ua(inv["link"], "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)")
+        assert status == 200 and inv["token"].encode() not in body and b"Paste the link into your agent" in body
+        # the agent reads the page: plain text with the token and the brief; reading twice is fine before the first use
+        status, ctype, body = _get_ua(inv["link"], "Claude-User/1.0")
+        assert status == 200 and ctype.startswith("text/plain") and body.decode() == inv["page"]
+        status, _, body = _get_ua(inv["link"], "codex/1.0")
+        assert status == 200
+        # the token's first use over the door spends the link
+        status, _, body = _get(f"http://127.0.0.1:{port}/watch/state.json", token=inv["token"])
+        assert status == 403  # a player may not watch, but the token was used
+        status, _, body = _get_ua(inv["link"], "Claude-User/1.0")
+        assert status == 404 and "taken up" in json.loads(body)["reason"]
+        g = [x for x in gm.grants() if x["id"] == inv["id"]][0]
+        assert not g["link_unread"]
+        assert eng.store.get("grants", w.id, inv["id"])["page"] is None
+        # a stale link and an unknown code refuse with a way forward
+        old = gm.invite("player", template=None, label="Late")
+        eng.store.set("grants", w.id, old["id"], code_expires=eng.wall() - 1)
+        status, _, body = _get_ua(old["link"], "Claude-User/1.0")
+        assert status == 410 and "stale" in json.loads(body)["reason"]
+        status, _, body = _get_ua(f"http://127.0.0.1:{port}/i/nothing-here", "Claude-User/1.0")
+        assert status == 404 and json.loads(body)["hint"]
+        # a revoked grant's link is gone too
+        gone = gm.invite("observer", label="Eye")
+        gm.revoke(gone["id"])
+        status, _, body = _get_ua(gone["link"], "Claude-User/1.0")
+        assert status == 410 and "revoked" in json.loads(body)["reason"]
+        # no public URL: no link, and the paste is the page itself
+        eng.public_url = None
+        plain = gm.invite("player", template=None, label="Local")
+        assert plain["link"] is None and plain["paste"] == plain["page"] and plain["token"] in plain["paste"]
+        assert eng.store.get("grants", w.id, plain["id"])["page"] is None
+    finally:
+        server.should_exit = True
+        t.join(timeout=5)

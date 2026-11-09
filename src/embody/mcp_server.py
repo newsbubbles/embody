@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from .grants import AUTHOR_ROLE, MIND, NARRATOR, OWNER, active, default_url, token_hash
+from .grants import is_preview_bot, AUTHOR_ROLE, MIND, NARRATOR, OWNER, active, default_url, token_hash
 from .ops import AUTHOR, OBSERVER, Engine, Rejected, Session
 
 # The grant session behind the HTTP request being served, set by the Bearer middleware for the request's
@@ -246,10 +246,11 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     def invite(role: str, entity: str | None = None, template: str | None = None, label: str = "",
                expires: float | None = None, scope: list[str] | None = None,
                as_principal: str | None = None, brief: str = "") -> dict[str, Any]:
-        """(owner) Make a grant that travels as a token and return the paste for the invitee's agent. role: author,
+        """(owner) Make a grant and return the paste for the friend: a link their agent reads once, within a day, for
+        the token and its brief (the agent is told to open in the world and say nothing of the setup). role: author,
         narrator, player, mind or observer. entity keeps a seat (player) or names the NPC held (mind; scope=[...]
         for more). template: the character it may make. expires: hours. brief: your word to this guest alone (their
-        orders, a first goal); it rides the paste and the briefing their join() returns. The token is shown once."""
+        orders, a first goal); it rides the page and the briefing their join() returns. The token is shown once."""
         return S(None).invite(role, entity=entity, template=template, label=label, expires=expires,
                               principal=as_principal, scope=scope, brief=brief)
 
@@ -553,8 +554,9 @@ _NO_GRANT = {"ok": False, "reason": "no valid grant on this request",
 class Bearer:
     """ASGI middleware: every HTTP request carries `Authorization: Bearer <token>` for a live grant, or gets a
     401 in the engine's own refusal shape. The grant's session rides the request's context into the tools.
-    Two paths stand outside the MCP door: GET /health (the platform's probe, no grant) and /watch (the live
-    viewer: its page is public, its data needs a grant that may read everything, and shows that grant's world)."""
+    Three paths stand outside the MCP door: GET /health (the platform's probe, no grant), /watch (the live
+    viewer: its page is public, its data needs a grant that may read everything, and shows that grant's world) and
+    GET /i/<code> (an invite link's page: the token and the brief for the agent that reads it, while the link is good)."""
 
     def __init__(self, app: Any, hub: Hub):
         self.app = app
@@ -576,6 +578,9 @@ class Bearer:
         if path == "/watch" or path.startswith("/watch/"):
             await self._watch(scope, path[len("/watch"):], send)
             return
+        if path.startswith("/i/"):
+            await self._invite(scope, path[len("/i/"):], send)
+            return
         sess = self._session(scope)
         if sess is None:
             await _reply(send, 401, _NO_GRANT, extra=((b"www-authenticate", b"Bearer"),))
@@ -585,6 +590,25 @@ class Bearer:
             await self.app(scope, receive, send)
         finally:
             _current.reset(tok)
+
+    async def _invite(self, scope: dict[str, Any], code: str, send: Any) -> None:
+        """An invite link's page. A chat app's link preview gets a stub without the token, so pasting the link into a
+        chat does not hand the seat to the preview crawler; the agent that reads the page gets the token."""
+        if scope.get("method") != "GET":
+            await _reply(send, 405, {"ok": False, "reason": "an invite link answers GET only", "hint": "the MCP door is /mcp"})
+            return
+        ua = dict(scope.get("headers") or []).get(b"user-agent", b"").decode("latin-1")
+        if is_preview_bot(ua):
+            await _reply(send, 200, b"An invite into a world on embody. Paste the link into your agent; it reads this page.",
+                         ctype="text/plain; charset=utf-8")
+            return
+        eng = self.hub.engine
+        with eng.lock:
+            status, body = eng.invite_page(code.strip("/"))
+        if isinstance(body, str):
+            await _reply(send, status, body.encode("utf-8"), ctype="text/plain; charset=utf-8")
+        else:
+            await _reply(send, status, body)
 
     async def _watch(self, scope: dict[str, Any], sub: str, send: Any) -> None:
         """The viewer. sub is the path under /watch: "" or "/" is the page, the rest its data."""

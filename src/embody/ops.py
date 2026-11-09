@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from .grants import (AUTHOR_ROLE, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, OWNER, PLAYER, ROLES, ROLE_DOC,
+from .grants import (LINK_HOURS, link_for, new_code, page, AUTHOR_ROLE, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, OWNER, PLAYER, ROLES, ROLE_DOC,
                      active, allowed, caps_for, new_token, paste, principal_id_for, role_for, token_hash)
 from .store import Store
 from .world import Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
@@ -176,12 +176,38 @@ class Engine:
 
     def session_for_token(self, token: str) -> "Session | None":
         """The session a bearer token stands for: its principal, its world, its role and its scope. None if the
-        token is unknown, revoked or expired."""
+        token is unknown, revoked or expired. The token's first use spends its invite link."""
         g = self.grant_for_token(token)
         if g is None:
             return None
+        if g.get("code_hash") or g.get("page"):
+            self.spend_link(g)
         return self.session(g["principal_id"], world_id=g["world_id"], name=g.get("label") or g["principal_id"],
                             role=g["role"], scope=list(g.get("scope") or []), grant=g)
+
+    def spend_link(self, g: dict[str, Any]) -> None:
+        """Forget the invite link's code and the page that carried the token: from here the engine holds the hash only."""
+        g["code_hash"] = None
+        g["code_expires"] = None
+        g["page"] = None
+        self.store.set("grants", g["world_id"], g["id"], code_hash=None, code_expires=None, page=None)
+
+    def invite_page(self, code: str) -> tuple[int, dict[str, Any] | str]:
+        """What the door serves at /i/<code>: the page with the token while the link is good, else a refusal that says
+        what happened and what to do. Reading the page does not spend the link; the token's first use does."""
+        rows = self.store.query("grants", "code_hash=?", (token_hash(code),), limit=1)
+        g = rows[0] if rows else None
+        if g is None:
+            return 404, {"ok": False, "reason": "no such invite, or one already taken up",
+                         "hint": "a link works once and for a day; ask the host for a fresh one"}
+        now = self.wall()
+        if not active(g, now):
+            return 410, {"ok": False, "reason": "this invite was revoked or has expired", "hint": "ask the host for a fresh one"}
+        if g.get("code_expires") is not None and float(g["code_expires"]) <= now:
+            self.spend_link(g)
+            return 410, {"ok": False, "reason": "this invite link is older than a day and has gone stale",
+                         "hint": "ask the host for a fresh one"}
+        return 200, g.get("page") or ""
 
 
 class Session:
@@ -511,6 +537,9 @@ class Session:
                "wait(timeout) blocks until something happens near you",
                "a refusal says why and what would work; do not retry the same call",
                "tell the human what happens as a story, in prose, in the fiction: no bullets, no stat sheets, no tool names"]
+        if self.role == PLAYER:
+            how.insert(0, "this briefing is for you, not for them: say nothing of seats, grants, tokens or tools; open in the "
+                          "world, with where they stand, who is near and what the body feels, then ask what they do")
         if self.role == MIND:
             how.insert(0, "your card carries the secret brief: who you are and what you want; remember() and intend() keep your notes")
         out = {"role": self.role, "role_doc": ROLE_DOC.get(self.role, ""), "world": w.name, "you": ent["name"] if ent else eid,
@@ -533,7 +562,8 @@ class Session:
         """(owner) A grant that travels as a token. role: author, narrator, player, mind or observer. entity: the
         seat kept for this invite (player) or the NPC it holds (mind; scope=[...] for more). template: the character
         it may make. expires: hours. brief: the host's word to this guest alone (their orders, their first goal); it
-        rides the paste and the briefing join() returns. Returns the token once, with the paste for the invitee's agent."""
+        rides the page and the briefing join() returns. Returns the token once, the link whose page carries it (good
+        once, for a day) and the paste: the link with a line for the friend. Without a public URL the paste is the page."""
         self._tick()
         w = self.world
         if role not in ROLES:
@@ -555,21 +585,29 @@ class Session:
             raise Rejected(f"principal {pid!r} is taken", hint="another label or principal=")
         token = new_token()
         now = self.engine.wall()
-        row = {"world_id": w.id, "id": "g" + secrets.token_hex(4), "principal_id": pid, "role": role, "scope": sc,
-               "entity_id": eid, "template": template, "label": label, "token_hash": token_hash(token),
-               "created": now, "expires": (now + float(expires) * 3600.0) if expires else None, "revoked": 0,
-               "last_used": None, "brief": brief or None}
-        w.store.put("grants", row)
+        url = self.engine.public_url or ""
+        code = new_code()
+        link = link_for(url, code)
         ck = w.clock()
         names = [w.get(x)["name"] for x in sc if w.get(x)]
         waits = bool(w.meta().get("run_when_occupied"))
-        text = paste(w.name, role, self.engine.public_url or "", token,
-                     seat=(w.get(eid)["name"] if eid and role != MIND else None), scope_names=names,
-                     rate=ck["rate"] if ck["running"] or waits else 0.0, waits=waits,
-                     briefing=(f"From the host, for you alone: {brief}" if brief else ""))
+        text = page(w.name, role, url, token, seat=(w.get(eid)["name"] if eid and role != MIND else None),
+                    scope_names=names, rate=ck["rate"] if ck["running"] or waits else 0.0, waits=waits,
+                    briefing=(f"From the host, for you alone: {brief}" if brief else ""))
+        exp = (now + float(expires) * 3600.0) if expires else None
+        code_exp = min(now + LINK_HOURS * 3600.0, exp) if exp else now + LINK_HOURS * 3600.0
+        row = {"world_id": w.id, "id": "g" + secrets.token_hex(4), "principal_id": pid, "role": role, "scope": sc,
+               "entity_id": eid, "template": template, "label": label, "token_hash": token_hash(token),
+               "created": now, "expires": exp, "revoked": 0, "last_used": None, "brief": brief or None,
+               "code_hash": token_hash(code) if link else None, "code_expires": code_exp if link else None,
+               "page": text if link else None}
+        w.store.put("grants", row)
         return {"ok": True, "id": row["id"], "principal": pid, "role": role, "entity": eid, "scope": sc,
                 "template": template, "expires": row["expires"], "token": token, "url": self.engine.public_url,
-                "paste": text, "hint": "the token is shown once; grants() lists grants without it"}
+                "link": link, "link_expires": row["code_expires"], "paste": paste(w.name, role, link, text, label=label),
+                "page": text,
+                "hint": ("send them the paste: the link works once and for a day" if link else
+                         "no public URL, so no link: send them the paste whole") + "; grants() lists grants without the token"}
 
     def grants(self) -> list[dict[str, Any]]:
         """(owner) Every grant on this world, without the tokens."""
@@ -579,8 +617,8 @@ class Session:
         out = []
         for g in w.store.query("grants", "world_id=?", (w.id,), order="created"):
             p = w.principal(g["principal_id"])
-            out.append({k: v for k, v in g.items() if k not in ("token_hash", "world_id")}
-                       | {"active": active(g, now), "in_world": p is not None,
+            out.append({k: v for k, v in g.items() if k not in ("token_hash", "world_id", "code_hash", "page")}
+                       | {"active": active(g, now), "in_world": p is not None, "link_unread": bool(g.get("code_hash")),
                           "embodying": p["entity_id"] if p else None})
         return out
 

@@ -7,10 +7,14 @@ One machine runs the world; friends come in through their own agents. The host k
 1. Make it a place, not a spine. Tag the entities a newcomer may become with `playable: true` in their state. Put `templates` on the world root for new characters (see below). Put a `briefing` paragraph on the root: it is what `join` hands every newcomer. Give the build a `host(s)` function: how the world differs as a hosted place. The Glass Reach's sets the clock to 4x real time, `claim_lapse` to 900 seconds of silence, `run_when_occupied` so the clock runs while a guest is in a body and waits when none is, and a spine of timers in world seconds (heat at noon, dusk, night, dawn, every day; the cistern on its day). A build without `host` is hosted as it is.
 2. Load it hosted: `uv run embody --as host --author load glass-reach --hosted`. `load --upgrade --hosted` renews a world that is already there: the current code against the same state, the timers left where they are. The Glass Reach's clock then runs at four times real time whenever anyone is in: a game day every six real hours, four chances a day for a night-only trigger. A paused world is turn-based, which does not synchronize players.
 3. Serve: `uv run embody serve --http --host 0.0.0.0 --port 8900 --url https://your.host/mcp`. The same tools as the stdio server, at `/mcp`, behind a bearer check: every request needs `Authorization: Bearer <token>` for a live grant or gets a 401 in the engine's own refusal shape. `GET /health` answers 200 without a grant, for the platform's probe. The server ticks once a second: running clocks advance, lapsed seats are released, and a world that runs while occupied starts and stops with its guests, whether or not anyone is calling.
-4. Invite: `EMBODY_URL=https://your.host/mcp uv run embody --as host --author --world glass-reach invite player --entity reeve --label "Sam Pike"`. It prints the paste. Send that text to Sam; Sam drops it into their agent, the agent adds the server, calls `join()` and is the reeve.
-5. Hand yourself the keys: `... invite owner --label "<you>"` once, from the hosting process, and add that paste to your own agent. From then on invites are a sentence to your agent ("invite Sam as the reeve"): the `invite`, `grants` and `revoke` tools answer to an owner grant over the door, and the viewer (below) is yours too. Only the hosting process makes owner grants; an owner over the door hands on author at most.
+4. Invite: `EMBODY_URL=https://your.host/mcp uv run embody --as host --author --world glass-reach invite player --entity reeve --label "Sam Pike"`. It prints the paste: a link and one line. Send that to Sam; Sam drops the link into their agent, the agent reads the page at the link (the server address, the token, who they are, how to begin), adds the server, calls `join()` and is the reeve, and opens with the scene rather than the setup.
+5. Hand yourself the keys: `... invite owner --label "<you>"` once, from the hosting process, and paste that link into your own agent. From then on invites are a sentence to your agent ("invite Sam as the reeve"): the `invite`, `grants` and `revoke` tools answer to an owner grant over the door, and the viewer (below) is yours too. Only the hosting process makes owner grants; an owner over the door hands on author at most.
 
 Always put TLS in front of a public host: the token travels in a header. The bearer token is the guard, not the Host header, so the server runs with DNS rebinding protection off.
+
+## Invite links
+
+An invite is a link, `https://your.host/i/<code>`. The code is random, kept hashed like the token, and the page it serves is plain text written for the agent: what this world is, the add-server lines with the bearer token, how to join, and how to tell it. The page stays up for 24 hours (or until the grant itself expires, if sooner) and goes away with the token's first use over the door: from then on the server holds the token's hash only, and the link answers 404 with a hint to ask the host for a fresh one. Reading the page does not spend it, so an agent that fetches it twice before connecting is fine. Link-preview crawlers (Discord, Slack, WhatsApp, Telegram and the like, by user agent) get a stub without the token, so a link pasted into a chat survives its preview. The `invite` result carries the `link`, the short `paste` to send, and the `page` the link serves, for a friend whose agent cannot fetch a URL. Without a public URL there is no link and the paste is the page.
 
 ## On Railway
 
@@ -61,9 +65,9 @@ Caps for players and minds: a line of `say` is at most 1000 characters, and at m
 
 File paths over the door stay inside the workspace: `restore(path)` and `load_world(file)` from a grant take a world id, a save name, or a path under the workspace root, and refuse anything else. The hosting process itself may name any file.
 
-The paste for a player or a mind also tells the agent how to tell it: as a story, in prose, in the fiction, no bullet points, no stat sheets, no tool names; the join briefing's `how` repeats it. The engine hands the agent numbers; the human should get a dry mouth.
+The page for a player tells the agent how to tell it: say nothing of the setup, the server, seats, grants, tokens or tools; open in the world (where they stand, the light, who is near, what the body feels) and ask what they do; keep to prose in the fiction, no bullet points, no stat sheets, no tool names; anticipate a newcomer, and give the mechanics only when asked outright. The join briefing's `how` repeats it. The engine hands the agent numbers; the human should get a dry mouth.
 
-Harness scope: the paste tells the agent to run with the embody tools only, no filesystem and no shell. That is the invitee's side of the bargain; the host cannot enforce it, so the role keeps what the agent can do in the world small whatever it does at home.
+Harness scope: the page tells the agent to run with the embody tools only, no filesystem and no shell. That is the invitee's side of the bargain; the host cannot enforce it, so the role keeps what the agent can do in the world small whatever it does at home.
 
 ## The viewer
 
@@ -79,4 +83,4 @@ The viewer reads through the engine's own connection under its lock, so it never
 
 ## What is not here yet
 
-Accounts and rosters, a client without an agent, `wait` as a server-sent stream, invite pages. ROADMAP.md tracks them under "Hosted, many players".
+Accounts and rosters, a client without an agent, `wait` as a server-sent stream. ROADMAP.md tracks them under "Hosted, many players".
