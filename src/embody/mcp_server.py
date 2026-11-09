@@ -90,7 +90,19 @@ class Hub:
                 if g is None or not active(g, self.engine.wall()):
                     self.by_token.pop(h, None)
                     return None
+            self._touch(s)
             return s
+
+    TOUCH_EVERY = 60.0  # seconds between last_used writes for one grant
+
+    def _touch(self, s: Session) -> None:
+        """Record that the grant was used, at most once a minute so a chatty agent costs one write."""
+        now = self.engine.wall()
+        last = s.grant.get("last_used")
+        if last is not None and now - float(last) < self.TOUCH_EVERY:
+            return
+        s.grant["last_used"] = now
+        self.engine.store.set("grants", s.grant["world_id"], s.grant["id"], last_used=now)
 
     def session(self, principal: str | None) -> Session:
         cur = _current.get()
@@ -120,10 +132,15 @@ class Hub:
         return s
 
     def principals(self) -> list[dict[str, Any]]:
-        out = [{"principal": self.main.pid, "capabilities": self.main.capabilities, "world": self.main.world_id,
-                "main": True}]
-        for pid, s in self.extra.items():
-            out.append({"principal": pid, "capabilities": s.capabilities, "world": s.world_id, "main": False})
+        """Who this connection speaks for. Over the door that is the grant's own principal and the sub-principals
+        it asked for, never the host's."""
+        cur = _current.get()
+        main = cur or self.main
+        out = [main.who() | {"main": True}]
+        prefix = f"{main.pid}:" if cur is not None else None
+        for key, s in self.extra.items():
+            if prefix is None or key.startswith(prefix):
+                out.append(s.who() | {"main": False})
         return out
 
 
@@ -186,7 +203,7 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
         the files in scripts/; packs it requires come from packs/. upgrade=True runs the packs, scripts, define and
         upgrade(s) against the world this session points at: code renewed, state and history kept."""
         from .cli import load_world as _load
-        return _load(s, file, upgrade=upgrade)
+        return _load(s, s.door_path(file, "load_world"), upgrade=upgrade)
 
     @tool()
     @_wrap

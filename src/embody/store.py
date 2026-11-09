@@ -225,6 +225,12 @@ class Store:
     def delete(self, table: str, world_id: str, id: str) -> None:
         self.conn.execute(f"DELETE FROM {table} WHERE world_id=? AND id=?", (world_id, id))
 
+    def set(self, table: str, world_id: str, id: str, **fields: Any) -> None:
+        """Change named columns of one row; the row must exist."""
+        enc = self._encode(table, fields)
+        sets = ", ".join(f"{k}=?" for k in enc)
+        self.conn.execute(f"UPDATE {table} SET {sets} WHERE world_id=? AND id=?", [*enc.values(), world_id, id])
+
     def query(self, table: str, where: str = "", params: Iterable[Any] = (), order: str = "",
               limit: int | None = None) -> list[dict[str, Any]]:
         sql = f"SELECT * FROM {table}"

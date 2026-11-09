@@ -273,11 +273,37 @@ class Session:
     def worlds(self) -> list[dict[str, Any]]:
         return self.engine.worlds()
 
+    def who(self) -> dict[str, Any]:
+        """This session as the server sees it: principal, role, world, and the grant it came in on."""
+        out: dict[str, Any] = {"principal": self.pid, "role": self.role, "capabilities": self.capabilities,
+                               "world": self.world_id}
+        if self.grant is not None:
+            out["grant"] = self.grant["id"]
+            if self.grant.get("label"):
+                out["label"] = self.grant["label"]
+            if self.scope:
+                out["scope"] = list(self.scope)
+        return out
+
+    def door_path(self, ref: str, what: str) -> str:
+        """A file reference from over the door (a grant) stays inside the workspace: a world id, a save name, or a
+        path under the workspace root. The host's own process may name any file."""
+        if self.grant is None or not any(ch in ref for ch in "/\\") and not ref.endswith((".json", ".py")):
+            return ref
+        ws = self.engine.workspace
+        root = ws.root if ws is not None else Path.cwd().resolve()
+        p = Path(ref).resolve()
+        if p != root and root not in p.parents:
+            raise Rejected(f"{what} over the door stays inside the workspace",
+                           hint="name a world id or a save (save(name) made it); only the host's own process reaches other files")
+        return ref
+
     def use(self, world_id: str) -> dict[str, Any]:
-        """Point this session at a world without embodying anything (authors, observers)."""
+        """Point this session at a world without embodying anything (authors, observers). The answer says who you are
+        there (`you`: principal and role)."""
         self.engine.world(world_id)
         self.world_id = world_id
-        return self.world.summary()
+        return self.world.summary() | {"you": self.who()}
 
     def create_world(self, name: str, seed: int = 0, id: str | None = None, description: str = "") -> dict[str, Any]:
         self._need(AUTHOR)
@@ -310,7 +336,7 @@ class Session:
     def restore(self, path: str, id: str | None = None) -> dict[str, Any]:
         """(author) A world from a save file, under its own id or a new one. Point this session at it afterwards."""
         self._need(AUTHOR)
-        p = Path(path)
+        p = Path(self.door_path(path, "restore"))
         if not p.exists() and self.engine.workspace is not None and self.world_id:
             ws = self.engine.workspace
             cand = ws.save_path(self.world_id, p.stem, ws.home(self.world_id, self._meta_of))

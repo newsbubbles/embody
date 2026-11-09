@@ -320,3 +320,69 @@ def test_viewer_is_mounted_behind_the_door_for_watching_roles_only():
     finally:
         server.should_exit = True
         t.join(timeout=5)
+
+
+def test_door_calls_write_last_used_once_a_minute():
+    from embody.mcp_server import Hub
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    clock = [1000.0]
+    eng.wall = lambda: clock[0]
+    inv = gm.invite("player", label="kit")
+    assert eng.store.get("grants", "two-rooms", inv["id"])["last_used"] is None
+    hub = Hub(eng, gm, http_only=True)
+    s = hub.for_token(inv["token"])
+    assert s.grant["last_used"] == 1000.0
+    assert eng.store.get("grants", "two-rooms", inv["id"])["last_used"] == 1000.0
+    clock[0] = 1030.0
+    hub.for_token(inv["token"])
+    assert eng.store.get("grants", "two-rooms", inv["id"])["last_used"] == 1000.0, "one write a minute"
+    clock[0] = 1070.0
+    hub.for_token(inv["token"])
+    assert eng.store.get("grants", "two-rooms", inv["id"])["last_used"] == 1070.0
+    assert [g["last_used"] for g in gm.grants() if g["id"] == inv["id"]] == [1070.0]
+
+
+def test_use_says_who_you_are_and_principals_answers_the_caller():
+    from embody.mcp_server import Hub, _current
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    assert gm.use("two-rooms")["you"]["role"] == "owner"
+    inv = gm.invite("observer", label="eye")
+    eye = eng.session_for_token(inv["token"])
+    you = eye.use("two-rooms")["you"]
+    assert you["role"] == "observer" and you["grant"] == inv["id"] and you["label"] == "eye"
+    assert you["principal"] == inv["principal"]
+    hub = Hub(eng, gm, http_only=True)
+    tok = _current.set(eye)
+    try:
+        ps = hub.principals()
+    finally:
+        _current.reset(tok)
+    assert [p["principal"] for p in ps] == [inv["principal"]] and ps[0]["role"] == "observer" and ps[0]["main"]
+    assert hub.principals()[0]["principal"] == "gm"
+
+
+def test_file_paths_over_the_door_stay_inside_the_workspace(tmp_path):
+    from embody.workspace import Workspace
+    eng, w, i = engine_with_two_rooms()
+    eng.workspace = Workspace(tmp_path / "ws")
+    (tmp_path / "ws").mkdir()
+    gm = owner(eng)
+    outside = tmp_path / "elsewhere.json"
+    outside.write_text("{}", encoding="utf-8")
+    au = eng.session_for_token(gm.invite("author", label="ed")["token"])
+    au.use("two-rooms")
+    with pytest.raises(Rejected) as r:
+        au.restore(str(outside))
+    assert "inside the workspace" in r.value.reason
+    with pytest.raises(Rejected) as r:
+        au.door_path(str(outside.parent / "x" / "build.py"), "load_world")
+    assert "inside the workspace" in r.value.reason
+    assert au.door_path("two-rooms", "load_world") == "two-rooms"
+    assert au.door_path("night-one", "restore") == "night-one"
+    inside = tmp_path / "ws" / "saves" / "two-rooms" / "saves" / "night-one.json"
+    assert au.door_path(str(inside), "restore") == str(inside)
+    with pytest.raises(Rejected) as r:
+        gm.restore(str(outside))
+    assert "not an embody save" in r.value.reason, "the host's own process reaches the file and is told what it is"

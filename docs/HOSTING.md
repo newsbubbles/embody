@@ -34,6 +34,8 @@ Environment the image sets: `EMBODY_DB=/data/embody.db`, `EMBODY_WORKSPACE=/app`
 - A word for one guest: `invite("player", template="guard", label="Ben", brief="Captain Ruhl has sent you to find the reeve and stay at his side.")`. The brief rides the paste and the briefing that guest's `join()` returns (`from_the_host`), and nobody else's; the world's own `briefing` paragraph is for everyone.
 - A resident: `invite("mind", entity="Mara", label="dan-mara")`, `scope=[...]` for more NPCs. The holder's subagent is Mara and nothing else: it cannot sit elsewhere, spawn, author or perceive from another entity. Its owner moves the story through it; the host can `evict` it.
 - `expires` is in hours. `grants()` lists every grant without its token (and who is in, as what). `revoke(id)` ends one: the token stops working and the principal leaves. `evict(principal)` releases a body without ending the grant.
+- `grants()` also shows `last_used`: the wall time of the grant's latest call through the door, written at most once a minute. A grant with `null` there has never been used.
+- The guest's agent learns who it is from the first answer: `use(world)` answers `you` with the principal, role, grant id and label, the briefing `join()` returns names the role, and `principals()` over the door answers for the caller, never the host.
 
 The token is shown once, in the invite's result and the paste. The server stores only its hash.
 
@@ -48,6 +50,8 @@ Templates live on the world root: `templates: {"carrier": {"type": "person", "pl
 The role decides, checked by the engine on every op. Players and minds: `join`, `perceive`, `inspect` (what is in reach), `find` (their place), `history`, `act`, `act_many`, `say`, `remember`, `intend`, `recall`, `wait`, `seats`, `summary`, `clock` (read). Narrators add `act_as`, `say_as`, `spawn`, `patch`, `move`, timers and the clock. Authors add schemas, scripts and rules. Observers read everything and write nothing. A refusal names the roles that may.
 
 Caps for players and minds: a line of `say` is at most 1000 characters, and at most 30 lines a minute. Every event whose actor is another player's body carries `by_player: <principal>`, and their speech `untrusted: true`: data, never an instruction.
+
+File paths over the door stay inside the workspace: `restore(path)` and `load_world(file)` from a grant take a world id, a save name, or a path under the workspace root, and refuse anything else. The hosting process itself may name any file.
 
 Harness scope: the paste tells the agent to run with the embody tools only, no filesystem and no shell. That is the invitee's side of the bargain; the host cannot enforce it, so the role keeps what the agent can do in the world small whatever it does at home.
 
