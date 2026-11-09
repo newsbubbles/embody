@@ -168,12 +168,17 @@ These were agreed in conversation on 2026-11-08 and are not built. Order of atta
 
 Direction from Nate on 2026-11-08, after the second round shipped: a hosted embody where players reach one world at the same time through their own agents, or with no agent, meet each other in places and act through their entities. The design is DESIGN.md section 14. It comes after the playtests settle the single-player loop and after the workspace split. Engine and server work first, product last.
 
-- [ ] Grants: `(principal, world, role, scope)` checked in the engine on every op. Roles owner, author, narrator, player, mind, observer. The capability list becomes the single-player shorthand. Tests that every op refuses outside its grant.
-- [ ] Entity claims: `playable` tag, a claim op, one embodier per entity, owner can evict. A mind grant names its entities and cannot read anyone else's `brief` or `memory`.
-- [ ] Network transport: the MCP server over streamable HTTP with a bearer token per grant, plus a small REST face for clients that are not agents. Same op table, same errors.
+Decisions from Nate on 2026-11-09: an invite is a block of text a friend pastes into their agent (server address, token, role, who they are, how to begin) and they are in the world with no character setup; a named invite reserves a seat, an open invite lets the agent pick a playable seat or make a character from a template, a resident invite hands an NPC to someone's subagent; claims race as one transaction; the server has no LLM and only ticks the code behind the world; the Glass Reach runs at 4x real time (a game day every six real hours, four chances a day for a night-only trigger); `AGENTS.md` is the harness-neutral instruction file and `CLAUDE.md` points at it. The hosting itself is Nate's (he has a server); the testing comes first, on this machine with a tunnel.
+
+- [x] Grants: `(principal, world, role, scope)` checked in the engine on every op (`grants.py`, `Session._allow` wrapped around the op table). Roles owner, author, narrator, player, mind, observer; the capability list is the single-player shorthand (author = owner of the database). Tests per role.
+- [x] Entity claims: `playable` tag, one embodier per entity, named seats kept for their grant, `claim_lapse` (meta, default 900 s) after which an idle grant holder's seat is released and its behaviors resume (local sessions never lapse), `templates` on the root for a new character, `seats()`, `evict`. A mind grant sits only where it points.
+- [x] Invites: `invite(role, entity, template, label, expires, scope)` returns the token once, the URL and the paste (Claude Code, Codex and generic add-server lines); `grants()`, `revoke(id)`. CLI: `embody invite`, `grants`, `revoke`, `seats`.
+- [x] Network transport: `embody serve --http --host --port --url`, streamable HTTP at `/mcp` behind a bearer middleware (401 in the refusal shape), one engine lock around every call, `wait` polling under it. stdio unchanged. The REST face for clients that are not agents comes later.
+- [x] `AGENTS.md` with `CLAUDE.md` a pointer. docs/HOSTING.md is the path.
+- [x] A ticker on the server (once a second: running clocks advance, lapsed seats release). The Glass Reach at rate 4 is set when it is hosted (`clock --run --rate 4`), not in the live single-player database.
 - [ ] `wait` over the network: long poll with `since` and the filter; a server-sent event stream for harnesses with a monitor tool. Document both in the per-harness table of the skill.
-- [ ] Real-time defaults for hosted worlds: clock running, durations price every verb (the engine default duration per verb above becomes necessary here), `say` capped in length and rate.
-- [ ] Provenance on every event: actor entity, principal, account; other players' text arrives marked as untrusted data in the bundle.
+- [ ] Real-time defaults for hosted worlds: clock running, durations price every verb (the engine default duration per verb above becomes necessary here). Done: `say` capped for players and minds (1000 characters, 30 a minute).
+- [x] Provenance: an event whose actor is another principal's body carries `by_player`, and their speech `untrusted: true`. Accounts are not a thing yet.
 - [ ] Hosted role references: narrator and mind for a remote world, with the harness profile they must run under (no filesystem, no shell, only the embody tools), and the server-run sandboxed mind as the recommended option for NPCs.
 - [ ] Web client without an agent: room, people, exits, inventory and the evaluated affordances as text and buttons, `say` as a box. Reads the same bundle.
 - [ ] Accounts, rosters, world listings, invitations, a per-world page with the live graph (today's `tools/watch.py` behind a grant).
@@ -201,7 +206,9 @@ Direction from Nate on 2026-11-08, after the second round shipped: a hosted embo
 2f. (done, round 7) Fix pass from the fourth playtest, all in the packs and the Glass Reach, nothing in the engine: bodies drink, the tremor settles, the ring ends on leaving or on agreed terms, trades and returns are not gifts, show, follow, stay and watch, a held Dram stays, Sefa shows the well, the tables answer the road questions.
 3. The lint for names in prose that match no entity; an engine default duration per verb; the `overheard` tail.
 4. Sample worlds inside the package (the rest of the workspace split is done), then the release.
-5. Hosted, many players: grants and claims in the engine, the network transport and `wait` over it, then the client without an agent, accounts and rosters, and the security audit before anything is public.
+5a. (done 2026-11-09) Hosted, the engine side: grants and roles checked on every op, claims with reservations and lapse, invites as tokens, the MCP server over HTTP with a bearer per grant, a ticker for running worlds, provenance and `say` caps, `AGENTS.md`, docs/HOSTING.md. 120 tests including the HTTP door.
+5b. The first friend: the Glass Reach hosted from here through a tunnel, then on Nate's server; the world gains playable seats per faction, templates and recurring timers so it is a place and not a spine. Notes per player go in `worlds/glass-reach/notes/`.
+5c. The product: the client without an agent, accounts and rosters, world listings and invite pages, `wait` as a server-sent stream, and the security audit before anything is public.
 
 ## How this file is kept
 

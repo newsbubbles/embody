@@ -1291,18 +1291,24 @@ class World:
     # ---- principals -----------------------------------------------------------
 
     def join(self, principal_id: str, entity_id: str, kind: str = "agent", name: str = "",
-             capabilities: list[str] | None = None) -> dict[str, Any]:
+             capabilities: list[str] | None = None, role: str | None = None, grant_id: str | None = None,
+             now: float | None = None) -> dict[str, Any]:
         self.need(entity_id)
         other = self.embodied(entity_id)
         if other and other["id"] != principal_id:
-            raise Rejected(f"{entity_id} is already embodied by {other['id']}",
-                           hint="pick another entity, or spawn one with author capability")
+            if self.lapsed(other, now):
+                self.leave(other["id"])  # an invitee who went quiet: the seat is free again, the body ran on behaviors
+            else:
+                raise Rejected(f"{entity_id} is already embodied by {other['id']}",
+                               hint="pick another entity, or spawn one with author capability")
         old = self.store.get("principal", self.id, principal_id)
         ecur = self.entity_cursor(entity_id)
         row = {"world_id": self.id, "id": principal_id, "kind": kind, "name": name or principal_id,
                "capabilities": capabilities if capabilities is not None else (old["capabilities"] if old else []),
                "entity_id": entity_id,
-               "cursor_seq": ecur if ecur is not None else (old["cursor_seq"] if old else self.store.next_seq(self.id) - 1)}
+               "cursor_seq": ecur if ecur is not None else (old["cursor_seq"] if old else self.store.next_seq(self.id) - 1),
+               "role": role or (old.get("role") if old else None), "grant_id": grant_id or (old.get("grant_id") if old else None),
+               "last_seen": now}
         self.store.put("principal", row)
         self.emit("embodied", actor=entity_id, target=entity_id, reach=1,
                   payload={"principal": principal_id, "as": kind})
@@ -1319,6 +1325,31 @@ class World:
 
     def principal(self, principal_id: str) -> dict[str, Any] | None:
         return self.store.get("principal", self.id, principal_id)
+
+    def claim_lapse(self) -> float:
+        """Real seconds of silence after which an invited principal's seat is released (world meta `claim_lapse`)."""
+        return float(self._row["meta"].get("claim_lapse", 900.0))
+
+    def lapsed(self, p: dict[str, Any], now: float | None) -> bool:
+        """Only principals that came in on a grant lapse; the owner at the keyboard never loses a seat to silence."""
+        if now is None or not p.get("grant_id") or p.get("last_seen") is None:
+            return False
+        return now - float(p["last_seen"]) > self.claim_lapse()
+
+    def touch(self, principal_id: str, now: float) -> None:
+        p = self.store.get("principal", self.id, principal_id)
+        if p and (p.get("last_seen") is None or now - float(p["last_seen"]) >= 5.0):
+            p["last_seen"] = now
+            self.store.put("principal", p)
+
+    def release_lapsed(self, now: float) -> list[str]:
+        """Seats whose invitee went quiet past the lapse: released, so their bodies run on behaviors again."""
+        out = []
+        for p in self.principals():
+            if p.get("entity_id") and self.lapsed(p, now):
+                self.leave(p["id"])
+                out.append(p["id"])
+        return out
 
     def principals(self) -> list[dict[str, Any]]:
         return self.store.query("principal", "world_id=?", (self.id,), order="id")
@@ -1481,7 +1512,8 @@ class World:
             "edges": self.store.count("edge", "world_id=?", (self.id,)),
             "events": self.store.count("event", "world_id=?", (self.id,)),
             "schemas": self.store.count("schema", "world_id=?", (self.id,)),
-            "principals": [{"id": p["id"], "kind": p["kind"], "entity": p["entity_id"]} for p in self.principals()],
+            "principals": [{"id": p["id"], "kind": p["kind"], "role": p.get("role"), "entity": p["entity_id"]}
+                           for p in self.principals()],
             "clock": self.clock(),
         }
 

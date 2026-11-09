@@ -7,17 +7,29 @@ failure is a `Rejected` with a reason, a hint and alternatives.
 
 from __future__ import annotations
 
+import collections
 import contextlib
+import functools
+import secrets
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
 
+from .grants import (AUTHOR_ROLE, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, OWNER, PLAYER, ROLES, ROLE_DOC,
+                     active, allowed, caps_for, new_token, paste, principal_id_for, role_for, token_hash)
 from .store import Store
 from .world import Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
 from .workspace import Workspace, restore_world, save_world
 
 AUTHOR = "author"
+NARRATOR = "narrator"
 OBSERVER = "observer"
+# What one line of speech may be, and how many lines a principal may say in a minute: a hosted world's floor
+# against a runaway agent. Authors and narrators are not capped.
+_SAY_MAX = 1000
+_SAY_BURST = 30
+_SAY_WINDOW = 60.0
 # State keys only the entity itself (its mind) and authors ever see.
 _ALWAYS_SECRET = frozenset({"memory", "brief", "goals"})
 # Relations whose edge data is world structure, readable by anyone who sees the edge.
@@ -50,6 +62,10 @@ class Engine:
         self._worlds: dict[str, World] = {}
         self._wall: dict[str, float] = {}
         self.now: Callable[[], float] = time.monotonic
+        self.wall: Callable[[], float] = time.time  # real time, for grants that expire and seats that lapse
+        self.lock = threading.RLock()  # one op at a time on one store; servers take it around every call
+        self.public_url: str | None = None  # where a hosted server is reached; printed into invites
+        self._said: dict[str, collections.deque] = {}
 
     def worlds(self) -> list[dict[str, Any]]:
         out = []
@@ -115,19 +131,63 @@ class Engine:
         dt = (now - last) * w.clock()["rate"]
         return w.step(dt) if dt > 0 else []
 
+    def tick_all(self) -> dict[str, Any]:
+        """What a server does once a second: running clocks advance, lapsed seats are released."""
+        out: dict[str, Any] = {"stepped": [], "released": {}}
+        now = self.wall()
+        for row in self.store.list_worlds():
+            w = self.world(row["id"])
+            if w.clock()["running"]:
+                self.sync_clock(w.id)
+                out["stepped"].append(w.id)
+            gone = w.release_lapsed(now)
+            if gone:
+                out["released"][w.id] = gone
+        return out
+
     def session(self, principal_id: str, world_id: str | None = None, capabilities: list[str] | None = None,
-                name: str = "") -> "Session":
-        return Session(self, principal_id, world_id=world_id, capabilities=capabilities, name=name)
+                name: str = "", role: str | None = None, scope: list[str] | None = None,
+                grant: dict[str, Any] | None = None) -> "Session":
+        return Session(self, principal_id, world_id=world_id, capabilities=capabilities, name=name, role=role,
+                       scope=scope, grant=grant)
+
+    def grant_for_token(self, token: str) -> dict[str, Any] | None:
+        rows = self.store.query("grants", "token_hash=?", (token_hash(token),), limit=1)
+        g = rows[0] if rows else None
+        return g if g and active(g, self.wall()) else None
+
+    def session_for_token(self, token: str) -> "Session | None":
+        """The session a bearer token stands for: its principal, its world, its role and its scope. None if the
+        token is unknown, revoked or expired."""
+        g = self.grant_for_token(token)
+        if g is None:
+            return None
+        return self.session(g["principal_id"], world_id=g["world_id"], name=g.get("label") or g["principal_id"],
+                            role=g["role"], scope=list(g.get("scope") or []), grant=g)
 
 
 class Session:
+    """One principal's view of the engine. The role decides which ops answer (grants.ROLE_OPS, checked on every
+    op); the capability list is the single-player shorthand for it (`author` means owner of this database). The
+    scope is the entities a player or mind grant names; empty means the role's default reach."""
+
     def __init__(self, engine: Engine, principal_id: str, world_id: str | None = None,
-                 capabilities: list[str] | None = None, name: str = ""):
+                 capabilities: list[str] | None = None, name: str = "", role: str | None = None,
+                 scope: list[str] | None = None, grant: dict[str, Any] | None = None):
         self.engine = engine
         self.pid = principal_id
         self.name = name or principal_id
         self.world_id = world_id
-        self.capabilities = list(capabilities or [])
+        if role is not None:
+            if role not in ROLES:
+                raise Rejected(f"no role {role!r}", hint="one of " + ", ".join(ROLES))
+            self.role = role
+            self.capabilities = caps_for(role)
+        else:
+            self.capabilities = list(capabilities or [])
+            self.role = role_for(self.capabilities)
+        self.scope = list(scope or [])
+        self.grant = grant
         self.default_fuel = 20_000
         self._building = False
 
@@ -173,14 +233,26 @@ class Session:
         return p["entity_id"]
 
     def _need(self, cap: str) -> None:
-        if cap not in self.capabilities:
-            raise Rejected(f"this op needs the {cap!r} capability; you have {self.capabilities or 'none'}",
-                           hint="connect with --as author to build worlds; embodied principals act through act()")
+        """The author's hand: a narrator has it for what its role lets through (grants.ROLE_OPS keeps schemas,
+        scripts and rules out of its reach before this is ever asked)."""
+        if cap in self.capabilities or (cap == AUTHOR and NARRATOR in self.capabilities):
+            return
+        raise Rejected(f"this op needs the {cap!r} capability; you have {self.capabilities or 'none'}",
+                       hint="connect with --as author to build worlds; embodied principals act through act()")
+
+    def _allow(self, op: str) -> None:
+        if allowed(self.role, op):
+            return
+        who = [r for r in ROLES if allowed(r, op)]
+        raise Rejected(f"{op} is not open to a {self.role}; it needs the {' or '.join(who)} role",
+                       hint=ROLE_DOC.get(self.role, ""), alternatives=sorted(allowed_ops(self.role) & _PLAY_OR_WATCH))
 
     def _tick(self) -> None:
         if self.world_id:
             self.world.refresh()
             self.engine.sync_clock(self.world_id)
+            if self.grant is not None:
+                self.world.touch(self.pid, self.engine.wall())
 
     # ---- choosing a world -----------------------------------------------------
 
@@ -241,21 +313,242 @@ class Session:
         w = self.engine.fork_world(source, id, name)
         return w.summary()
 
-    def join(self, world_id: str, entity: str) -> dict[str, Any]:
+    def join(self, world_id: str | None = None, entity: str | None = None, template: str | None = None,
+             name: str = "") -> dict[str, Any]:
+        """Embody an entity. A grant holder may call it bare: the seat the grant names, or the one they held last.
+        template=... makes a new character from the world root's `templates` and embodies it. Claims are one
+        transaction: two agents racing for a seat get one winner and one refusal that lists what is still open."""
+        if self.role == OBSERVER_ROLE:
+            raise Rejected("observers do not embody", hint="use(world) then perceive(from_entity=...)")
+        world_id = world_id or self.world_id
+        if not world_id:
+            raise Rejected("no world", hint="join(world_id, entity); worlds() lists them")
         self.engine.world(world_id)
         self.world_id = world_id
         w = self.world
-        eid = self._resolve(entity)
-        if OBSERVER in self.capabilities and AUTHOR not in self.capabilities:
-            raise Rejected("observers do not embody", hint="use(world) then perceive(from=entity)")
-        kind = AUTHOR if AUTHOR in self.capabilities else "agent"
-        w.join(self.pid, eid, kind=kind, name=self.name, capabilities=self.capabilities)
-        return self.perceive()
+        now = self.engine.wall()
+        with self.engine.lock:
+            w.store.begin()
+            try:
+                if template:
+                    eid = self._from_template(template, name)
+                else:
+                    if entity is None:
+                        entity = self._default_seat()
+                    eid = self._resolve(entity)
+                    self._may_sit(eid, now)
+                w.join(self.pid, eid, kind=self.role, name=self.name, capabilities=self.capabilities, role=self.role,
+                       grant_id=self.grant["id"] if self.grant else None, now=now)
+                w.store.commit()
+            except Exception:
+                w.store.rollback()
+                raise
+        b = self.perceive()
+        b["briefing"] = self._briefing(eid)
+        return b
+
+    def _default_seat(self) -> str:
+        """join() with no entity: the one seat the grant names, or the seat this principal already holds."""
+        w = self.world
+        p = w.principal(self.pid)
+        if p and p.get("entity_id") and w.get(p["entity_id"]):
+            return p["entity_id"]
+        if len(self.scope) == 1:
+            return self.scope[0]
+        if self.grant and self.grant.get("entity_id"):
+            return self.grant["entity_id"]
+        if self.scope:
+            raise Rejected("your grant names several entities", hint="join(entity=<one of them>)",
+                           alternatives=[w.get(x)["name"] for x in self.scope if w.get(x)])
+        raise Rejected("say who you are", hint="seats() lists the open seats and the templates; join(world, entity) or "
+                                                "join(world, template=..., name=...)")
+
+    def _reservations(self, eid: str, now: float) -> list[dict[str, Any]]:
+        """Live grants that name this entity as their seat, other than this principal's own."""
+        w = self.world
+        rows = w.store.query("grants", "world_id=? AND entity_id=? AND revoked=0", (w.id, eid))
+        return [g for g in rows if active(g, now) and g["principal_id"] != self.pid]
+
+    def _may_sit(self, eid: str, now: float) -> None:
+        """Who may take which seat. Owners, authors and narrators sit anywhere free. A mind sits only where its
+        grant points. A player sits where its grant points, or in any `playable` seat nobody holds or has reserved."""
+        w = self.world
+        ent = w.need(eid)
+        if self.role in (OWNER, AUTHOR_ROLE, NARRATOR_ROLE):
+            return
+        if eid in self.scope:
+            return
+        if self.grant is None:
+            return  # a local principal (the owner's own process, a narrator's subagent) sits in any free body
+        if self.role == MIND:
+            if not self.scope:
+                return  # a remote narrator's delegate: any free body
+            raise Rejected(f"your grant does not name {ent['name']}", hint="join(entity=...) with one it names",
+                           alternatives=[w.get(x)["name"] for x in self.scope if w.get(x)])
+        if not ent["state"].get("playable"):
+            raise Rejected(f"{ent['name']} is not a seat you may take", hint="seats() lists the open seats",
+                           alternatives=self._open_seat_names(now))
+        if self._reservations(eid, now):
+            raise Rejected(f"{ent['name']} is kept for someone else", hint="seats() lists the open seats",
+                           alternatives=self._open_seat_names(now))
+
+    def _open_seat_names(self, now: float) -> list[str]:
+        return [s["name"] for s in self._seat_rows(now) if s["open"]][:10]
+
+    def _seat_rows(self, now: float) -> list[dict[str, Any]]:
+        w = self.world
+        if self.role == MIND and self.scope:
+            rows = [w.get(x) for x in self.scope if w.get(x)]
+        else:
+            rows = w.find(state={"playable": True}, limit=200)
+        out = []
+        for e in rows:
+            emb = w.embodied(e["id"])
+            if emb and w.lapsed(emb, now):
+                emb = None
+            res = self._reservations(e["id"], now)
+            place = w.get(e["parent_id"]) if e["parent_id"] else None
+            out.append({"id": e["id"], "name": e["name"], "type": e["type"], "place": place["name"] if place else None,
+                        "about": e["state"].get("description") or e["state"].get("doc") or "",
+                        "embodied_by": emb["id"] if emb else None, "reserved": bool(res),
+                        "open": emb is None and (not res or e["id"] in self.scope)})
+        return out
+
+    def seats(self, world_id: str | None = None) -> dict[str, Any]:
+        """What a newcomer may become: the `playable` seats (who holds them, which are kept for someone) and the
+        world root's `templates` for a new character."""
+        if world_id:
+            self.use(world_id)
+        self._tick()
+        w = self.world
+        root = w.get(w.root_id)
+        templates = (root["state"].get("templates") or {}) if root else {}
+        return {"world": w.id, "seats": self._seat_rows(self.engine.wall()),
+                "templates": [{"template": k, "type": t.get("type"), "place": t.get("place"), "doc": t.get("doc", "")}
+                              for k, t in templates.items()],
+                "hint": "join(world, entity) takes an open seat; join(world, template=..., name=...) makes someone new"}
+
+    def _from_template(self, template: str, name: str) -> str:
+        w = self.world
+        root = w.get(w.root_id)
+        templates = (root["state"].get("templates") or {}) if root else {}
+        t = templates.get(template)
+        if t is None:
+            raise Rejected(f"no template {template!r}", hint="seats() lists them", alternatives=sorted(templates))
+        if self.role == MIND:
+            raise Rejected("a mind holds the NPCs its grant names; it does not make new people")
+        if not name:
+            raise Rejected("a new character needs a name", hint="join(world, template=..., name='...')")
+        if w.find(name=name, limit=2) and any(e["name"].lower() == name.lower() for e in w.find(name=name, limit=10)):
+            raise Rejected(f"someone is already called {name!r}", hint="pick another name")
+        if self.grant and self.grant.get("template") and self.grant["template"] != template:
+            raise Rejected(f"your grant is for the {self.grant['template']!r} template", hint="use that one")
+        state = dict(t.get("state") or {})
+        state.update({"playable": True, "template": template})
+        if t.get("brief"):
+            state["brief"] = t["brief"]
+        parent = self._resolve(t["place"]) if t.get("place") else w.root_id
+        return w.spawn(t.get("type", "creature"), parent, name=name, state=state)
+
+    def _briefing(self, eid: str) -> dict[str, Any]:
+        """What join hands a newcomer: the world's own paragraph, who they are, the pace, and how to begin."""
+        w = self.world
+        root = w.get(w.root_id)
+        ent = w.get(eid)
+        ck = w.clock()
+        pace = (f"the clock runs at {ck['rate']:g}x real time; things happen while you are away, wait() keeps up"
+                if ck["running"] else "the world is paused between acts: each of yours moves it a turn")
+        how = ["perceive() is your eyes; act(verb, target) your hands; say(text, to=...) your voice",
+               "wait(timeout) blocks until something happens near you",
+               "a refusal says why and what would work; do not retry the same call"]
+        if self.role == MIND:
+            how.insert(0, "your card carries the secret brief: who you are and what you want; remember() and intend() keep your notes")
+        return {"role": self.role, "role_doc": ROLE_DOC.get(self.role, ""), "world": w.name, "you": ent["name"] if ent else eid,
+                "text": (root["state"].get("briefing") if root else None) or w.summary()["description"],
+                "pace": pace, "how": how}
 
     def leave(self) -> dict[str, Any]:
         if self.world_id and self.world.principal(self.pid):
             self.world.leave(self.pid)
         return {"ok": True}
+
+    # ---- grants: how others get in --------------------------------------------------------------
+
+    def invite(self, role: str, entity: str | None = None, template: str | None = None, label: str = "",
+               expires: float | None = None, principal: str | None = None,
+               scope: list[str] | None = None) -> dict[str, Any]:
+        """(owner) A grant that travels as a token. role: author, narrator, player, mind or observer. entity: the
+        seat kept for this invite (player) or the NPC it holds (mind; scope=[...] for more). template: the character
+        it may make. expires: hours. Returns the token once, with the paste for the invitee's agent."""
+        self._tick()
+        w = self.world
+        if role not in ROLES:
+            raise Rejected(f"no role {role!r}", hint="author, narrator, player, mind or observer")
+        if role == OWNER and self.grant is not None:
+            raise Rejected("only the host's own process makes owner grants", hint="invite('author', ...) is the most a grant hands on")
+        eid = self._resolve(entity) if entity else None
+        sc = [self._resolve(x) for x in (scope or [])]
+        if eid and eid not in sc:
+            sc.insert(0, eid)
+        if role == MIND and not sc:
+            raise Rejected("a mind grant names its NPCs", hint="invite('mind', entity='Mara') or scope=[...]")
+        if template:
+            root = w.get(w.root_id)
+            if template not in ((root["state"].get("templates") or {}) if root else {}):
+                raise Rejected(f"no template {template!r}", hint="patch the root's templates first")
+        pid = principal or principal_id_for(label, role)
+        if w.principal(pid) or w.store.query("grants", "world_id=? AND principal_id=? AND revoked=0", (w.id, pid), limit=1):
+            raise Rejected(f"principal {pid!r} is taken", hint="another label or principal=")
+        token = new_token()
+        now = self.engine.wall()
+        row = {"world_id": w.id, "id": "g" + secrets.token_hex(4), "principal_id": pid, "role": role, "scope": sc,
+               "entity_id": eid, "template": template, "label": label, "token_hash": token_hash(token),
+               "created": now, "expires": (now + float(expires) * 3600.0) if expires else None, "revoked": 0,
+               "last_used": None}
+        w.store.put("grants", row)
+        ck = w.clock()
+        names = [w.get(x)["name"] for x in sc if w.get(x)]
+        text = paste(w.name, role, self.engine.public_url or "", token,
+                     seat=(w.get(eid)["name"] if eid and role != MIND else None), scope_names=names,
+                     rate=ck["rate"] if ck["running"] else 0.0)
+        return {"ok": True, "id": row["id"], "principal": pid, "role": role, "entity": eid, "scope": sc,
+                "template": template, "expires": row["expires"], "token": token, "url": self.engine.public_url,
+                "paste": text, "hint": "the token is shown once; grants() lists grants without it"}
+
+    def grants(self) -> list[dict[str, Any]]:
+        """(owner) Every grant on this world, without the tokens."""
+        self._tick()
+        w = self.world
+        now = self.engine.wall()
+        out = []
+        for g in w.store.query("grants", "world_id=?", (w.id,), order="created"):
+            p = w.principal(g["principal_id"])
+            out.append({k: v for k, v in g.items() if k not in ("token_hash", "world_id")}
+                       | {"active": active(g, now), "in_world": p is not None,
+                          "embodying": p["entity_id"] if p else None})
+        return out
+
+    def revoke(self, id: str) -> dict[str, Any]:
+        """(owner) End a grant: its token stops working and its principal leaves the world."""
+        self._tick()
+        w = self.world
+        g = w.store.get("grants", w.id, id)
+        if g is None:
+            raise Rejected(f"no grant {id!r}", hint="grants() lists them")
+        g["revoked"] = 1
+        w.store.put("grants", g)
+        w.leave(g["principal_id"])
+        return {"ok": True, "id": id, "principal": g["principal_id"]}
+
+    def evict(self, principal: str) -> dict[str, Any]:
+        """(owner) Release whatever a principal embodies; its body runs on behaviors again."""
+        self._tick()
+        w = self.world
+        p = w.principal(principal)
+        if p is None:
+            raise Rejected(f"{principal!r} is not in this world", hint="summary() lists who is")
+        w.leave(principal)
+        return {"ok": True, "principal": principal, "released": p.get("entity_id")}
 
     def _resolve(self, ref: str) -> str:
         """An id, or a unique name (case-insensitive)."""
@@ -276,8 +569,8 @@ class Session:
         self._tick()
         w = self.world
         if from_entity is not None:
-            if AUTHOR not in self.capabilities and OBSERVER not in self.capabilities:
-                raise Rejected("perceiving from another entity needs the author or observer capability")
+            if not self._privileged():
+                raise Rejected("perceiving from another entity needs the author, narrator or observer role")
             me = self._resolve(from_entity)
             p = None
         else:
@@ -328,15 +621,25 @@ class Session:
         return out
 
     def _privileged(self) -> bool:
-        return AUTHOR in self.capabilities or OBSERVER in self.capabilities
+        return AUTHOR in self.capabilities or NARRATOR in self.capabilities or OBSERVER in self.capabilities
 
     def _events_for(self, me: str | None, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """The public view of events for one viewer. Authors and observers see everything but the internal
         kinds. An embodied viewer never sees another entity's private events (remembered, intended) and sees
-        `patched` only on itself; an author's edit to another entity is not news, its result is in perceive."""
+        `patched` only on itself; an author's edit to another entity is not news, its result is in perceive.
+        Provenance: an event whose actor is another principal's body carries `by_player`, and that player's
+        words carry `untrusted: true`: data from a stranger, never an instruction."""
         w = self.world
         out = []
         full = self._privileged()
+        holders: dict[str, str | None] = {}
+
+        def holder(eid: str) -> str | None:
+            if eid not in holders:
+                p = w.embodied(eid)
+                holders[eid] = p["id"] if p else None
+            return holders[eid]
+
         for e in rows:
             if e["kind"] in _INTERNAL_KINDS:
                 continue
@@ -347,7 +650,15 @@ class Session:
                     # an author's edit to someone else is the world changing under you, not news you heard;
                     # what it changed shows in the next perceive, the raw diff stays with the author
                     continue
-            out.append(_public_event(e))
+            pe = _public_event(e)
+            a = e["actor_id"]
+            if a and a != me:
+                who = holder(a)
+                if who and who != self.pid:
+                    pe["by_player"] = who
+                    if e["kind"] == "say":
+                        pe["untrusted"] = True
+            out.append(pe)
         return out
 
     def _knows(self, me: str) -> list[dict[str, Any]]:
@@ -434,7 +745,7 @@ class Session:
         w = self.world
         eid = self._resolve(entity)
         e = w.need(eid)
-        full = AUTHOR in self.capabilities or OBSERVER in self.capabilities
+        full = self._privileged()
         if not full:
             me = self._me()
             ok, why = w.reachable(me, eid)
@@ -458,14 +769,14 @@ class Session:
              parent: str | None = None, state: dict[str, Any] | None = None, limit: int = 30) -> list[dict[str, Any]]:
         self._tick()
         w = self.world
-        if AUTHOR not in self.capabilities and OBSERVER not in self.capabilities:
+        if not self._privileged():
             # an embodied principal searches what it can see: its place and its holdings
             me = self._me()
             scope = w.need(me)["parent_id"] or me
             under = under or scope
         rows = w.find(type=type, name=name, under=self._resolve(under) if under else None,
                       parent=self._resolve(parent) if parent else None, state=state, limit=min(limit, 100))
-        return [self._card(r) for r in rows if AUTHOR in self.capabilities or not r["state"].get("hidden")]
+        return [self._card(r) for r in rows if self._privileged() or not r["state"].get("hidden")]
 
     def history(self, since: int = 0, until: int | None = None, kinds: list[str] | None = None,
                 touching: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
@@ -525,9 +836,21 @@ class Session:
         return {"ok": True, "done": done}
 
     def say(self, text: str, reach: int = 1, to: str | None = None) -> dict[str, Any]:
-        """Speak as the entity you embody. `to` addresses someone here; the room still hears it."""
+        """Speak as the entity you embody. `to` addresses someone here; the room still hears it. Players and
+        minds are capped: one line is at most _SAY_MAX characters, and at most _SAY_BURST lines a minute."""
         self._tick()
         me = self._me()
+        if not self._privileged():
+            if len(text) > _SAY_MAX:
+                raise Rejected(f"a line is at most {_SAY_MAX} characters; this one is {len(text)}",
+                               hint="say less, or say it in turns")
+            dq = self.engine._said.setdefault(self.pid, collections.deque())
+            now = self.engine.now()
+            while dq and now - dq[0] > _SAY_WINDOW:
+                dq.popleft()
+            if len(dq) >= _SAY_BURST:
+                raise Rejected(f"{_SAY_BURST} lines in a minute is the most anyone says", hint="wait() and listen")
+            dq.append(now)
         ev = self.world.say(me, text, reach=reach, to=self._resolve(to) if to else None)
         self.world._bump_cursor(self.pid)
         return {"ok": True, "event": _public_event(ev)}
@@ -644,27 +967,34 @@ class Session:
         p = self._principal()
         start = clock()
         while True:
-            self._tick()
-            w = self.world
-            evs = [e for e in self._events_for(me, w.events(since=p["cursor_seq"], touching=me, limit=50))
-                   if not kinds or e["kind"] in kinds]
-            timed_out = clock() - start >= timeout
-            if evs or timed_out:
-                if full:
-                    b = self.perceive()
-                else:
-                    ent = w.need(me)
-                    here = w.get(ent["parent_id"]) if ent["parent_id"] else None
-                    b = {"world": w.id, "t": w.t, "ambient": self._ambient(here),
-                         "here": {"id": here["id"], "name": here["name"]} if here else None,
-                         "present": [{"id": c["id"], "name": c["name"]} for c in w.children(ent["parent_id"])
-                                     if c["id"] != me and not c["state"].get("hidden")] if here else [],
-                         "events": evs, "cursor": w.store.next_seq(w.id) - 1}
-                    w.set_cursor(self.pid, b["cursor"])
-                if timed_out:
-                    b["timed_out"] = True
+            with self.engine.lock:  # one poll at a time shares the store with every other caller; the sleep does not
+                b = self._wait_poll(me, p, kinds, full, clock() - start >= timeout)
+            if b is not None:
                 return b
             sleep(poll)
+
+    def _wait_poll(self, me: str, p: dict[str, Any], kinds: list[str] | None, full: bool,
+                   timed_out: bool) -> dict[str, Any] | None:
+        self._tick()
+        w = self.world
+        evs = [e for e in self._events_for(me, w.events(since=p["cursor_seq"], touching=me, limit=50))
+               if not kinds or e["kind"] in kinds]
+        if evs or timed_out:
+            if full:
+                b = self.perceive()
+            else:
+                ent = w.need(me)
+                here = w.get(ent["parent_id"]) if ent["parent_id"] else None
+                b = {"world": w.id, "t": w.t, "ambient": self._ambient(here),
+                     "here": {"id": here["id"], "name": here["name"]} if here else None,
+                     "present": [{"id": c["id"], "name": c["name"]} for c in w.children(ent["parent_id"])
+                                 if c["id"] != me and not c["state"].get("hidden")] if here else [],
+                     "events": evs, "cursor": w.store.next_seq(w.id) - 1}
+                w.set_cursor(self.pid, b["cursor"])
+            if timed_out:
+                b["timed_out"] = True
+            return b
+        return None
 
     # ---- authoring ------------------------------------------------------------------------
 
@@ -873,9 +1203,31 @@ def call(session: Session, op: str, **kw: Any) -> Any:
 
 
 OPS = [
-    "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave",
+    "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats",
+    "invite", "grants", "revoke", "evict",
     "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate",
     "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
 ]
+
+
+_PLAY_OR_WATCH = frozenset({"worlds", "use", "summary", "seats", "join", "leave", "perceive", "inspect", "find", "history",
+                            "act", "say", "wait", "recall", "clock"})
+
+
+def allowed_ops(role: str) -> frozenset[str]:
+    from .grants import ROLE_OPS
+    return ROLE_OPS.get(role, frozenset())
+
+
+def _guard(name: str, fn: Callable[..., Any]) -> Callable[..., Any]:
+    @functools.wraps(fn)
+    def inner(self: Session, *a: Any, **kw: Any) -> Any:
+        self._allow(name)
+        return fn(self, *a, **kw)
+    return inner
+
+
+for _op in OPS:
+    setattr(Session, _op, _guard(_op, getattr(Session, _op)))

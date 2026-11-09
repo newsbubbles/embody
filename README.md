@@ -45,7 +45,9 @@ A world is a folder under `worlds/`: `build.py`, `scripts/`, notes, tests, and a
 
 ## Any harness
 
+- **Any agent, any harness**: `AGENTS.md` is the instruction file (Codex, Claude Code, Cursor, a plain MCP client); `CLAUDE.md` points at it.
 - **MCP**: `uv run embody serve --as <principal> [--author] [--observer]` on stdio. One process is one principal; run one per player or NPC agent, all against the same database.
+- **Hosted**: `uv run embody serve --http --url https://your.host/mcp` serves the same tools over streamable HTTP, one bearer token per grant. `embody invite player --entity reeve --label Sam` prints the block of text a friend pastes into their agent; they `join()` and are the reeve. Roles (owner, author, narrator, player, mind, observer) are checked by the engine on every op. docs/HOSTING.md has the path.
 - **CLI**: every op, `uv run embody --help`.
 - **Python**: `from embody.ops import Engine`, `Engine("embody.db").session("me", capabilities=["author"])`.
 - **Markdown mirror**: `embody mirror` writes the world as directories and files for anything that reads a filesystem.

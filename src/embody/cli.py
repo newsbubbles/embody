@@ -346,8 +346,28 @@ def main(argv: list[str] | None = None) -> int:
     c = sub.add_parser("op", help="call any op by name with JSON arguments")
     c.add_argument("name", help="one of: " + ", ".join(OPS))
     c.add_argument("--json-args", dest="json_args", default="{}", help="JSON object of keyword arguments")
-    c = sub.add_parser("serve", help="run the MCP server on stdio: embody serve --as gm --author")
+    c = sub.add_parser("serve", help="run the MCP server: on stdio (embody serve --as gm --author), or hosted with "
+                                     "--http (bearer grants only; embody invite makes them)")
     c.add_argument("--name", default="")
+    c.add_argument("--http", action="store_true", help="serve streamable HTTP at /mcp instead of stdio")
+    c.add_argument("--host", default="127.0.0.1", help="bind address for --http (0.0.0.0 for a public host)")
+    c.add_argument("--port", type=int, default=8900)
+    c.add_argument("--url", help="the public URL printed into invites (default http://host:port/mcp, or $EMBODY_URL)")
+    c.add_argument("--log-level", dest="log_level", default=None)
+
+    c = sub.add_parser("invite", help="(owner) make a grant and print the paste: embody --author --world W invite player --entity reeve --label Sam")
+    c.add_argument("role", help="author, narrator, player, mind or observer")
+    c.add_argument("--entity", help="the seat kept for them (player) or the NPC they hold (mind)")
+    c.add_argument("--scope", nargs="*", default=None, help="(mind) more entities they hold")
+    c.add_argument("--template", help="the template their new character may use")
+    c.add_argument("--label", default="", help="who this is for; becomes their principal id")
+    c.add_argument("--expires", type=float, help="hours until the token stops working")
+    c.add_argument("--url", help="server URL for the paste (default $EMBODY_URL)")
+    c.add_argument("--principal", help="their principal id (default from the label)")
+    c = sub.add_parser("grants", help="(owner) list the grants on the world, without tokens")
+    c = sub.add_parser("revoke", help="(owner) end a grant")
+    c.add_argument("id")
+    c = sub.add_parser("seats", help="the open seats and templates of the world")
     # the global flags again, so they may follow the subcommand (how .mcp.json files are written)
     c.add_argument("--db", default=argparse.SUPPRESS)
     c.add_argument("--as", dest="as_", default=argparse.SUPPRESS)
@@ -387,6 +407,24 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "join":
             b = s.join(args.world_id, args.entity)
             emit(args, b, render_perceive(b))
+        elif args.cmd == "invite":
+            eng.public_url = args.url or os.environ.get("EMBODY_URL")
+            r = s.invite(args.role, entity=args.entity, template=args.template, label=args.label, expires=args.expires,
+                         principal=args.principal, scope=args.scope)
+            emit(args, r, f"grant {r['id']} for {r['principal']} ({r['role']}). Send them this:\n\n{r['paste']}")
+        elif args.cmd == "grants":
+            r = s.grants()
+            emit(args, r, "\n".join(f"{g['id']:10} {g['role']:9} {g['principal_id']:24} seat={g['entity_id'] or '-':8} "
+                                    f"{'active' if g['active'] else 'ended'}" + (f" in as {g['embodying']}" if g['embodying'] else "")
+                                    for g in r) or "no grants")
+        elif args.cmd == "revoke":
+            emit(args, s.revoke(args.id))
+        elif args.cmd == "seats":
+            r = s.seats()
+            emit(args, r, "\n".join(f"{x['id']:6} {x['name']:20} {x['type']:10} at {x['place'] or '-':16} "
+                                    + ("open" if x["open"] else ("held by " + x["embodied_by"] if x["embodied_by"] else "kept"))
+                                    for x in r["seats"]) + ("\ntemplates: " + ", ".join(t["template"] for t in r["templates"])
+                                                            if r["templates"] else ""))
         elif args.cmd == "leave":
             emit(args, s.leave())
         elif args.cmd == "perceive":

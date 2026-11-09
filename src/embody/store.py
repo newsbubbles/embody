@@ -104,9 +104,31 @@ CREATE TABLE IF NOT EXISTS principal (
     capabilities TEXT NOT NULL DEFAULT '[]',
     entity_id TEXT,
     cursor_seq INTEGER NOT NULL DEFAULT 0,
+    role TEXT,
+    grant_id TEXT,
+    last_seen REAL,
     PRIMARY KEY (world_id, id)
 );
+CREATE TABLE IF NOT EXISTS grants (
+    world_id TEXT NOT NULL, id TEXT NOT NULL,
+    principal_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT '[]',
+    entity_id TEXT,
+    template TEXT,
+    label TEXT NOT NULL DEFAULT '',
+    token_hash TEXT,
+    created REAL NOT NULL,
+    expires REAL,
+    revoked INTEGER NOT NULL DEFAULT 0,
+    last_used REAL,
+    PRIMARY KEY (world_id, id)
+);
+CREATE INDEX IF NOT EXISTS grants_token ON grants (token_hash);
 """
+
+# Columns added after a table was first shipped: a database from before gets them on open.
+_ADDED_COLS = {"principal": (("role", "TEXT"), ("grant_id", "TEXT"), ("last_seen", "REAL"))}
 
 JSON_COLS = {
     "world": {"counters", "meta"},
@@ -118,6 +140,7 @@ JSON_COLS = {
     "event": {"payload", "path"},
     "scheduled": {"payload"},
     "principal": {"capabilities"},
+    "grants": {"scope"},
 }
 
 
@@ -137,6 +160,11 @@ class Store:
             self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.executescript(SCHEMA_SQL)
+        for table, cols in _ADDED_COLS.items():
+            have = {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            for col, typ in cols:
+                if col not in have:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
         self._depth = 0
 
     def close(self) -> None:

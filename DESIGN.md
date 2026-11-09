@@ -175,7 +175,23 @@ No agent. The `perceive` bundle lists affordances with their preconditions evalu
 
 Untrusted text. Everything another principal says reaches an agent's context as data. The server marks every event with its actor and the actor's account, caps the length and rate of `say`, and the role references for hosted play tell a mind or narrator harness to run with no filesystem or shell tools. The safest mind is one the server runs itself, in a sandbox that has only the embody tools; that is an option, not the only way. A security audit of the whole door (auth, grants, script sandbox, rate limits, abuse of `fill`) comes before the first public world.
 
-The hosted product (sign-in, rosters, world listings, invitations, claims on entities) sits on top of the engine's grants and knows nothing about worlds beyond their ids.
+Invites. A grant travels as an invite: one token, one paste. Settled with Nate on 2026-11-09. The text a friend drops into their agent carries the server address, the token, the role, who they are in the world and how to begin; the agent adds the MCP server, calls `join`, reads the briefing that comes back and plays. Nobody configures a character. Three kinds of invite:
+
+- A named seat. The token names an entity (the reeve, a carrier, the captain of the guard), reserved for that token until it is claimed or the invite expires. Until a person sits down the entity runs on its behaviors like any other; when the player goes idle past the world's `claim_lapse` the seat is released and the behaviors resume, so a hosted world never has a frozen body in it.
+- An open seat. The token says `player` and names nothing. The agent lists what is open (`seats`): every entity tagged `playable` that nobody embodies, and the `templates` on the world root for a new character (a faction, a trade, a starting place). `join(world, entity)` claims one, `join(world, template=..., name=...)` makes one. Two agents racing for the same seat are one SQLite transaction: one wins, the other gets a refusal that lists what is still open.
+- A resident. A `mind` grant on one or more named NPCs, held by someone's subagent, which moves the story the way its owner wants while people it has never met play beside it. It reads only its own entities' `brief`, `memory` and `goals`, cannot author or spawn, and the owner can evict it. A player who takes a seat and a resident who takes an NPC are the same mechanism with different reach.
+
+Only grant holders lapse. The owner's own sessions, and the extra principals a local process asks for by name, keep their seats through any silence: they are the host at the keyboard, not a guest who left. The role is checked by the engine on every op, not by the server in front of it, so the stdio server, the HTTP server and the CLI refuse the same things with the same words.
+
+No LLM on the server. The host runs the clock and the code behind it: behaviors, timers, rules, the bookkeeping. Every player, narrator and resident brings their own inference through their own harness; the host pays nothing per thought, and an NPC that thinks is always someone's agent. This is what lets one person host a world for friends at the cost of a small machine.
+
+Harness scope. A mind or player agent that holds an invite needs less reach than a developer's agent, not only in the world but on the computer it runs on. The role reference for hosted play says: a resident or a player subagent runs with the embody tools and nothing else, no filesystem, no shell, so a prompt injected through `say` can misplay one entity and touch nothing else.
+
+Time, concretely. The Glass Reach runs at four times real time (Nate, 2026-11-09): a game day every six real hours, so one real day holds four game days spread across every time zone, long enough for a session to feel like an evening, and a trigger that fires only at night gets four chances a day. The running clock is what synchronizes players: nobody waits for anyone's turn, the world moves and `wait` wakes whoever is near what happened. A hosted world is a place people come back to, not a spine they finish.
+
+Any harness. The instructions that tell an agent how to be a narrator, author or mind are harness-neutral and live in `AGENTS.md`; `CLAUDE.md` points there and keeps only what is Claude Code's own (the skill, `.mcp.json`). An invite paste tells a Codex, Claude Code or other MCP-capable agent the one line that adds the server.
+
+The hosted product (sign-in, rosters, world listings, invite pages, a client with no agent) sits on top of the engine's grants and knows nothing about worlds beyond their ids.
 
 ## 15. The slice
 
