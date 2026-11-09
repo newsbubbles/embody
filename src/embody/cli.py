@@ -149,6 +149,42 @@ def render_perceive(b: dict[str, Any]) -> str:
     return "\n".join(out)
 
 
+def parse_span(text: str) -> float:
+    """'90s', '20m', '8h', '1.5h' or plain seconds, as real seconds."""
+    t = str(text).strip().lower()
+    mult = {"s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}.get(t[-1:], None)
+    try:
+        return float(t[:-1]) * mult if mult else float(t)
+    except ValueError:
+        raise SystemExit(f"--for {text!r}: say 90s, 20m or 8h") from None
+
+
+def watch_local(s: Session, args: argparse.Namespace) -> dict[str, Any]:
+    """`embody watch` on this machine's database: loop wait(until=...) until it fires or the time is up."""
+    import time as _t
+    end = _t.monotonic() + parse_span(args.for_)
+    since = None
+    while True:
+        left = end - _t.monotonic()
+        if args.until:
+            r = s.wait(timeout=max(0.0, min(left, 60.0)), until=args.until, since=since, full=args.full)
+        else:
+            r = s.wait(timeout=max(0.0, min(left, 60.0)), full=args.full)
+        if not r.get("timed_out") or left <= 60.0:
+            return r
+        since = r.get("since", since)
+
+
+def render_watch(b: dict[str, Any]) -> str:
+    """What a watcher prints: FIRED or TIME UP, then the light bundle."""
+    if b.get("timed_out"):
+        return (f"TIME UP at t={b['t']:g}: {b.get('until') or 'any event'} never came true"
+                + (f"; here {b['here']}" if isinstance(b.get("here"), str) else "")
+                + (f"; present: {', '.join(b['present'])}" if b.get("present") and isinstance(b["present"][0], str) else ""))
+    head = f"FIRED: {b['until']}\n" if b.get("until") else ""
+    return head + (render_perceive(b) if "affordances" in b else render_wait(b))
+
+
 def render_wait(b: dict[str, Any]) -> str:
     """The light bundle wait() returns: where, who, what happened."""
     out = []
@@ -338,6 +374,15 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--timeout", type=float, default=30)
     c.add_argument("--kinds", nargs="*")
     c.add_argument("--full", action="store_true", help="return the whole perceive bundle, not the light one")
+    c = sub.add_parser("watch", help="wait for a condition, for hours if need be, then print what happened and exit: "
+                                      "embody watch --door .mcp.json --until \"came('Reeve')\" --for 8h")
+    c.add_argument("--until", default="", help="the condition, one expression (see wait's until); empty: any event near you")
+    c.add_argument("--for", dest="for_", default="1h", help="how long to watch in real time: 90s, 20m, 8h (default 1h)")
+    c.add_argument("--door", help="a .mcp.json (or a file with the URL and 'Bearer <token>'): watch a hosted world over its door")
+    c.add_argument("--server", help="which server in the .mcp.json (default: the first http one)")
+    c.add_argument("--principal", help="watch as this sub-principal of the connection (a mind run over the same grant)")
+    c.add_argument("--rejoin", action="store_true", help="if the seat lapsed, take it again with join() and keep watching")
+    c.add_argument("--full", action="store_true", help="print the whole perceive bundle when it fires")
     c = sub.add_parser("clock", help="show or set the world clock (author to set)")
     c.add_argument("--run", action="store_true")
     c.add_argument("--pause", action="store_true")
@@ -383,6 +428,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "serve":
         from .mcp_server import serve
         return serve(args)
+    if args.cmd == "watch" and args.door:
+        from .watch_door import watch_door
+        return watch_door(args)
 
     eng, s, st = open_session(args)
     db = db_path(args)
@@ -452,6 +500,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "wait":
             b = s.wait(timeout=args.timeout, kinds=args.kinds, full=args.full)
             emit(args, b, render_perceive(b) if args.full else render_wait(b))
+        elif args.cmd == "watch":
+            r = watch_local(s, args)
+            emit(args, r, render_watch(r))
         elif args.cmd == "clock":
             run = True if args.run else (False if args.pause else None)
             r = s.clock(run=run, rate=args.rate, step=args.step)

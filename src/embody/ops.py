@@ -10,6 +10,7 @@ from __future__ import annotations
 import collections
 import contextlib
 import functools
+import json
 import secrets
 import threading
 import time
@@ -18,6 +19,7 @@ from typing import Any, Callable
 
 from .grants import (LINK_HOURS, link_for, new_code, page, AUTHOR_ROLE, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, OWNER, PLAYER, ROLES, ROLE_DOC,
                      active, allowed, caps_for, new_token, paste, principal_id_for, role_for, token_hash)
+from .script import Script, ScriptError
 from .store import Store
 from .world import Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
 from .workspace import Workspace, restore_world, save_world
@@ -1056,10 +1058,18 @@ class Session:
                 "here": o["parent_id"] == ent["parent_id"]}
 
     def wait(self, timeout: float = 30.0, kinds: list[str] | None = None, poll: float = 0.1, full: bool = False,
+             until: str | None = None, since: int | None = None,
              clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
         """Block until an event touches me (or the timeout). Returns the light bundle: the hour, where I am,
         who is here and the new events, with the cursor moved past them. `full=True` returns perceive()
-        instead. A mind loops on this, so a quiet minute costs a few lines, not the whole card."""
+        instead. A mind loops on this, so a quiet minute costs a few lines, not the whole card.
+
+        `until`: a condition, one expression in the script subset, checked by the engine against what this
+        principal may know (see UNTIL_DOC). The wait returns only when it is true, so a quiet hour of chatter that
+        does not match costs nothing. On a timeout the cursor stays put and the reply is a few fields; call again
+        (with the `since` it gave, for a watcher that is not embodied) and the events so far still count."""
+        if until is not None and str(until).strip():
+            return self._watch(str(until), timeout, kinds, full, since, clock, sleep)
         me = self._me()
         p = self._principal()
         start = clock()
@@ -1092,6 +1102,124 @@ class Session:
                 b["timed_out"] = True
             return b
         return None
+
+    def _watch(self, until: str, timeout: float, kinds: list[str] | None, full: bool, since: int | None,
+               clock: Callable[[], float], sleep: Callable[[float], None], poll: float = 0.5) -> dict[str, Any]:
+        """wait(until=...): the oracle. Rescans from `since` (an embodied principal: its cursor, which does not
+        move until the condition fires), keeps the last 200 events it may see, and evaluates the expression on a
+        copy of what it may know: never the engine's own objects, never anyone's secrets."""
+        cond = _until_script(until)
+        start = clock()
+        with self.engine.lock:
+            self._tick()
+            w = self.world
+            p = w.principal(self.pid)
+            me = p["entity_id"] if p and p["entity_id"] and w.get(p["entity_id"]) else None
+            if me is None and not self._privileged():
+                raise Rejected("you are not embodied", hint="join() your seat first, then wait(until=...)")
+            if since is None:
+                since = p["cursor_seq"] if (me and p) else w.store.next_seq(w.id) - 1
+        scan, seen = int(since), []
+        while True:
+            with self.engine.lock:
+                self._tick()
+                w = self.world
+                if me and w.get(me) is None:
+                    raise Rejected(f"the entity you embodied ({me}) no longer exists", hint="join another entity")
+                hi = w.store.next_seq(w.id) - 1
+                if hi > scan:
+                    rows = w.events(since=scan, until=hi, touching=me, limit=2000)
+                    seen.extend(e for e in self._events_for(me, rows) if not kinds or e["kind"] in kinds)
+                    seen = seen[-200:]
+                    scan = hi
+                view = self._watch_view(me, seen)
+                try:
+                    fired = bool(cond.call("until", env=view, fuel=20_000))
+                except ScriptError as e:
+                    raise Rejected(f"until: {e.reason}", hint=UNTIL_DOC) from None
+                timed_out = clock() - start >= timeout
+                if fired:
+                    return self._watch_reply(me, until, seen, hi, full)
+                if timed_out:
+                    return {"world": w.id, "t": w.t, "timed_out": True, "fired": False, "until": until,
+                            "since": since, "seen": len(seen), "here": view["here"], "present": view["present"]}
+            sleep(poll)
+
+    def _watch_view(self, me: str | None, seen: list[dict[str, Any]]) -> dict[str, Any]:
+        """The names an until-expression sees. Plain data, copied, so a script can only read it."""
+        w = self.world
+        ent = w.get(me) if me else None
+        here = w.get(ent["parent_id"]) if ent and ent["parent_id"] else None
+        near = [c for c in w.children(here["id"]) if c["id"] != me and not c["state"].get("hidden")] if here else []
+        names: dict[str, str] = {}
+
+        def nm(i: str | None) -> str | None:
+            if not i:
+                return None
+            if i not in names:
+                e = w.get(i)
+                names[i] = e["name"] if e else i
+            return names[i]
+
+        evs = [{"seq": e["seq"], "t": e["t"], "kind": e["kind"], "actor": nm(e["actor"]), "target": nm(e["target"]),
+                "text": str((e.get("payload") or {}).get("text") or (e.get("payload") or {}).get("about") or ""),
+                "player": bool(e.get("by_player"))} for e in seen]
+        cards = {c["name"]: self._visible_state(c, full=False) for c in near}
+        if ent:
+            cards.update({c["name"]: self._visible_state(c, full=False) for c in w.children(me)})
+            cards[ent["name"]] = self._visible_state(ent, full=True)
+        data = json.loads(json.dumps({
+            "t": w.t, "ambient": self._ambient(here), "here": here["name"] if here else None,
+            "present": [c["name"] for c in near], "me": self._visible_state(ent, full=True) if ent else {},
+            "events": evs, "cards": cards}, default=str))
+        privileged = self._privileged()
+
+        def low(x: Any) -> str:
+            return str(x or "").lower()
+
+        def heard(word: str = "", by: str = "") -> bool:
+            return any(e["text"] and low(word) in low(e["text"]) and low(by) in low(e["actor"]) for e in data["events"])
+
+        def did(kind: str, by: str = "") -> bool:
+            return any(e["kind"] == kind and low(by) in low(e["actor"]) for e in data["events"])
+
+        def came(name: str) -> bool:
+            return any(low(name) in low(n) for n in data["present"])
+
+        def state(name: str) -> dict[str, Any]:
+            for n, st in data["cards"].items():
+                if low(name) == low(n) or low(name) in low(n):
+                    return st
+            if privileged:
+                try:
+                    e = w.get(self._resolve(name))
+                except Rejected:
+                    return {}
+                return json.loads(json.dumps(self._visible_state(e, full=True), default=str)) if e else {}
+            return {}
+
+        view = {k: v for k, v in data.items() if k != "cards"}
+        view.update(heard=heard, did=did, came=came, state=state)
+        return view
+
+    def _watch_reply(self, me: str | None, until: str, seen: list[dict[str, Any]], hi: int,
+                     full: bool) -> dict[str, Any]:
+        w = self.world
+        if full and me:
+            b = self.perceive()
+            b["fired"] = True
+            b["until"] = until
+            return b
+        ent = w.get(me) if me else None
+        here = w.get(ent["parent_id"]) if ent and ent["parent_id"] else None
+        b = {"world": w.id, "t": w.t, "fired": True, "until": until, "ambient": self._ambient(here),
+             "here": {"id": here["id"], "name": here["name"]} if here else None,
+             "present": [{"id": c["id"], "name": c["name"]} for c in w.children(here["id"])
+                         if c["id"] != me and not c["state"].get("hidden")] if here else [],
+             "events": seen[-50:], "cursor": hi}
+        if me:
+            w.set_cursor(self.pid, hi)
+        return b
 
     # ---- authoring ------------------------------------------------------------------------
 
@@ -1297,6 +1425,28 @@ def call(session: Session, op: str, **kw: Any) -> Any:
         return r.to_dict()
     except TypeError as e:
         return Rejected(f"{op}: {e}", hint=f"see help for {op}").to_dict()
+
+
+UNTIL_DOC = ("until is one Python expression (the embody script subset: no imports, no lambdas) over what you may "
+             "know: t (world seconds), ambient (dict: time_of_day, light, ...), here (your place's name), present "
+             "(names of who is here), me (your own state: water, vigor, wounded, ...), events (since the wait began: "
+             "seq, t, kind, actor, target, text, player), and helpers heard(word, by=''), did(kind, by=''), "
+             "came(name), state(name) (the state you can see of someone here or something you hold). Examples: "
+             "\"came('Reeve')\", \"heard('ruhl', by='Reeve') or me['vigor'] < 3\", \"t >= 43200\", "
+             "\"ambient.get('time_of_day') == 'dusk'\". Names match by part, any case.")
+
+
+def _until_script(until: str) -> Script:
+    expr = " ".join(str(until).split())
+    if len(expr) > 2000:
+        raise Rejected("until is too long (2000 characters at most)", hint=UNTIL_DOC)
+    try:
+        sc = Script("def until():\n    return (" + expr + ")\n", name="until")
+    except ScriptError as e:
+        raise Rejected(f"until: {e.reason}", hint=UNTIL_DOC) from None
+    if set(sc.functions) != {"until"}:
+        raise Rejected("until is one expression, not definitions", hint=UNTIL_DOC)
+    return sc
 
 
 OPS = [

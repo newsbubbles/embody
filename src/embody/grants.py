@@ -21,7 +21,7 @@ ROLES = (OWNER, AUTHOR_ROLE, NARRATOR, PLAYER, MIND, OBSERVER_ROLE)
 # Ops by what they are for. A role is a union of these.
 _ANYONE = {"worlds", "use", "summary", "seats", "leave", "clock"}
 _PLAY = {"join", "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait"}
-_WATCH = {"perceive", "inspect", "find", "history", "recall", "timers", "schemas", "scripts", "script_source"}
+_WATCH = {"perceive", "inspect", "find", "history", "recall", "timers", "schemas", "scripts", "script_source", "wait"}
 _NARRATE = {"act_as", "say_as", "timers", "spawn", "patch", "move", "destroy", "link", "connect", "unlink",
             "relate", "unrelate", "schedule", "unschedule", "remember", "intend", "recall"}
 _AUTHOR = _NARRATE | _WATCH | {"create_world", "fork_world", "save", "restore", "define_schema", "define_script",

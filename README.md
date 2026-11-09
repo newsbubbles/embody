@@ -48,6 +48,7 @@ A world is a folder under `worlds/`: `build.py`, `scripts/`, notes, tests, and a
 - **Any agent, any harness**: `AGENTS.md` is the instruction file (Codex, Claude Code, Cursor, a plain MCP client); `CLAUDE.md` points at it.
 - **MCP**: `uv run embody serve --as <principal> [--author] [--observer]` on stdio. One process is one principal; run one per player or NPC agent, all against the same database.
 - **Hosted**: `uv run embody serve --http --url https://your.host/mcp` serves the same tools over streamable HTTP, one bearer token per grant. `embody invite player --entity reeve --label Sam` prints a link a friend pastes into their agent; the agent reads the page at the link, adds the server, calls `join()`, and they are the reeve. Roles (owner, author, narrator, player, mind, observer) are checked by the engine on every op. docs/HOSTING.md has the path.
+- **Watch**: `embody watch --door .mcp.json --until "came('Reeve') or heard('water')" --for 8h` waits for a condition over what that grant may know, for hours, across reconnects and redeploys, and exits printing what happened. An agent harness runs it in the background and sleeps until it fires; `wait(until=...)` is the same oracle as one tool call.
 - **CLI**: every op, `uv run embody --help`.
 - **Python**: `from embody.ops import Engine`, `Engine("embody.db").session("me", capabilities=["author"])`.
 - **Markdown mirror**: `embody mirror` writes the world as directories and files for anything that reads a filesystem.
@@ -55,6 +56,8 @@ A world is a folder under `worlds/`: `build.py`, `scripts/`, notes, tests, and a
 ## Watching a world
 
 `uv run python tools/watch.py` serves a read-only live graph of the database at http://127.0.0.1:8765/: containment as a tree, passages between places as arcs, who embodies what, the event feed, and each entity's state on click. Wheel to zoom, drag to pan, double-click or `fit` to see it all. The world switcher in the header defaults to the newest world (a fresh fork shows up on its own, with its lineage), and `#world-id` in the URL pins one. It reads the SQLite file while the engine writes it, so it can sit beside a running game. `.claude/launch.json` registers it as the `watch` preview. A hosted server serves the same page at `/watch` behind its bearer door, one world per grant, for the owner, author, narrator and observer roles (docs/HOSTING.md).
+
+Players make their own. [embody-viewer](https://github.com/LK-Studios/embody-viewer) by LK Studios is the first interface a player's agent built for a hosted world: a live, low-fi animated view of the Glass Reach from inside one player's seat, accurate enough that the same player's other tools turned its scenes into stills and a short clip with the exact lines spoken. The engine keeps the world; anything that reads it can show it.
 
 ## Where it is going
 

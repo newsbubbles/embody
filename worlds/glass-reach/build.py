@@ -191,7 +191,7 @@ STORY_KINDS = ["arrived", "checked", "talked", "agreed", "dram_moves", "downed",
                "heat", "dusk", "night", "dawn", "cistern_cracks"]
 
 # the spine at 4x real time, in world seconds: a day is 86400 (six real hours); every=86400 repeats daily
-HOSTED = {"rate": 4, "claim_lapse": 900,
+HOSTED = {"rate": 4, "claim_lapse": 3600,
           # a body's water in the hosted day: one point every 2.4 world hours (36 real minutes of play at 4x), a look for
           # water every ten world minutes; the turn-based story keeps the pack's 60 s
           "pace": {"thirst": 8640, "quench": 600},

@@ -367,15 +367,19 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     async def wait(timeout: float = 30.0, kinds: list[str] | None = None, full: bool = False,
+                   until: str | None = None, since: int | None = None,
                    principal: str | None = None) -> dict[str, Any]:
         """Block until an event touches you or your place (or the timeout, max 120 s). Returns the light bundle
         (t, ambient, here, who is present, the new events, cursor); `full=true` returns perceive() instead.
-        A mind loops on this."""
+        until="<expression>" waits for a condition instead of any event: came('Reeve'), heard('water', by='Ruhl'),
+        me['vigor'] < 3, t >= 43200, ambient.get('time_of_day') == 'dusk'. It returns with fired=true and the
+        events since it began, or timed_out with nothing moved: call again (pass back `since` if you are not
+        embodied). For hours of waiting, run `embody watch` from a shell instead; it loops this for you."""
         import anyio
         sess = S(principal)
         try:
             return await anyio.to_thread.run_sync(
-                lambda: sess.wait(timeout=min(float(timeout), 120.0), kinds=kinds, full=full))
+                lambda: sess.wait(timeout=min(float(timeout), 120.0), kinds=kinds, full=full, until=until, since=since))
         except Rejected as r:
             return r.to_dict()
 
