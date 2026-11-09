@@ -7,12 +7,14 @@ failure is a `Rejected` with a reason, a hint and alternatives.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from pathlib import Path
 from typing import Any, Callable
 
 from .store import Store
 from .world import Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
+from .workspace import Workspace, restore_world, save_world
 
 AUTHOR = "author"
 OBSERVER = "observer"
@@ -23,11 +25,28 @@ _PUBLIC_RELATIONS = frozenset({"connects_to"})
 
 
 class Engine:
-    """Owns a store and the worlds in it. One per process."""
+    """Owns a store and the worlds in it. One per process.
 
-    def __init__(self, path: str | Path | None = None, mirror_root: str | Path | None = None):
+    `workspace` is the folder of worlds/ and packs/ the database belongs to; by default the database's own folder
+    (or the folder above a legacy worlds/embody.db). `record` says whether live authoring is written to the
+    world's folder as well (scripts/<id>.py, changes.jsonl): on for a database on disk, off in memory."""
+
+    def __init__(self, path: str | Path | None = None, mirror_root: str | Path | None = None,
+                 workspace: str | Path | None = None, record: bool | None = None):
         self.store = Store(path)
-        self.mirror_root = Path(mirror_root) if mirror_root else (Path(path).parent / "mirror" if path else None)
+        if workspace is not None:
+            self.workspace: Workspace | None = Workspace(workspace)
+        elif path:
+            self.workspace = Workspace.from_db(path)
+        else:
+            self.workspace = None
+        self.record = (path is not None) if record is None else bool(record)
+        if mirror_root:
+            self.mirror_root = Path(mirror_root)
+        elif self.workspace is not None and path:
+            self.mirror_root = self.workspace.root / "mirror"
+        else:
+            self.mirror_root = None
         self._worlds: dict[str, World] = {}
         self._wall: dict[str, float] = {}
         self.now: Callable[[], float] = time.monotonic
@@ -110,6 +129,25 @@ class Session:
         self.world_id = world_id
         self.capabilities = list(capabilities or [])
         self.default_fuel = 20_000
+        self._building = False
+
+    @contextlib.contextmanager
+    def building(self):
+        """While a loader builds from files, nothing is written back to them."""
+        before = self._building
+        self._building = True
+        try:
+            yield
+        finally:
+            self._building = before
+
+    def _recording(self) -> bool:
+        return bool(self.engine.record and not self._building and self.engine.workspace is not None and self.world_id)
+
+    def _record(self, op: str, **args: Any) -> None:
+        """Live authoring lands in the world's folder too, as a line of changes.jsonl, so a fresh build has it."""
+        if self._recording():
+            self.engine.workspace.record(self.world_id, op, {k: v for k, v in args.items() if v is not None}, by=self.pid)
 
     # ---- plumbing ---------------------------------------------------------
 
@@ -159,7 +197,32 @@ class Session:
         self._need(AUTHOR)
         w = self.engine.create_world(name, seed=seed, id=id, description=description)
         self.world_id = w.id
-        return w.summary()
+        r = w.summary()
+        if self._recording():
+            ws = self.engine.workspace
+            folder = ws.scaffold_world(w.id, name, seed=seed, description=description)
+            r["folder"] = folder["folder"]
+            r["git"] = ws.git_init(Path(folder["folder"]))
+            r["hint"] = "the world's code lives in that folder: build.py for schemas and entities, scripts/ for verbs and rules"
+        return r
+
+    def save(self, name: str | None = None) -> dict[str, Any]:
+        """(author) Write everything the database holds about this world to worlds/<id>/saves/<name>.json."""
+        self._need(AUTHOR)
+        ws = self.engine.workspace or Workspace(Path.cwd())
+        return save_world(self.engine, self.world.id, ws.save_path(self.world.id, name))
+
+    def restore(self, path: str, id: str | None = None) -> dict[str, Any]:
+        """(author) A world from a save file, under its own id or a new one. Point this session at it afterwards."""
+        self._need(AUTHOR)
+        p = Path(path)
+        if not p.exists() and self.engine.workspace is not None and self.world_id:
+            cand = self.engine.workspace.save_path(self.world_id, p.stem)
+            if cand.exists():
+                p = cand
+        if not p.exists():
+            raise Rejected(f"no save at {path}", hint="save(name) writes one; the path is in its result")
+        return restore_world(self.engine, p, id)
 
     def fork_world(self, source: str, id: str, name: str = "") -> dict[str, Any]:
         """(author) A new game on the same world state: everything copied, history kept, nobody embodied.
@@ -598,12 +661,18 @@ class Session:
     def define_schema(self, id: str, **kw: Any) -> dict[str, Any]:
         self._need(AUTHOR)
         row = self.world.define_schema(id, **kw)
+        self._record("define_schema", id=id, **kw)
         return {"ok": True, "schema": id, "version": row["version"]}
 
     def define_script(self, id: str, source: str, doc: str = "") -> dict[str, Any]:
         self._need(AUTHOR)
         row = self.world.define_script(id, source, doc)
-        return {"ok": True, "script": id, "version": row["version"]}
+        r = {"ok": True, "script": id, "version": row["version"]}
+        if self._recording():
+            p = self.engine.workspace.write_script(self.world_id, id, source)
+            if p is not None:
+                r["file"] = str(p)
+        return r
 
     def schemas(self) -> list[dict[str, Any]]:
         self._need(AUTHOR)
@@ -626,6 +695,7 @@ class Session:
     def spawn(self, type: str, parent: str, name: str = "", state: dict[str, Any] | None = None,
               pos: list[float] | None = None) -> dict[str, Any]:
         self._need(AUTHOR)
+        self._record("spawn", type=type, parent=parent, name=name or None, state=state, pos=pos)
         eid = self.world.spawn(type, self._resolve(parent), name=name, state=state, pos=pos, actor=self._actor_or_none())
         return self._card(self.world.need(eid), full=True)
 
@@ -634,29 +704,34 @@ class Session:
         replace=True sets each key whole; a None value deletes the key."""
         self._need(AUTHOR)
         eid = self._resolve(entity)
+        self._record("patch", entity=entity, changes=changes, replace=replace or None)
         self.world.patch(eid, changes, actor=self._actor_or_none(), replace=replace)
         return self._card(self.world.need(eid), full=True)
 
     def move(self, entity: str, parent: str, pos: list[float] | None = None) -> dict[str, Any]:
         self._need(AUTHOR)
         eid = self._resolve(entity)
+        self._record("move", entity=entity, parent=parent, pos=pos)
         self.world.move(eid, self._resolve(parent), pos=pos, actor=self._actor_or_none())
         return self._card(self.world.need(eid), full=True)
 
     def destroy(self, entity: str) -> dict[str, Any]:
         self._need(AUTHOR)
         eid = self._resolve(entity)
+        self._record("destroy", entity=entity)
         self.world.destroy(eid, actor=self._actor_or_none())
         return {"ok": True, "destroyed": eid}
 
     def link(self, source: str, target: str, relation: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
         self._need(AUTHOR)
+        self._record("link", source=source, target=target, relation=relation, data=data)
         gid = self.world.link(self._resolve(source), self._resolve(target), relation, data)
         return {"ok": True, "edge": gid}
 
     def connect(self, a: str, b: str, via: str | None = None, data: dict[str, Any] | None = None) -> dict[str, Any]:
         """Two-way connects_to between places, optionally through a door-like entity."""
         self._need(AUTHOR)
+        self._record("connect", a=a, b=b, via=via, data=data)
         d = dict(data or {})
         if via:
             d["via"] = self._resolve(via)
@@ -665,32 +740,38 @@ class Session:
 
     def unlink(self, source: str, target: str, relation: str) -> dict[str, Any]:
         self._need(AUTHOR)
+        self._record("unlink", source=source, target=target, relation=relation)
         n = self.world.unlink(self._resolve(source), self._resolve(target), relation)
         return {"ok": True, "removed": n}
 
     def relate(self, relation: str, participants: list[str], data: dict[str, Any] | None = None) -> dict[str, Any]:
         self._need(AUTHOR)
+        self._record("relate", relation=relation, participants=participants, data=data)
         hid = self.world.relate(relation, [self._resolve(p) for p in participants], data)
         return {"ok": True, "relation": hid}
 
     def unrelate(self, id: str) -> dict[str, Any]:
         self._need(AUTHOR)
+        self._record("unrelate", id=id)
         self.world.unrelate(id)
         return {"ok": True}
 
     def set_rule(self, entity: str, script: str, kinds: list[str] | None = None) -> dict[str, Any]:
         self._need(AUTHOR)
+        self._record("set_rule", entity=entity, script=script, kinds=kinds)
         self.world.set_rule(self._resolve(entity), script, kinds)
         return {"ok": True}
 
     def clear_rule(self, entity: str, script: str) -> dict[str, Any]:
         self._need(AUTHOR)
+        self._record("clear_rule", entity=entity, script=script)
         self.world.clear_rule(self._resolve(entity), script)
         return {"ok": True}
 
     def schedule(self, after: float, kind: str, entity: str | None = None, payload: dict[str, Any] | None = None,
                  every: float | None = None) -> dict[str, Any]:
         self._need(AUTHOR)
+        self._record("schedule", after=after, kind=kind, entity=entity, payload=payload, every=every)
         sid = self.world.schedule(after, kind, entity=self._resolve(entity) if entity else None, payload=payload,
                                   every=every)
         return {"ok": True, "scheduled": sid}
@@ -698,6 +779,7 @@ class Session:
     def unschedule(self, id: str) -> dict[str, Any]:
         """Cancel a pending timer by its id from timers()."""
         self._need(AUTHOR)
+        self._record("unschedule", id=id)
         item = self.world.unschedule(id)
         return {"ok": True, "unscheduled": id, "kind": item["kind"]}
 
@@ -781,7 +863,7 @@ def call(session: Session, op: str, **kw: Any) -> Any:
 
 
 OPS = [
-    "worlds", "use", "create_world", "fork_world", "join", "leave",
+    "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave",
     "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate",

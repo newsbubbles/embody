@@ -4,16 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from embody.cli import load_world_file
+from embody.cli import load_world
 from embody.ops import AUTHOR, OBSERVER, Engine, Rejected
 
-WORLDS = Path(__file__).resolve().parent.parent / "worlds"
+REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").exists())
 
 
 def ferry():
-    eng = Engine()
+    eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py")
+    load_world(gm, "ferry-at-dusk")
     return eng, gm
 
 

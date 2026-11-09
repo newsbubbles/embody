@@ -6,7 +6,7 @@ The `embody` skill (`.claude/skills/embody/SKILL.md`) is the role reference: nar
 
 ## The loop
 
-1. `worlds()` to see what exists. Empty? `load_world(file="worlds/ferry_at_dusk.py")` loads the sample, or build your own.
+1. `worlds()` to see what exists. Empty? `load_world(file="ferry-at-dusk")` builds the sample, or build your own.
 2. `join(world_id, entity)` to embody someone, or `use(world_id)` to stand outside as the author.
 3. `perceive()` gives the whole bundle: where you are, who and what is here, exits, what you hold, who you know, the verbs you could try and why some are not possible right now, and events since you last looked.
 4. `say(text, to=...)` for words (no `to`: said into the room), `act(verb, target, params)` for deeds. `intend` keeps your character's goals, `recall(about=...)` is the graph query around someone within what you may know. A rejection comes back as `{ok: false, reason, hint, alternatives}`. Read the reason, do not retry the same call.
@@ -20,12 +20,12 @@ They answer from their dialog tables and act on behaviors on their own. When one
 
 ## Building a world
 
-Read `guide()` (docs/SCRIPTING.md) before writing scripts. `worlds/ferry_at_dusk.py` is the worked example of a village (talk, chores, a storyline on facts) and `worlds/glass_reach.py` with `worlds/rules_d20.py` the worked example of a world with rules as verbs (dice, wounds, duels, factions): `define(s)` for scripts and schemas, `populate(s)` for the rest, `build(s)` for a new world. `load_world(file, upgrade=true)` renews a live world's code. `fork_world(source, id)` starts a fresh game on the same state.
+Read `guide()` (docs/SCRIPTING.md) before writing scripts. A world is a folder, `worlds/<id>/`: `build.py` with a `WORLD` manifest, `define(s)` for schemas, `populate(s)` for entities, rules and timers, `upgrade(s)` for what an older build lacks; its scripts are the files in `scripts/`; the packs it `requires` come from `packs/`. `create_world(name, id=...)` makes the folder and starts a git repository in it, and live authoring is written back into it. `worlds/ferry-at-dusk/` is the worked example of a village (talk, chores, a storyline on facts) on the `village` pack, `worlds/glass-reach/` on the `d20` pack the worked example of a world with rules as verbs (dice, wounds, duels, factions). `load_world(id, upgrade=true)` renews a live world's code. `fork_world(source, id)` starts a fresh game on the same state; `save(name)` and `restore(path)` carry one as a file. The database is `embody.db` at the workspace root.
 
 ## Working on the engine
 
-- `uv sync --all-extras`, then `timeout 120 uv run pytest -q tests` (the suite runs in about two seconds; a hang means a clock bug, so always run it with a timeout).
-- Layout: `src/embody/script.py` the interpreter, `store.py` SQLite, `world.py` the graph, events, actions and clock, `ops.py` sessions and capabilities, `mirror.py` the markdown projection, `cli.py` and `mcp_server.py` the two front doors, `tools/watch.py` the read-only live viewer.
+- `uv sync --all-extras`, then `timeout 180 uv run pytest -q` (the suite covers `tests/`, the worlds' and the packs' own tests and runs in under twenty seconds; a hang means a clock bug, so always run it with a timeout).
+- Layout: `src/embody/script.py` the interpreter, `store.py` SQLite, `world.py` the graph, events, actions and clock, `ops.py` sessions and capabilities, `workspace.py` the folders (worlds, packs, scripts as files, `changes.jsonl`, save and restore), `mirror.py` the markdown projection, `cli.py` and `mcp_server.py` the two front doors, `tools/watch.py` the read-only live viewer.
 - DESIGN.md is the authority on what embody is. ROADMAP.md tracks where it stands. Change them when the design or the state changes.
 - Libraries only when they bring a real efficiency gain. The engine depends on nothing but Python; the MCP server is an extra.
 - Docs are written without em-dashes.

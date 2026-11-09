@@ -1,6 +1,6 @@
 """The Glass Reach: a desert fief with table-top rules, nine places, seven NPCs, two seats to play.
 
-    uv run embody --as gm --author load worlds/glass_reach.py
+    uv run embody --as gm --author load glass-reach
     uv run embody --as you join glass-reach "Reeve Ansel Varrick"
     uv run embody --as you perceive
 
@@ -9,7 +9,7 @@ people who know the water, a house newly given the fief, a house that lost it an
 guild that carries and sells, and something under the dunes that comes to rhythm. Said once, so the
 borrowing is plain; after this the Reach is its own.
 
-Every rule is an action or a listener from `worlds/rules_d20.py`: checks against a difficulty, opposed
+Every rule is an action or a listener from the d20 pack (`packs/d20`): checks against a difficulty, opposed
 attacks, wards that stop fast blades, brace, yield, kill, threaten, parley, duels whose ring holds, water
 that runs out, factions that remember, the Thresher that comes when the sand is walked loud. The narrator
 reads the numbers off the events and tells them; the engine decides them.
@@ -31,205 +31,19 @@ back to Taan). The story checks facts, not a stage:
 
 Timers: heat at 200, Dram at 240, dusk at 500, the cistern fails at 600. Play is turn-based, three seconds a turn.
 
-Split like the ferry: define(s), populate(s), upgrade(s), build(s).
+Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on and reach_story; take, drop, give, talk,
+read and person_on come from packs/village, the rules from packs/d20), define(s), populate(s), upgrade(s).
 """
 
-import sys
-from pathlib import Path
+from packs.d20.pack import install_rules
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from ferry_at_dusk import DROP, GIVE, PERSON_ON, READ, TAKE, TALK  # noqa: E402
-from rules_d20 import define_rules, install_rules  # noqa: E402
-
-# ---- scripts of this world -------------------------------------------------------------
-
-GO = '''
-def check(ctx):
-    here = ctx.actor.parent
-    if ctx.actor.state.down:
-        return "you are down: crawl"
-    for e in ctx.edges(here, "connects_to", "out"):
-        if e["target"] == ctx.target.id:
-            if ctx.target.state.hidden and ctx.target.state.known_to != ctx.actor.state.faction:
-                return "you do not know the way"
-            return True
-    return "there is no way there from here"
-
-def apply(ctx):
-    here = ctx.actor.parent
-    ctx.move(ctx.actor, ctx.target)
-    ctx.emit("arrived", target=ctx.target, reach=-1, who=ctx.actor.id, place=ctx.target.id, quiet=False)
-    for p in ctx.children(here, "creature"):
-        if p.state.follows == ctx.actor.id and not p.state.down and not p.state.dead:
-            ctx.move(p, ctx.target)
-            ctx.emit("arrived", target=ctx.target, reach=1, who=p.id, place=ctx.target.id, following=ctx.actor.id, quiet=False)
-'''
-
-CREEP = '''
-def check(ctx):
-    here = ctx.actor.parent
-    if ctx.actor.state.down:
-        return "you are down: crawl"
-    for e in ctx.edges(here, "connects_to", "out"):
-        if e["target"] == ctx.target.id:
-            if ctx.target.state.hidden and ctx.target.state.known_to != ctx.actor.state.faction:
-                return "you do not know the way"
-            return True
-    return "there is no way there from here"
-
-def apply(ctx):
-    # the broken step: twice as long, and the sand does not count it
-    ctx.move(ctx.actor, ctx.target)
-    ctx.emit("arrived", target=ctx.target, reach=-1, who=ctx.actor.id, place=ctx.target.id, quiet=True)
-'''
-
-WARD_TOGGLE = '''
-def check(ctx):
-    if ctx.self.parent.id != ctx.actor.id:
-        return "you must hold it"
-    return True
-
-def apply(ctx):
-    on = not ctx.self.state.on
-    ctx.patch(ctx.self, {"on": on, "description": ctx.self.state.description_on if on else ctx.self.state.description_off})
-    ctx.emit("ward_" + ("on" if on else "off"), target=ctx.actor, reach=1)
-'''
-
-OSSA_ON = '''
-def on(ctx, event):
-    # emberglass handed to Ossa buys a full skin; anything else she keeps and says so
-    if event.target != ctx.self.id:
-        return
-    item = ctx.get(event.payload.get("item"))
-    buyer = ctx.get(event.payload.get("by"))
-    if item is None or buyer is None:
-        return
-    if item.state.kind == "ember":
-        ctx.destroy(item)
-        ctx.spawn("waterskin", buyer, name="Full waterskin", state={"left": 3})
-        ctx.patch(ctx.self, {"ember_bought": int(ctx.self.state.ember_bought or 0) + 1})
-        ctx.say("Fair glass. A full skin, and no questions where you dug it.", to=buyer.id)
-        ctx.emit("traded", target=buyer, reach=1, by=ctx.self.id, got="Full waterskin", gave="Emberglass")
-    else:
-        ctx.say("I take glass, friend. Keep your trinkets.", to=buyer.id)
-'''
-
-STORY = '''
-def scene(ctx, place, text):
-    ctx.emit("scene", target=place, reach=1, text=text)
-
-def keth_standing(ctx, who, keth):
-    for e in ctx.edges(who, "standing", "out"):
-        if e["target"] == keth.id:
-            return int(e["data"].get("value") or 0)
-    return 0
-
-def reveal_well(ctx, st, how):
-    well = ctx.get(st.deepwell)
-    if well is None or not well.state.hidden:
-        return
-    ctx.patch(well, {"hidden": False})
-    ctx.patch(ctx.find(type="story", limit=1)[0], {"found_well": True, "well_found_by": how})
-    if how == "nico":
-        scene(ctx, st.ridge, "Nico looks at you a long moment, then points down the back of the ridge, to a shadow in the rock you had taken for nothing. A way down.")
-    else:
-        scene(ctx, st.ridge, "Goat sign, then a worn lip of stone, then cool air coming up out of the rock. There is a way down the back of the ridge.")
-
-def finish_if_done(ctx, story):
-    st = story.state
-    if st.truce and st.dram_done and not st.done:
-        ctx.patch(story, {"done": True})
-        ctx.patch(ctx.root(), {"story": "complete"})
-        scene(ctx, st.hold, "Water comes up the Salt Road under a Keth flag, and the Carrier's clerk is gone from the yard. Scar Gate stands. For now, it stands.")
-
-def on(ctx, event):
-    story = ctx.find(type="story", limit=1)[0]
-    st = story.state
-    k = event.kind
-    p = event.payload
-    if k == "arrived":
-        dram = ctx.get(st.dram)
-        if dram is not None and dram.state.waiting and dram.parent is not None and p.get("place") == dram.parent.id and p.get("who") == st.ansel:
-            reeve = ctx.get(st.ansel)
-            if not reeve.state.down and not ctx.relations(reeve, "duel") and not ctx.relations(dram, "duel"):
-                ctx.relate("duel", [dram.id, reeve.id], {"place": dram.parent.id, "since": ctx.t, "public": True})
-                ctx.patch(dram, {"waiting": False})
-                ctx.emit("challenged", target=reeve, reach=1, by=dram.id, place=dram.parent.id, ring=True)
-                scene(ctx, dram.parent, "Dram Hollis turns in the ring and draws. 'Reeve Varrick. Dram Hollis, of the Carriers' book, lately of other books. Step in, or be known for stepping back.'")
-        if p.get("place") == st.ridge and not st.seen_ridge:
-            ctx.patch(story, {"seen_ridge": True})
-            scene(ctx, st.ridge, "From up here the Reach is a sheet of black glass with red dunes walking across it. The Hold is a thumbprint to the south. Nothing moves, except one thin line of smoke from somewhere under the rock.")
-        elif p.get("place") == st.flats and not st.seen_flats:
-            ctx.patch(story, {"seen_flats": True})
-            scene(ctx, st.flats, "Glass underfoot, warm already. Veins of dull red show where the dunes have pulled back. Every step rings.")
-    elif k == "checked":
-        if p.get("place") == st.ridge and p.get("success") and str(p.get("skill")) in ["survival", "lore", "track", "search"] and int(p.get("dc") or 0) >= 15:
-            reveal_well(ctx, st, "found")
-    elif k == "talked":
-        if event.target == st.nico:
-            about = str(p.get("about", "")).lower()
-            asker = ctx.get(p.get("by"))
-            keth = ctx.get(st.keth)
-            if asker is not None and ("water" in about or "well" in about or "cistern" in about or "keth" in about):
-                if asker.state.faction == "the Keth" or keth_standing(ctx, asker, keth) >= 1:
-                    reveal_well(ctx, st, "nico")
-    elif k == "agreed":
-        if event.target == st.taan and not st.truce:
-            offer = str(p.get("offer", "")).lower()
-            who = ctx.get(p.get("by"))
-            keth = ctx.get(st.keth)
-            if who is not None and keth_standing(ctx, who, keth) >= -1 and ("water" in offer or "truce" in offer or "well" in offer or "ember" in offer or "glass" in offer or "share" in offer or "peace" in offer):
-                side = ctx.find(type="faction", name=who.state.faction, limit=1)
-                parts = [keth.id] + ([side[0].id] if side else [who.id])
-                ctx.relate("truce", parts, {"terms": str(p.get("offer")), "since": ctx.t, "public": True})
-                ctx.patch(story, {"truce": True})
-                ctx.patch(ctx.get(st.taan), {"dialog": {"water|well|truce": "We have terms. Keth water goes up the road at dusk and the Flats stay quiet. Keep it so."}})
-                scene(ctx, st.deepwell, "Taan puts both palms flat on the wet stone. 'Then it is water between us. Say it at the Hold the way I say it here.'")
-                finish_if_done(ctx, story)
-            else:
-                scene(ctx, st.deepwell, "Taan hears you out and shakes her head once. 'That is not terms. That is a man asking.'")
-    elif k == "dram_moves":
-        dram = ctx.get(st.dram)
-        if dram is None or dram.state.down or dram.state.dead or st.dram_done:
-            return
-        ctx.move(dram, st.yard)
-        ctx.emit("arrived", target=st.yard, reach=-1, who=dram.id, place=st.yard, quiet=False)
-        ctx.patch(dram, {"waiting": True, "description": "The Carrier's clerk, except that the clerk's coat is off and the blade on his hip is not a clerk's."})
-        reeve = ctx.get(st.ansel)
-        if reeve is not None and reeve.parent.id == st.yard and not reeve.state.down and not ctx.relations(reeve, "duel"):
-            ctx.relate("duel", [dram.id, reeve.id], {"place": st.yard, "since": ctx.t, "public": True})
-            ctx.patch(dram, {"waiting": False})
-            ctx.emit("challenged", target=reeve, reach=1, by=dram.id, place=st.yard, ring=True)
-            scene(ctx, st.yard, "Dram Hollis steps into the ring and draws. 'Reeve Varrick. Dram Hollis, of the Carriers' book, lately of other books. Step in, or be known for stepping back.'")
-        else:
-            scene(ctx, st.yard, "Dram Hollis walks into the ring, shrugs off the clerk's coat, draws, and asks the yard for the reeve by name.")
-            scene(ctx, st.hold, "Word comes in from the yard: the Carrier's clerk is in the ring with a blade out, asking for the reeve.")
-    elif k in ["downed", "killed", "yielded"]:
-        who = event.target
-        if who == st.dram and not st.dram_done:
-            ctx.patch(story, {"dram_done": True, "dram_how": k})
-            scene(ctx, ctx.get(who).parent, "Something falls out of Dram's coat as he goes down: a folded letter under a seal the color of old blood.")
-            ctx.spawn("letter", ctx.get(who).parent, name="Sealed letter", state={
-                "text": "H. The reeve in the ring, before the moon turns. Keep the Keth thirsty: no truce, whatever it costs. The Flats are ours when the Hold is empty. Burn this. D.",
-                "description": "Folded twice, sealed in dark red wax with a sigil of a well and a bar across it."})
-            finish_if_done(ctx, story)
-        elif who == st.ansel and k == "killed" and not st.reeve_dead:
-            ctx.patch(story, {"reeve_dead": True, "done": True})
-            ctx.patch(ctx.root(), {"story": "lost"})
-            scene(ctx, ctx.get(who).parent, "The reeve of Scar Gate is dead on the Hold's own sand. Within the month a Dreyer banner will hang from the gate, and the Keth will go on drinking in the dark.")
-    elif k == "heat":
-        ctx.patch(ctx.root(), {"ambient": {"time_of_day": "noon", "weather": "white glare, heat shimmer off the glass", "light": "blinding"}})
-        scene(ctx, st.flats, "The glare comes up off the glass until there is no ground, only light.")
-    elif k == "dusk":
-        ctx.patch(ctx.root(), {"ambient": {"time_of_day": "dusk", "weather": "the heat going out of the air fast", "light": "red, long shadows"}})
-        scene(ctx, st.hold, "The sun drops behind Red Ridge and the Hold's walls start to tick as they cool.")
-    elif k == "cistern_cracks":
-        cistern = ctx.get(st.cistern)
-        if cistern is not None and int(cistern.state.left or 0) > 0:
-            ctx.patch(cistern, {"left": 0, "description": "A stone tank with a crack you could put your hand in. Dry. The floor of it is already warm."})
-            scene(ctx, st.hold, "A sound like a shot from under the floor. The cistern's crack has run, and what water was left is going into the sand.")
-'''
+WORLD = {
+    "id": "glass-reach",
+    "name": "The Glass Reach",
+    "seed": 23,
+    "description": "A desert fief, a cracked cistern, a people with the water, a blade left behind. Rules on the table.",
+    "requires": ["d20", "village"],
+}
 
 # ---- what there is ---------------------------------------------------------------------
 
@@ -358,7 +172,6 @@ KNOWS = [
     ("Sefa of the Keth", "Nico", 2, "watches with me"),
 ]
 
-
 def seed_reach(s, by_name):
     """Goals, standings and acquaintances for every seat. Idempotent: checks before it writes."""
     for who, goals in GOALS.items():
@@ -379,14 +192,8 @@ def seed_reach(s, by_name):
         if not any(e["target"] == eb for e in s.world.edges(ea, "knows", "out")):
             s.link(ea, eb, "knows", {"standing": standing, "note": note, "met_t": 0, "count": 0})
 
-
 def define(s):
-    """Scripts and schemas. Safe to run again on a live world."""
-    define_rules(s)
-    for sid, src in [("go", GO), ("creep", CREEP), ("take", TAKE), ("drop", DROP), ("give", GIVE), ("talk", TALK),
-                     ("read", READ), ("person_on", PERSON_ON), ("ward_toggle", WARD_TOGGLE), ("ossa_on", OSSA_ON),
-                     ("reach_story", STORY)]:
-        s.define_script(sid, src)
+    """Schemas. The scripts are the files in scripts/ and the packs. Safe to run again on a live world."""
     s.define_schema("person", extends="combatant", doc="Someone of the Reach: walks, carries, talks, and fights by the rules.",
                     state={"dialog": {}, "default_line": "Hm.", "gives": {}, "gave": {}, "asleep": False, "follows": None,
                            "secret": ["dialog", "gives", "gave"]},
@@ -417,7 +224,6 @@ def define(s):
     s.define_schema("story", extends="entity", doc="The rails. Hidden; holds the facts the story has seen.",
                     state={"hidden": True, "seen_ridge": False, "seen_flats": False, "found_well": False, "truce": False,
                            "dram_done": False, "reeve_dead": False, "done": False})
-
 
 def populate(s):
     """Places, people, things, rules and the clock."""
@@ -519,7 +325,6 @@ def populate(s):
     s.clock(run=False, turn=3)
     return s.summary()
 
-
 def upgrade(s):
     """Bring a world built from an older version of this file up to this one. Checks before every write."""
     names = {e["name"]: e["id"] for e in s.find(limit=500)}
@@ -532,9 +337,3 @@ def upgrade(s):
                                             "heat", "dusk", "cistern_cracks"])
     s.patch(root, {"policy": POLICY})
 
-
-def build(s):
-    s.create_world("The Glass Reach", seed=23, id="glass-reach",
-                   description="A desert fief, a cracked cistern, a people with the water, a blade left behind. Rules on the table.")
-    define(s)
-    return populate(s)

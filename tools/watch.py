@@ -125,7 +125,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--db", default="worlds/embody.db")
+    ap.add_argument("--db", default="embody.db" if Path("embody.db").exists() or not Path("worlds/embody.db").exists() else "worlds/embody.db")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     a = ap.parse_args()

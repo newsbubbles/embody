@@ -30,7 +30,7 @@ claude
 The CLI works without an agent:
 
 ```bash
-uv run embody --as gm --author load worlds/ferry_at_dusk.py
+uv run embody --as gm --author load ferry-at-dusk
 uv run embody --as you join ferry-at-dusk Traveler
 uv run embody --as you perceive
 uv run embody --as you act talk Mara --param about=ferry
@@ -41,11 +41,13 @@ uv run embody --as gm mirror
 
 `perceive` prints where you are, who is here, the exits, what you hold, what you can do right now and what you cannot (with the reason), and what happened since you last looked. A rejected action says why and what would work instead.
 
+A world is a folder under `worlds/`: `build.py`, `scripts/`, notes, tests, and anything else it needs, so git versions it; `create_world` starts a repository there. The database (`embody.db`) is the build of the folder plus the game. Shared verbs and rules are packs under `packs/`.
+
 ## Any harness
 
 - **MCP**: `uv run embody serve --as <principal> [--author] [--observer]` on stdio. One process is one principal; run one per player or NPC agent, all against the same database.
 - **CLI**: every op, `uv run embody --help`.
-- **Python**: `from embody.ops import Engine`, `Engine("worlds/embody.db").session("me", capabilities=["author"])`.
+- **Python**: `from embody.ops import Engine`, `Engine("embody.db").session("me", capabilities=["author"])`.
 - **Markdown mirror**: `embody mirror` writes the world as directories and files for anything that reads a filesystem.
 
 ## Watching a world
@@ -58,11 +60,12 @@ ROADMAP.md tracks what exists, what the first playtest found, and the directions
 
 ## Layout
 
-- `src/embody/` the engine: `script.py` interpreter, `store.py` SQLite, `world.py` graph, events, actions, clock, `ops.py` sessions and capabilities, `mirror.py`, `cli.py`, `mcp_server.py`
-- `worlds/` sample worlds (`ferry_at_dusk.py`, `two_rooms.py`)
+- `src/embody/` the engine: `script.py` interpreter, `store.py` SQLite, `world.py` graph, events, actions, clock, `ops.py` sessions and capabilities, `workspace.py` worlds as folders, `mirror.py`, `cli.py`, `mcp_server.py`
+- `worlds/` sample worlds, one folder each (`ferry-at-dusk/`, `glass-reach/`, `two-rooms/`): `build.py`, `scripts/`, `notes/`, `tests/`
+- `packs/` shared verbs and rules a world `requires` (`village/`, `d20/`)
 - `docs/SCRIPTING.md` the scripting reference (also the `guide()` tool)
 - `DESIGN.md` the design, authoritative
-- `tests/` run with `uv run pytest -q tests`
+- `tests/` run with `uv run pytest -q` (the worlds' and packs' own tests run with it)
 
 ## License
 

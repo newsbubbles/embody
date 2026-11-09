@@ -2,16 +2,16 @@
 
 from pathlib import Path
 
-from embody.cli import load_world_file
+from embody.cli import load_world
 from embody.ops import AUTHOR, Engine, Rejected
 
-WORLDS = Path(__file__).resolve().parent.parent / "worlds"
+REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").exists())
 
 
 def test_ferry_at_dusk_rails_complete():
-    eng = Engine()
+    eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py")
+    load_world(gm, "ferry-at-dusk")
     you = eng.session("you")
     first = you.join("ferry-at-dusk", "Traveler")
     assert first["here"]["name"] == "Ashford Square"
@@ -68,9 +68,9 @@ def test_ferry_at_dusk_rails_complete():
 def test_ferry_at_dusk_is_deterministic():
     hashes = []
     for _ in range(2):
-        eng = Engine()
+        eng = Engine(workspace=REPO)
         gm = eng.session("gm", capabilities=[AUTHOR])
-        load_world_file(gm, WORLDS / "ferry_at_dusk.py")
+        load_world(gm, "ferry-at-dusk")
         gm.clock(step=200)
         hashes.append(gm.world.state_hash())
     assert hashes[0] == hashes[1]

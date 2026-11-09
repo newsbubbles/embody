@@ -12,3 +12,7 @@ worlds/mirror/
 .claude/settings.local.json
 worlds/*.db-shm
 worlds/*.db-wal
+mirror/
+*.db-shm
+*.db-wal
+worlds/*/saves/

@@ -5,18 +5,18 @@ from pathlib import Path
 
 import pytest
 
-from embody.cli import load_world_file, main as cli_main
+from embody.cli import load_world, main as cli_main
 from embody.ops import AUTHOR, Engine
 from embody.store import Store
 from embody.world import World
 
-WORLDS = Path(__file__).resolve().parent.parent / "worlds"
+REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").exists())
 
 
 def ferry(path=None):
-    eng = Engine(path) if path else Engine()
+    eng = Engine(path, workspace=REPO, record=False) if path else Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py")
+    load_world(gm, "ferry-at-dusk")
     return eng, gm
 
 

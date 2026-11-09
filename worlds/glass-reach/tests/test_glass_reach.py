@@ -3,18 +3,18 @@ ring, the letter, the end states, the trade at the Landing, the timers, and a sa
 
 from pathlib import Path
 
-from embody.cli import load_world_file
+from embody.cli import load_world
 import pytest
 
 from embody.ops import AUTHOR, Engine, Rejected
 
-WORLDS = Path(__file__).resolve().parent.parent / "worlds"
+REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").exists())
 
 
 def reach(seat="Reeve Ansel Varrick"):
-    eng = Engine()
+    eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world_file(gm, WORLDS / "glass_reach.py")
+    load_world(gm, "glass-reach")
     you = eng.session("you")
     you.join("glass-reach", seat)
     return eng, gm, you
@@ -205,7 +205,7 @@ def test_upgrade_is_idempotent():
     before = {e["id"]: e["state"] for e in gm.find(limit=500)}
     goals = len(gm.recall(entity="Reeve Ansel Varrick")["goals"])
     edges = gm.world.store.count("edge", "world_id=?", (gm.world.id,))
-    load_world_file(gm, WORLDS / "glass_reach.py", upgrade=True)
+    load_world(gm, "glass-reach", upgrade=True)
     assert {e["id"]: e["state"] for e in gm.find(limit=500)} == before
     assert gm.world.store.count("edge", "world_id=?", (gm.world.id,)) == edges
     assert len(gm.recall(entity="Reeve Ansel Varrick")["goals"]) == goals

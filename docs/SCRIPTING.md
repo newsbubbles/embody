@@ -21,6 +21,31 @@ define_schema("rat", extends="creature", behaviors=[{"script": "wander", "every"
 define_schema("fighter", extends="creature", behaviors=[{"script": "thirst", "every": 60, "always": True}])
 ```
 
+## Worlds are folders
+
+A world is a folder under `worlds/`, named by its id. Everything about it that is code or text lives there, in plain files git can track; the database (`embody.db` at the workspace root) is the build of those files plus what happened in play.
+
+```
+worlds/<id>/
+  build.py        WORLD = {"id", "name", "seed", "description", "requires"}; define(s), populate(s), upgrade(s)
+  scripts/*.py    one script per file, the file stem is the script id
+  changes.jsonl   live authoring, one op per line, replayed by a fresh build
+  saves/*.json    save(name) writes here; ignored by git unless you keep one
+  notes/          playtest notes, the handoff to the next author round
+  tests/          pytest finds them
+packs/<name>/
+  pack.py         PACK = {"name", "description"}; an optional define(s) for shared schemas
+  scripts/*.py    verbs and rules a world takes with "requires": ["<name>"]
+```
+
+`load_world(id)` builds it: for each pack in `requires`, the pack's scripts and its `define`; then the world's scripts, its `define` (schemas), its `populate` (entities, rules, timers) and the replay of `changes.jsonl`. A world script with the same name as a pack script wins, and the pack's is never defined. `load_world(id, upgrade=true)` runs packs, scripts, `define` and `upgrade(s)` against the live world: new code, same state and history.
+
+Scripts share code with `use("name")` on a line of its own: the file `scripts/_name.py` (or `name.py`) is pasted in its place when the world loads. Files that start with `_` are includes, never scripts of their own. `packs/d20/scripts/_common.py` carries the dice helpers its verbs share.
+
+Live authoring lands in the folder too. `create_world(name, id=...)` makes `worlds/<id>/` with a build.py skeleton and starts a git repository there (unless the folder already sits inside one). `define_script` writes `scripts/<id>.py`; `define_schema`, `spawn`, `patch`, `connect`, `set_rule`, `schedule` and the other author ops append to `changes.jsonl` with the arguments as you gave them. Name things, then: `spawn("thing", "Pell's Mill", "Hat")` replays on a fresh build, an entity id would not. When the world settles, move what changes.jsonl holds into `populate` or `upgrade` and start the file over.
+
+`save(name)` writes the whole world (entities, events, scripts, schemas, timers) to `saves/<name>.json`; `restore(path, id=...)` brings it back under its own id or a new one. Versions, forks and backups of the code are git's job: commit the folder, branch it, tag it. The engine's `fork_world` is for a fresh game on the same state, not for versions.
+
 ## Holder verbs and object verbs
 
 An action with `targets` (a type name, or `"any"`) is the holder's own verb, done to something of that type: `go` targets a `place`, `take` a `thing`, `attack` a `creature`. An action without `targets` is done to the entity that carries it: `open` on a door, `read` on a sign. Perception pairs the first kind with every reachable entity of the right type and lists the second kind under the object. Other action keys: `doc`, `params` (documentation of expected params), `reach` (`near` default, `self`, or `any`), `self: true` (a `near` holder verb that may also target the actor, so it is listed against yourself too: `wake`, `check`), `range` (max distance in the container's space), `duration` (world seconds until `finish` runs; in turn-based play also the length of that turn), `scope` on holder verbs (`exits`: only connected places, `here`: only what lies in the actor's place, `held`: only what the actor holds, `any`: the default), `hidden`. Scope keeps impossible pairs out of a player's affordances; the near misses keep their reasons. A creature's own targetless verbs (`brace`, `check`, `sleep`) are things it does, so they are listed once with no target and never against another creature.
@@ -100,18 +125,18 @@ A door between two rooms: spawn the door in one room and connect the rooms `via`
 
 A monster that acts on its own until a player embodies it: a behavior with `tick`. The engine skips ticks while the entity is embodied. A behavior with `"always": True` is the body, not the mind (thirst, bleeding, a wound that worsens): it ticks on an embodied seat too.
 
-Ambient facts: put a dict `ambient` on the world root (`time_of_day`, `weather`, `light`, whatever the world cares about) and, where a place differs, an `ambient` dict on the place. Every perceive carries the two merged, the place's keys on top. A rule on the root listening for your own `fog`, `nightfall`, `dawn` timers patches them and emits `scene` events at the places; `worlds/ferry_at_dusk.py` has one. Timers are listed by the `timers` op and cancelled with `unschedule`.
+Ambient facts: put a dict `ambient` on the world root (`time_of_day`, `weather`, `light`, whatever the world cares about) and, where a place differs, an `ambient` dict on the place. Every perceive carries the two merged, the place's keys on top. A rule on the root listening for your own `fog`, `nightfall`, `dawn` timers patches them and emits `scene` events at the places; `worlds/ferry-at-dusk/scripts/weather.py` is one. Timers are listed by the `timers` op and cancelled with `unschedule`.
 
-A world file that grows: besides `define(s)` and `populate(s)`, give it an `upgrade(s)` that adds what an older build lacks (a new place, a prop in someone's pocket, a timer, the ambient dict) and checks before each step, so running it twice changes nothing. `load_world(file, upgrade=true)` runs `define` and then `upgrade` against the live world. `set_rule` is already a no-op when the same rule is installed.
+A world file that grows: besides `define(s)` and `populate(s)`, give it an `upgrade(s)` that adds what an older build lacks (a new place, a prop in someone's pocket, a timer, the ambient dict) and checks before each step, so running it twice changes nothing. `load_world(id, upgrade=true)` runs `define` and then `upgrade` against the live world. `set_rule` is already a no-op when the same rule is installed.
 
 A table as the floor and a mind on top: the listener that answers `talked` from a dialog table carries `unless_embodied: true`. While an agent embodies the person the table is silent and the agent hears the `talked` and the addressed `say`; when it leaves, the table answers again. State an author writes for the mind goes in `brief`; the mind's own notes go in `memory` through `remember`, its goals in `goals` through `intend`. All three are always secret.
 
-Whole-word dialog: split the topic into words and match each `|`-separated alias of a key against them, so `ale` matches "an ale, please" and not "a tale". Entries may be dicts: `{"line": ..., "after_gift": ..., "if_state": {"friend": None}, "else": ...}`. `worlds/ferry_at_dusk.py` has the script (`PERSON_ON`).
+Whole-word dialog: split the topic into words and match each `|`-separated alias of a key against them, so `ale` matches "an ale, please" and not "a tale". Entries may be dicts: `{"line": ..., "after_gift": ..., "if_state": {"friend": None}, "else": ...}`. `packs/village/scripts/person_on.py` is the script.
 
 A turn-based pocket: a place whose `before_act` listener rejects anyone but `state.order[state.turn]`, and whose `act` listener advances `state.turn`. Outside that place the world keeps running.
 
-A storyline: a hidden entity (`state.hidden = True`) holds `state.stage`; its script is installed on the root with `set_rule(root, "story", kinds=[...])` so it hears every event, and finds its entity with `ctx.find(type="story")`. Each stage waits for its trigger event, applies effects (spawn, patch, move, emit a `scene` event at a place, schedule) and advances the stage. `worlds/ferry_at_dusk.py` is a full example.
+A storyline: a hidden entity (`state.hidden = True`) holds `state.stage`; its script is installed on the root with `set_rule(root, "story", kinds=[...])` so it hears every event, and finds its entity with `ctx.find(type="story")`. Each stage waits for its trigger event, applies effects (spawn, patch, move, emit a `scene` event at a place, schedule) and advances the stage. `worlds/ferry-at-dusk/scripts/story.py` is a full example.
 
-Rules as actions, the TTRPG way: every rule of the game is a verb with a `check` and an `apply`, and the dice are `ctx.rand.roll("1d20")`, so the same seed replays the same fight. `worlds/rules_d20.py` is a reusable rule set: `check(skill, dc)` emits `checked` with roll, mod, total, dc and margin; `attack` rolls against a defence and emits `hit`, `missed` or `warded`, with vigor, wounds, down and dead as state; `yield`, `kill`, `brace`, `threaten`, `parley`, `challenge` (a duel hyperedge that a root rule turns into a ring nobody else may strike into), `drink`, `fill`, `search`, `harvest`; a `thirst` behavior on every combatant; a `fighter_tick` behavior that fights without a mind; factions as entities with `hostile` maps and `standing` edges. `install_rules(s)` puts the root rules in place; `worlds/glass_reach.py` builds a world on it. The narrator never decides what a 16 means: the event says it.
+Rules as actions, the TTRPG way: every rule of the game is a verb with a `check` and an `apply`, and the dice are `ctx.rand.roll("1d20")`, so the same seed replays the same fight. `packs/d20` is a reusable rule set: `check(skill, dc)` emits `checked` with roll, mod, total, dc and margin; `attack` rolls against a defence and emits `hit`, `missed` or `warded`, with vigor, wounds, down and dead as state; `yield`, `kill`, `brace`, `threaten`, `parley`, `challenge` (a duel hyperedge that a root rule turns into a ring nobody else may strike into), `drink`, `fill`, `search`, `harvest`; a `thirst` behavior on every combatant; a `fighter_tick` behavior that fights without a mind; factions as entities with `hostile` maps and `standing` edges. `install_rules(s, root)` from `packs/d20/pack.py` puts the root rules in place; `worlds/glass-reach/` builds a world on it with `"requires": ["d20", "village"]`. The narrator never decides what a 16 means: the event says it.
 
 A lazily built place: `state.fidelity = "sketch"`. A listener on the root emits `approach_sketch` when someone enters it; an author agent waiting on that event fills it in.

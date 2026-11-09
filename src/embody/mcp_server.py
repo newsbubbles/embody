@@ -116,10 +116,25 @@ def build_server(session: Session, db: Path, engine: Engine | None = None):
     @tool()
     @_wrap
     def load_world(file: str, upgrade: bool = False) -> dict[str, Any]:
-        """(author) Run a world file (a Python module with build(session)). upgrade=True runs only its define(session)
-        against the world this session points at: scripts and schemas are redefined, state and history stay."""
-        from .cli import load_world_file
-        return load_world_file(s, Path(file), upgrade=upgrade)
+        """(author) Build a world from its folder: `file` is a world id (worlds/<id>/build.py), a folder, or a world file.
+        The folder's build.py has a WORLD manifest, define(s) for schemas and populate(s) for entities; its scripts are
+        the files in scripts/; packs it requires come from packs/. upgrade=True runs the packs, scripts, define and
+        upgrade(s) against the world this session points at: code renewed, state and history kept."""
+        from .cli import load_world as _load
+        return _load(s, file, upgrade=upgrade)
+
+    @tool()
+    @_wrap
+    def save(name: str | None = None) -> dict[str, Any]:
+        """(author) Write everything about the current world (entities, events, scripts, schemas, timers) to
+        worlds/<id>/saves/<name>.json. Commit it with git in the world folder to keep it."""
+        return s.save(name)
+
+    @tool()
+    @_wrap
+    def restore(path: str, id: str | None = None) -> dict[str, Any]:
+        """(author) A world from a save file, under its own id or a new one (id=...). Then use(id) or join(id, entity)."""
+        return s.restore(path, id=id)
 
     @tool()
     @_wrap

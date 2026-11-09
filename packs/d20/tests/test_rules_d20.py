@@ -1,20 +1,20 @@
-"""The table rules of worlds/rules_d20.py, played in the Glass Reach: checks against a difficulty, opposed blows,
+"""The table rules of packs/d20, played in the Glass Reach: checks against a difficulty, opposed blows,
 wards and the slow stroke, brace, yield, down and dead, water, the ring, factions that remember, the Thresher."""
 
 from pathlib import Path
 
-from embody.cli import load_world_file
+from embody.cli import load_world
 import pytest
 
 from embody.ops import AUTHOR, Engine, Rejected
 
-WORLDS = Path(__file__).resolve().parent.parent / "worlds"
+REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").exists())
 
 
 def reach(seat="Reeve Ansel Varrick"):
-    eng = Engine()
+    eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world_file(gm, WORLDS / "glass_reach.py")
+    load_world(gm, "glass-reach")
     you = eng.session("you")
     you.join("glass-reach", seat)
     return eng, gm, you

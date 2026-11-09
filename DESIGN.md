@@ -151,6 +151,8 @@ A world clock runs continuously, at a configurable rate, pausable and steppable.
 
 Event log plus projections in SQLite. One world is one file; copy it to share it. The schema is plain SQL so a Postgres backend for shared worlds is a driver, not a redesign. One writer per world (an action queue) keeps determinism without locks. Snapshots every N events so joining does not replay history. Subscriptions are filtered by bubble path; a client never receives the whole world.
 
+A world's code is a folder, `worlds/<id>/`, and the folder is canonical: `build.py` with its manifest, `scripts/` as one file per script, `changes.jsonl` for what was authored live, `notes/`, `tests/`, and anything else the world needs (a model's weights, a map) as files, never as blobs in the database. The database is the build of that folder plus the history of play; a save is one JSON file in `saves/`. Shared verbs and rules are packs, `packs/<name>/`, that a world `requires`. Versions, forks and backups of the code are git's, and `create_world` starts a repository in the folder. The engine does not reinvent what the harness around it already does well: editing files, diffing, history, search.
+
 ## 12. Markdown mirror
 
 Every world projects to a read-only directory: containment is directories, each entity is a markdown file with its state, relations and the verbs available on it. Regenerated on change. Agents read it with their normal file tools; writes go only through `act`. Committed mirrors give a world a git history for free.

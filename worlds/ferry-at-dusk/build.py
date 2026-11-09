@@ -1,11 +1,11 @@
 """The Ferry at Dusk: five places, four NPCs, one storyline that watches facts.
 
-    uv run embody --as gm --author load worlds/ferry_at_dusk.py
+    uv run embody --as gm --author load ferry-at-dusk
     uv run embody --as you join ferry-at-dusk Traveler
     uv run embody --as you perceive
 
 The ferryman is missing and the river must be crossed before the fog. Everything that
-moves the story is deterministic code in this file: the storyline waits for events, the
+moves the story is deterministic code in this folder: the storyline waits for events, the
 innkeeper answers to topics, the miller wanders, the dog follows whoever feeds it, the fog
 rolls in on a timer, night falls and dawn comes. Whoever embodies the Traveler (a person,
 or Claude) does the playing; whoever runs the GM session narrates and can nudge any NPC
@@ -20,580 +20,31 @@ find him asleep in the Reeds and wake him and he walks down to the raft by himse
 Ambient facts live on the root (`ambient`: time_of_day, weather, light) and on the Landing
 (`ambient.weather` once the fog is in). Every perceive shows them merged.
 
-The file is split so a running world can take new code without losing its state:
-  define(s)    scripts and schemas (what things can do)
+The folder is split so a running world can take new code without losing its state:
+  scripts/     one file per script: verbs, listeners, behaviors, the storyline (go, take, drop, give, talk, read and
+               person_on come from packs/village, the rest is this world's)
+  define(s)    schemas (what things can do)
   populate(s)  places, people, things, rules, the clock (what there is)
-  upgrade(s)   idempotent additions for a world built from an older file (the Reeds, the tinderbox, ambient, timers)
-  build(s)     a new world: create, define, populate
-`uv run embody load worlds/ferry_at_dusk.py --upgrade` runs define() then upgrade() against the current world.
+  upgrade(s)   idempotent additions for a world built from an older build (the Reeds, the tinderbox, ambient, timers)
+`uv run embody load ferry-at-dusk --upgrade` runs the pack, the scripts, define() and upgrade() against the current world.
 
 Play is turn-based: the clock is paused and every act of an embodied player moves the world
 three seconds (longer for a slow verb). Fog at t=90, night at t=150, dawn at t=400.
 """
 
-# ---- scripts --------------------------------------------------------------------------
-
-GO = '''
-def check(ctx):
-    here = ctx.actor.parent
-    for e in ctx.edges(here, "connects_to", "out"):
-        if e["target"] == ctx.target.id:
-            via = e["data"].get("via")
-            if via and not ctx.get(via).state.open:
-                return "the way is shut"
-            return True
-    return "there is no way there from here"
-
-def apply(ctx):
-    here = ctx.actor.parent
-    ctx.move(ctx.actor, ctx.target)
-    ctx.emit("arrived", target=ctx.target, reach=-1, who=ctx.actor.id, place=ctx.target.id)
-    # whoever follows you comes along: the dog you fed, anyone told to follow
-    for p in ctx.children(here):
-        if p.state.friend == ctx.actor.id or p.state.follows == ctx.actor.id:
-            if not p.state.asleep:
-                ctx.move(p, ctx.target)
-                ctx.emit("arrived", target=ctx.target, reach=1, who=p.id, place=ctx.target.id, following=ctx.actor.id)
-'''
-
-TAKE = '''
-def check(ctx):
-    if ctx.target.parent.id == ctx.actor.id:
-        return "you already hold it"
-    if not ctx.target.state.portable:
-        return "it will not budge"
-    if ctx.target.parent.id != ctx.actor.parent.id:
-        return "it is not here"
-    return True
-
-def apply(ctx):
-    # a thing that hid this one (state.hides names it) changes its face once it is gone
-    for p in ctx.peers(ctx.target.id, "thing"):
-        if p.state.hides and p.state.hides == ctx.target.name:
-            ctx.patch(p, {"hides": None, "description": p.state.description_after or p.state.description})
-    ctx.move(ctx.target, ctx.actor)
-    ctx.emit("taken", target=ctx.target, reach=1, by=ctx.actor.id)
-'''
-
-DROP = '''
-def check(ctx):
-    if ctx.target.parent.id != ctx.actor.id:
-        return "you are not holding it"
-    return True
-
-def apply(ctx):
-    ctx.move(ctx.target, ctx.actor.parent)
-    ctx.emit("dropped", target=ctx.target, reach=1, by=ctx.actor.id)
-'''
-
-GIVE = '''
-def find_item(ctx):
-    want = str(ctx.params.get("item", "")).lower()
-    for it in ctx.actor.children():
-        if it.id == want or (it.name or "").lower() == want:
-            return it
-    return None
-
-def check(ctx):
-    if not ctx.params or "item" not in ctx.params:
-        return "say what to give: params {\\"item\\": <id or name of something you hold>}"
-    if find_item(ctx) is None:
-        return "you hold no such thing"
-    if ctx.target.parent.id != ctx.actor.parent.id:
-        return "they are not here"
-    return True
-
-def apply(ctx):
-    it = find_item(ctx)
-    ctx.move(it, ctx.target)
-    ctx.emit("given", target=ctx.target, reach=1, item=it.id, by=ctx.actor.id)
-'''
-
-TALK = '''
-def check(ctx):
-    if ctx.target.id == ctx.actor.id:
-        return "talking to yourself helps nobody"
-    if ctx.target.parent.id != ctx.actor.parent.id:
-        return "they are not here"
-    if ctx.target.state.asleep:
-        return "they are asleep; wake them first"
-    return True
-
-def apply(ctx):
-    about = ""
-    if ctx.params:
-        about = str(ctx.params.get("about", ""))
-    ctx.emit("talked", target=ctx.target, reach=-1, by=ctx.actor.id, about=about)
-'''
-
-PERSON_ON = '''
-def words(text):
-    # the topic as whole words: "ale" matches "an ale, please" and not "a tale"
-    t = str(text).lower()
-    for ch in [",", ".", "?", "!", ";", ":", "'", "\\""]:
-        t = t.replace(ch, " ")
-    return t.split()
-
-def score(key, topic):
-    # a dialog key is one word or several joined with |: "ale|drink|beer". The score is how many aliases
-    # the topic contains plus a little for longer aliases, so "ferry crossing" prefers the ferry entry.
-    s = 0
-    for alias in key.split("|"):
-        a = alias.strip()
-        if a in topic:
-            s = s + 10 + len(a)
-    return s
-
-def pick(ctx, entry, given):
-    # an entry is a line, or a dict: {"line", "after_gift", "if_state": {k: v}, "else"}
-    if not isinstance(entry, dict):
-        return entry
-    me = ctx.self.state
-    cond = entry.get("if_state")
-    if cond:
-        for k in cond:
-            if me.get(k) != cond[k]:
-                return entry.get("else", entry.get("line"))
-    if given and entry.get("after_gift"):
-        return entry["after_gift"]
-    return entry.get("line")
-
-def given_to(me, key):
-    # gave is {topic key: [who asked and got it]}; one gift per topic per asker, not per lifetime
-    gave = me.gave or {}
-    if isinstance(gave, list):
-        gave = {k: ["*"] for k in gave}
-    return list(gave.get(key) or [])
-
-def hand_over(ctx, g, asker):
-    # a gift is a held thing named in "item" (handed over for real), or a thing spawned from the table
-    item = g.get("item")
-    if item:
-        for it in ctx.self.children():
-            if (it.name or "").lower() == str(item).lower():
-                ctx.move(it, asker)
-                ctx.emit("given", target=asker, reach=1, item=it.id, by=ctx.self.id)
-                return True
-        return False
-    ctx.spawn(g["type"], asker, name=g["name"], state=g.get("state"))
-    return True
-
-def on(ctx, event):
-    # Someone talked to me. Answer from my dialog table with the best-matching entry; hand over anything I
-    # give for that topic. Skipped while an agent embodies me (unless_embodied): then the agent answers.
-    if event.target != ctx.self.id:
-        return
-    topic = words(event.payload.get("about", ""))
-    asker = event.payload.get("by")
-    me = ctx.self.state
-    dialog = me.dialog or {}
-    gives = me.gives or {}
-    best = None
-    best_s = 0
-    for key in dialog:
-        s = score(key, topic)
-        if s > best_s:
-            best = key
-            best_s = s
-    if best is None:
-        ctx.say(me.default_line or "Hm.", to=asker)
-        return
-    got = given_to(me, best)
-    had = asker in got or "*" in got
-    line = pick(ctx, dialog[best], had)
-    if line:
-        ctx.say(line, to=asker)
-    if best in gives and not had:
-        g = gives[best]
-        if hand_over(ctx, g, asker):
-            ctx.say(g.get("line") or "Here, take the " + str(g.get("name") or g.get("item")).lower() + ".", to=asker)
-            ctx.patch(ctx.self, {"gave": {best: got + [asker]}})
-        else:
-            ctx.say(g.get("gone_line") or "I had one of those somewhere. Gone now.", to=asker)
-'''
-
-READ = '''
-def apply(ctx):
-    text = ctx.target.state.text or "nothing is written on it"
-    ctx.emit("read", target=ctx.target, reach=0, text=text)
-    ctx.log(text)
-    return text
-'''
-
-DRINK = '''
-def check(ctx):
-    if ctx.target.parent.id != ctx.actor.id:
-        return "you are not holding it"
-    if (ctx.target.state.left or 0) <= 0:
-        return "it is empty"
-    return True
-
-def apply(ctx):
-    left = (ctx.target.state.left or 0) - 1
-    ctx.target.state.left = left
-    drinks = (ctx.actor.state.drinks or 0) + 1
-    ctx.actor.state.drinks = drinks
-    ctx.emit("drank", target=ctx.target, reach=1, by=ctx.actor.id, left=left)
-    if left <= 0:
-        ctx.patch(ctx.target, {"description": "An empty mug. It was " + (ctx.target.name or "a drink").lower() + "."})
-        ctx.log("Empty. Mara will want the mug back.")
-    else:
-        ctx.log("A long pull. Some left.")
-    if drinks >= 3 and not ctx.actor.state.tipsy:
-        ctx.actor.state.tipsy = True
-        ctx.emit("tipsy", target=ctx.actor, reach=1)
-        ctx.log("The room has taken on a lean.")
-'''
-
-WORK = '''
-def check(ctx):
-    chore = ctx.target.state.chore
-    if not chore:
-        return "nothing to be done with that"
-    if chore.get("done"):
-        return "that is done already"
-    need = chore.get("needs")
-    if need:
-        held = False
-        for k in ctx.actor.children():
-            if (k.name or "").lower() == str(need).lower():
-                held = True
-        if not held:
-            return "you need the " + str(need).lower() + " for that"
-    return True
-
-def apply(ctx):
-    chore = ctx.target.state.chore
-    ctx.emit("worked", target=ctx.target, reach=1, by=ctx.actor.id, chore=chore.get("name"))
-    ctx.log(chore.get("start") or "You set to it.")
-
-def finish(ctx):
-    chore = dict(ctx.target.state.chore or {})
-    chore["done"] = True
-    chore["by"] = ctx.actor.id
-    ctx.patch(ctx.target, {"chore": chore, "description": chore.get("after") or ctx.target.state.description})
-    ctx.emit("chore_done", target=ctx.target, reach=1, by=ctx.actor.id, chore=chore.get("name"))
-    # listeners hear only what bubbles through them; the people in the room get told
-    for p in ctx.peers(ctx.target.id, "creature"):
-        if p.id != ctx.actor.id:
-            ctx.emit("noticed", target=p, reach=0, of="chore_done", by=ctx.actor.id, thing=ctx.target.id, chore=chore.get("name"))
-    ctx.log(chore.get("after") or "Done.")
-'''
-
-HOB_ON = '''
-def on(ctx, event):
-    # work done at the mill by someone else squares whatever is owed to Hob: the village runs on favors
-    if event.payload.get("of") != "chore_done" or event.payload.get("by") == ctx.self.id:
-        return
-    thing = ctx.get(event.payload.get("thing"))
-    if thing is None or thing.parent.id != ctx.self.state.home:
-        return
-    for r in ctx.relations(ctx.self.id, "debt"):
-        if r["data"].get("owed_to") == ctx.self.id:
-            who = ctx.get(r["data"].get("owed_by"))
-            ctx.unrelate(r["id"])
-            ctx.say("That squares " + (who.name if who else "the") + "'s " + str(r["data"].get("what", "debt"))
-                    + ", far as I'm concerned. Tell him.", to=event.payload.get("by"))
-            ctx.emit("debt_settled", target=ctx.self, reach=1, by=event.payload.get("by"), was=r["data"])
-'''
-
-TIE = '''
-def check(ctx):
-    if ctx.target.state.rope:
-        return "the rope is already on it"
-    ropes = [k for k in ctx.actor.children() if k.state.kind == "rope"]
-    if not ropes:
-        return "you need a rope to tie on"
-    return True
-
-def apply(ctx):
-    rope = [k for k in ctx.actor.children() if k.state.kind == "rope"][0]
-    ctx.destroy(rope)
-    ctx.patch(ctx.target, {"rope": True,
-                           "description": "Iron bell on a post. A new rope hangs from the clapper, the knot still stiff."})
-    ctx.emit("tied", target=ctx.target, reach=1)
-'''
-
-RING = '''
-def check(ctx):
-    if not ctx.target.state.rope:
-        return "the bell rope has been cut; nothing to pull"
-    return True
-
-def apply(ctx):
-    ctx.emit("rang", target=ctx.target, reach=-1, by=ctx.actor.id)
-    ctx.say("The bell rings out over the river.")
-'''
-
-LIGHT = '''
-def check(ctx):
-    if ctx.target.state.lit:
-        return "it is already lit"
-    fire = [k for k in ctx.actor.children() if k.state.kind == "fire"]
-    if not fire:
-        return "you have nothing to light it with"
-    return True
-
-def apply(ctx):
-    ctx.target.state.lit = True
-    ctx.emit("lit", target=ctx.target, reach=1)
-'''
-
-CROSS = '''
-def ferryman_here(ctx):
-    for p in ctx.actor.peers():
-        if p.state.role == "ferryman" and not p.state.asleep:
-            return p
-    return None
-
-def check(ctx):
-    if ctx.actor.parent.id != ctx.target.parent.id:
-        return "the raft is not here"
-    if ferryman_here(ctx) is None:
-        return "nobody here knows the current; the raft stays moored"
-    here = ctx.actor.parent
-    if here.state.fog:
-        lanterns = [l for l in ctx.children(here) if l.state.lit]
-        lanterns = lanterns + [l for l in ctx.actor.children() if l.state.lit]
-        if not lanterns:
-            return "the fog hides the far bank"
-    return True
-
-def apply(ctx):
-    ctx.emit("casting_off", target=ctx.actor.parent, reach=1, who=ctx.actor.id)
-    ctx.log("Tam pushes off. The crossing takes a while.")
-
-def other_bank(ctx):
-    here = ctx.actor.parent.id
-    banks = ctx.self.state.banks or []
-    for b in banks:
-        if b != here:
-            return ctx.get(b)
-    return ctx.get(ctx.self.state.far_bank)
-
-def finish(ctx):
-    far = other_bank(ctx)
-    here = ctx.actor.parent
-    tam = ferryman_here(ctx)
-    ctx.move(ctx.actor, far)
-    if tam:
-        ctx.move(tam, far)
-    # the dog you fed and anyone following you ride along; the raft itself ends up on that side
-    for p in ctx.children(here):
-        if p.state.friend == ctx.actor.id or p.state.follows == ctx.actor.id:
-            ctx.move(p, far)
-    ctx.move(ctx.self, far)
-    ctx.emit("crossed", target=far, reach=-1, who=ctx.actor.id, from_bank=here.id)
-'''
-
-PEACE = '''
-def on(ctx, event):
-    if event.payload["verb"] == "attack":
-        ctx.reject("nobody raises a hand in the square; Mara would never forgive it", "talk instead")
-'''
-
-ASLEEP_GUARD = '''
-def on(ctx, event):
-    # a sleeper does nothing but wake (or get woken); installed on the root so it hears every before_act
-    if ctx.actor is not None and ctx.actor.state.asleep and event.payload["verb"] != "wake":
-        ctx.reject("you are asleep", "wake yourself (act wake on yourself) or wait to be woken")
-'''
-
-ATTACK = '''
-def apply(ctx):
-    dmg = ctx.rand.roll("1d6")
-    ctx.target.state.hp = ctx.target.state.hp - dmg
-    ctx.emit("hit", target=ctx.target, reach=1, dmg=dmg)
-    return dmg
-'''
-
-TOUCH = '''
-def check(ctx):
-    if ctx.target.parent.id != ctx.actor.parent.id and ctx.target.parent.id != ctx.actor.id:
-        return "it is not within reach"
-    return True
-
-def apply(ctx):
-    ctx.emit("touched", target=ctx.target, reach=1, by=ctx.actor.id)
-'''
-
-CHECK = '''
-def apply(ctx):
-    # a plain d20 with the world's seed: deterministic, replayable, and the player sees the number
-    skill = ""
-    if ctx.params:
-        skill = str(ctx.params.get("skill", ""))
-    roll = ctx.rand.roll("1d20")
-    mod = -2 if ctx.actor.state.tipsy else 0
-    ctx.emit("checked", target=ctx.target, reach=1, by=ctx.actor.id, skill=skill, roll=roll, mod=mod, total=roll + mod)
-    ctx.log("d20: " + str(roll) + (" " + str(mod) + " (tipsy)" if mod else ""))
-    return roll + mod
-'''
-
-SLEEP = '''
-def check(ctx):
-    if ctx.actor.state.asleep:
-        return "you are already asleep"
-    return True
-
-def apply(ctx):
-    ctx.actor.state.asleep = True
-    ctx.emit("slept", target=ctx.actor, reach=1, who=ctx.actor.id)
-    ctx.log("You settle down and sleep. Dawn, or a hand on your shoulder, will wake you.")
-'''
-
-WAKE = '''
-def check(ctx):
-    if not ctx.target.state.asleep:
-        return "they are awake"
-    if ctx.target.id != ctx.actor.id and ctx.target.parent.id != ctx.actor.parent.id:
-        return "they are not here"
-    return True
-
-def apply(ctx):
-    ctx.target.state.asleep = False
-    ctx.emit("woken", target=ctx.target, reach=-1, by=ctx.actor.id)  # to the root: the story listens for Tam
-'''
-
-HOB_WALK = '''
-def tick(ctx):
-    me = ctx.self
-    st = me.state
-    if st.asleep:
-        return
-    dest = st.haunt if me.parent.id == st.home else st.home
-    ctx.move(me, dest)
-    ctx.emit("arrived", target=dest, reach=-1, who=me.id, place=dest)
-    ctx.say(ctx.rand.choice(st.lines))
-'''
-
-DOG_FOLLOW = '''
-def tick(ctx):
-    me = ctx.self
-    friend = me.state.friend
-    if not friend:
-        return
-    f = ctx.get(friend)
-    if f is None or f.parent is None:
-        return
-    if f.parent.id != me.parent.id:
-        ctx.move(me, f.parent)
-        ctx.say("pads in after you, tail going")
-'''
-
-DOG_ON = '''
-def on(ctx, event):
-    if event.target != ctx.self.id:
-        return
-    if event.kind == "touched":
-        if ctx.self.state.friend == event.payload.get("by"):
-            ctx.say("leans into your hand, tail thumping the floor")
-        else:
-            ctx.say("sniffs your hand, then your pockets, hopeful")
-        return
-    item = ctx.get(event.payload["item"])
-    if item is not None and item.state.kind == "food":
-        ctx.destroy(item)
-        ctx.patch(ctx.self, {"friend": event.payload["by"]})
-        ctx.say("wolfs it down and looks up at you. You have a dog now.")
-        for board in ctx.find(type="sign", name="Notice board"):
-            text = str(board.state.text or "")
-            if "Lost: one grey dog" in text:
-                ctx.patch(board, {"text": text.split(" Lost: one grey dog")[0] + " FOUND: the grey dog. He picked someone."})
-    else:
-        ctx.say("sniffs it and loses interest")
-'''
-
-LANDING_ON = '''
-def on(ctx, event):
-    if event.kind == "fog":
-        ctx.self.state.fog = True
-        ctx.patch(ctx.self, {"ambient": {"weather": "river fog, thick; the far bank is gone"}})
-    elif event.kind == "dawn":
-        ctx.self.state.fog = False
-        ctx.patch(ctx.self, {"ambient": {"weather": "the fog thinning off the water"}})
-'''
-
-WEATHER = '''
-def on(ctx, event):
-    # the ambient facts every perceive carries: on the root, laid under each place's own
-    root = ctx.root()
-    if event.kind == "fog":
-        ctx.patch(root, {"ambient": {"weather": "fog coming up off the river"}})
-        ctx.emit("scene", target=ctx.get(event.target).parent if ctx.get(event.target) else root, reach=0,
-                 text=event.payload.get("text", "Fog."))
-    elif event.kind == "nightfall":
-        ctx.patch(root, {"ambient": {"time_of_day": "night", "light": "dark; lamps and stars"}})
-        for place in ctx.find(type="place"):
-            ctx.emit("scene", target=place, reach=0, text="The last light goes out of the sky. Night, proper.")
-    elif event.kind == "dawn":
-        ctx.patch(root, {"ambient": {"time_of_day": "dawn", "weather": "clear and cold", "light": "grey, growing"}})
-        for place in ctx.find(type="place"):
-            ctx.emit("scene", target=place, reach=0, text="Grey light. Birds in the reeds. Dawn.")
-        for p in ctx.find(type="person"):
-            if p.state.asleep:
-                ctx.patch(p, {"asleep": False})
-                ctx.emit("woken", target=p, reach=-1, by=None, dawn=True)
-'''
-
-STORY = '''
-def tam_to_landing(ctx, st, how):
-    tam = ctx.get(st.tam)
-    if tam is None or tam.parent.id == st.landing:
-        return
-    ctx.patch(tam, {"hidden": False, "asleep": False})
-    ctx.move(tam, st.landing)
-    if how == "bell":
-        ctx.emit("scene", target=st.square, reach=1, text="Far off, a hoarse voice answers the bell.")
-        ctx.emit("scene", target=st.landing, reach=1, text="Old Tam comes down the reed path, rubbing his eyes, and steps onto the raft.")
-    else:
-        ctx.emit("scene", target=st.reeds, reach=1, text="Tam gets up, brushes off the reeds and sets off down the bank. 'Raft is this way.'")
-        ctx.emit("scene", target=st.landing, reach=1, text="Old Tam comes along the bank from the reeds and steps onto the raft.")
-    ctx.emit("arrived", target=st.landing, reach=-1, who=tam.id, place=st.landing)
-    ctx.patch(ctx.find(type="story", limit=1)[0], {"stage": "cross", "tam_came_by": how})
-
-def on(ctx, event):
-    # installed on the world root with set_rule, so it hears every event; the Story entity keeps the facts.
-    # Every branch checks a fact, not the stage, so play off the rails still finds the river.
-    story = ctx.find(type="story", limit=1)[0]
-    st = story.state
-    k = event.kind
-    if k == "arrived" and event.payload.get("place") == st.landing and not st.seen_landing:
-        ctx.emit("scene", target=st.landing, reach=1,
-                 text="Cold mist lifts off the river. The raft is moored and the bell rope on the post hangs cut. No ferryman.")
-        ctx.patch(story, {"seen_landing": True, "stage": "ask"})
-    elif k == "talked" and event.target == st.mara and not st.mara_told:
-        about = str(event.payload.get("about", "")).lower()
-        if "ferry" in about or "tam" in about or "cross" in about or "river" in about:
-            # patch merges: this adds one topic to Mara's table without touching the rest
-            ctx.patch(ctx.get(st.mara), {"dialog": {
-                "bell": "The landing bell calls him down from wherever he is sleeping it off. Rope was cut by the Pell boys. Hob at the mill keeps rope."}})
-            ctx.patch(story, {"mara_told": True, "stage": "bell"})
-    elif k == "rang":
-        tam_to_landing(ctx, st, "bell")
-    elif k == "woken" and event.target == st.tam:
-        tam_to_landing(ctx, st, "woken")
-    elif k == "crossed" and not st.crossed and event.target == st.far_bank:
-        ctx.emit("scene", target=st.far_bank, reach=1, text="The raft grinds onto the far shingle. Behind you Ashford is a handful of lights in the fog.")
-        ctx.patch(ctx.root(), {"story": "complete"})
-        ctx.patch(story, {"crossed": True, "stage": "done"})
-'''
-
+WORLD = {
+    "id": "ferry-at-dusk",
+    "name": "The Ferry at Dusk",
+    "seed": 11,
+    "description": "A river village at dusk. The ferryman is missing. Cross before the fog closes in.",
+    "requires": ["village"],
+}
 
 # ---- what things can do ----------------------------------------------------------------
 
-
 def define(s):
-    """Scripts and schemas. Safe to run again on a live world: entities keep their state and pick up the new code."""
-    for sid, src in [("go", GO), ("take", TAKE), ("drop", DROP), ("give", GIVE), ("talk", TALK), ("read", READ),
-                     ("drink", DRINK), ("tie", TIE), ("ring", RING), ("light", LIGHT), ("cross", CROSS),
-                     ("attack", ATTACK), ("touch", TOUCH), ("check", CHECK), ("sleep", SLEEP), ("wake", WAKE),
-                     ("peace", PEACE), ("asleep_guard", ASLEEP_GUARD), ("person_on", PERSON_ON),
-                     ("hob_walk", HOB_WALK), ("dog_follow", DOG_FOLLOW), ("dog_on", DOG_ON),
-                     ("landing_on", LANDING_ON), ("weather", WEATHER), ("story", STORY),
-                     ("work", WORK), ("hob_on", HOB_ON)]:
-        s.define_script(sid, src)
-
+    """Schemas. The scripts are the files in scripts/ and packs/village/scripts. Safe to run again on a live world:
+    entities keep their state and pick up the new code."""
     # scope keeps impossible pairs out of a player's affordances: go only to exits, drop only what you hold.
     # The dialog table is secret: a player hears a line when they ask, not the whole table in perceive.
     # person_on is skipped while an agent embodies the person: the table is the floor, a mind sits on top.
@@ -643,7 +94,6 @@ def define(s):
     s.define_schema("landing", extends="place", listeners=[{"script": "landing_on", "kinds": ["fog", "dawn"]}])
     s.define_schema("story", extends="entity", doc="The rails. Hidden; holds the facts the story has seen.",
                     state={"hidden": True, "stage": "start", "seen_landing": False, "mara_told": False, "crossed": False})
-
 
 # ---- what there is ---------------------------------------------------------------------
 
@@ -734,7 +184,6 @@ TAM = {
     "default_line": "Tam scratches his beard. 'The river, the raft, Hob's jugs. That's what I know, friend.'",
 }
 
-
 WHEEL = {"portable": False, "description": "The great wheel, turning slow and squealing at every quarter turn.",
          "chore": {"name": "grease the wheel", "needs": "Pot of grease",
                    "start": "You climb down beside the axle with the pot. It is filthy work.",
@@ -752,7 +201,6 @@ GOALS = {
     "Old Tam": [("Row whoever needs across before the fog", "That is the job, and the job is all I have"),
                 ("Settle with Hob when the barley is in", "Three jugs. I know.")],
 }
-
 
 def seed_village(s, mara, hob, tam):
     """What the villagers want and what they think of each other, so an NPC seat starts with a life, not a blank
@@ -779,7 +227,6 @@ def seed_village(s, mara, hob, tam):
     settled = any(e["kind"] == "debt_settled" for e in s.history(kinds=["debt_settled"], limit=10))
     if not debts and not settled:
         s.relate("debt", [tam, hob], {"what": "three jugs of ale", "owed_by": tam, "owed_to": hob})
-
 
 def populate(s):
     """Places, people, things, rules and the clock, into the world the session points at."""
@@ -850,7 +297,6 @@ def populate(s):
     # turn-based: paused, three world seconds per embodied act. clock(run=True) makes it realtime instead.
     s.clock(run=False, turn=3)
     return s.summary()
-
 
 def upgrade(s):
     """Bring a world built from an older version of this file up to this one. Every step checks first, so it is
@@ -965,9 +411,3 @@ def upgrade(s):
         s.schedule(max(30.0, 400 - t), "dawn", entity=landing)
     return s.summary()
 
-
-def build(s):
-    s.create_world("The Ferry at Dusk", seed=11, id="ferry-at-dusk",
-                   description="A river village at dusk. The ferryman is missing. Cross before the fog closes in.")
-    define(s)
-    return populate(s)

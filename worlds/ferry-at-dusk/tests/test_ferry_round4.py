@@ -3,18 +3,18 @@ change with the world, chores and the debt they square, villagers with goals and
 
 from pathlib import Path
 
-from embody.cli import load_world_file
+from embody.cli import load_world
 import pytest
 
 from embody.ops import AUTHOR, Engine, Rejected
 
-WORLDS = Path(__file__).resolve().parent.parent / "worlds"
+REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").exists())
 
 
 def ferry():
-    eng = Engine()
+    eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py")
+    load_world(gm, "ferry-at-dusk")
     you = eng.session("you")
     you.join("ferry-at-dusk", "Traveler")
     return eng, gm, you
@@ -116,8 +116,8 @@ def test_villagers_start_with_goals_and_opinions_and_upgrade_is_idempotent():
     rel = hob.recall(about="Old Tam")
     assert any(g["relation"] == "debt" for g in rel["groups"])
     h0 = gm.world.state_hash()
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py", upgrade=True)
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py", upgrade=True)
+    load_world(gm, "ferry-at-dusk", upgrade=True)
+    load_world(gm, "ferry-at-dusk", upgrade=True)
     assert gm.world.state_hash() == h0
     assert len([g for g in gm.inspect("Hob")["state"]["goals"]]) == 2
 
@@ -131,7 +131,7 @@ def test_upgrade_converts_an_old_gave_list_and_promotes_improvised_chores():
     pot = gm.world.find(name="Pot of grease")[0]["id"]
     gm.patch(pot, {"improvised": True})
     gm.destroy("Mill wheel")
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py", upgrade=True)
+    load_world(gm, "ferry-at-dusk", upgrade=True)
     assert gm.inspect(mara)["state"]["gave"] == {"ale|drink|beer|pint": [me]}
     assert gm.inspect(pot)["state"].get("improvised") is None
     assert gm.world.find(name="Mill wheel")

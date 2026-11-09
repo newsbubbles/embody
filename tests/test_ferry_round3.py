@@ -4,16 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from embody.cli import load_world_file
+from embody.cli import load_world
 from embody.ops import AUTHOR, Engine, Rejected
 
-WORLDS = Path(__file__).resolve().parent.parent / "worlds"
+REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").exists())
 
 
 def ferry():
-    eng = Engine()
+    eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py")
+    load_world(gm, "ferry-at-dusk")
     you = eng.session("you")
     you.join("ferry-at-dusk", "Traveler")
     return eng, gm, you
@@ -100,9 +100,9 @@ def test_check_rolls_a_visible_d20():
 
 def test_upgrade_brings_an_older_world_up_to_date():
     """A world built without the Reeds, the tinderbox, ambient facts, briefs or the night timers takes them on."""
-    eng = Engine()
+    eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py")
+    load_world(gm, "ferry-at-dusk")
     root = gm.summary()["root"]
     # make it look like a round-two world
     gm.destroy("The Reeds")
@@ -116,7 +116,7 @@ def test_upgrade_brings_an_older_world_up_to_date():
         if t["kind"] in ("nightfall", "dawn"):
             gm.unschedule(t["id"])
     assert not gm.find(name="The Reeds")
-    r = load_world_file(gm, WORLDS / "ferry_at_dusk.py", upgrade=True)
+    r = load_world(gm, "ferry-at-dusk", upgrade=True)
     assert r["upgraded"] is True
     assert gm.find(name="The Reeds") and gm.find(name="Tinderbox")
     assert gm.inspect(root)["state"]["ambient"]["time_of_day"] == "dusk"
@@ -126,7 +126,7 @@ def test_upgrade_brings_an_older_world_up_to_date():
     assert st["seen_landing"] is True and st["mara_told"] is True and st["crossed"] is False
     assert {t["kind"] for t in gm.timers()} >= {"fog", "nightfall", "dawn"}
     h = gm.world.state_hash()
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py", upgrade=True)
+    load_world(gm, "ferry-at-dusk", upgrade=True)
     assert gm.world.state_hash() == h
 
 

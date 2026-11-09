@@ -4,17 +4,17 @@ from pathlib import Path
 
 import pytest
 
-from embody.cli import load_world_file
+from embody.cli import load_world
 from embody.mcp_server import Hub
 from embody.ops import AUTHOR, OBSERVER, Engine, Rejected
 
-WORLDS = Path(__file__).resolve().parent.parent / "worlds"
+REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").exists())
 
 
 def ferry():
-    eng = Engine()
+    eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world_file(gm, WORLDS / "ferry_at_dusk.py")
+    load_world(gm, "ferry-at-dusk")
     return eng, gm
 
 
@@ -223,11 +223,11 @@ def test_upgrade_redefines_code_and_keeps_state():
     you.act("take", "Bone")
     h = gm.world.state_hash()
     gm.define_script("read", "def apply(ctx):\n    return 'scribbles'\n")
-    r = load_world_file(gm, WORLDS / "ferry_at_dusk.py", upgrade=True)
+    r = load_world(gm, "ferry-at-dusk", upgrade=True)
     assert r["upgraded"] is True
     assert gm.world.state_hash() == h
     assert "nothing is written" in gm.script_source("read")["source"]
     assert any(h2["name"] == "Bone" for h2 in you.perceive()["holding"])
     fresh = eng.session("fresh", capabilities=[AUTHOR])
     with pytest.raises(Rejected):
-        load_world_file(fresh, WORLDS / "ferry_at_dusk.py", upgrade=True)
+        load_world(fresh, "ferry-at-dusk", upgrade=True)

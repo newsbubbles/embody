@@ -18,7 +18,6 @@ State that must survive between commands (which principal, which world) lives in
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import os
 import sys
@@ -26,12 +25,23 @@ from pathlib import Path
 from typing import Any
 
 from .ops import AUTHOR, OBSERVER, OPS, Engine, Rejected, Session, call
+from .workspace import Workspace
+from .workspace import load_world as _load_world
 
-DEFAULT_DB = Path("worlds") / "embody.db"
+DEFAULT_DB = Path("embody.db")
+LEGACY_DB = Path("worlds") / "embody.db"
 
 
 def db_path(args: argparse.Namespace) -> Path:
-    p = Path(args.db or os.environ.get("EMBODY_DB") or DEFAULT_DB)
+    """--db, then $EMBODY_DB, then embody.db in the current folder (the workspace root). A workspace from before
+    the folders, with its database at worlds/embody.db and none at the root, keeps working."""
+    given = args.db or os.environ.get("EMBODY_DB")
+    if given:
+        p = Path(given)
+    elif not DEFAULT_DB.exists() and LEGACY_DB.exists():
+        p = LEGACY_DB
+    else:
+        p = DEFAULT_DB
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -221,34 +231,46 @@ def parse_params(items: list[str] | None) -> dict[str, Any]:
 # ---- world files -------------------------------------------------------------------
 
 
-def load_world_file(session: Session, path: Path, upgrade: bool = False) -> dict[str, Any]:
-    """A world file is a Python module with `build(session)`. It runs with the author's session.
+def load_world(session: Session, ref: str | Path, upgrade: bool = False) -> dict[str, Any]:
+    """Build a world from its folder under <workspace>/worlds, or renew a live one with upgrade=True.
 
-    A file may split build into `define(session)` (scripts and schemas) and `populate(session)` (entities).
-    With upgrade=True `define` runs against the world the session points at, then `upgrade(session)` if the
-    file has one (idempotent additions: a new place, a prop, a timer, ambient facts). The code is renewed, the
-    state and history stay. That is how a forked world picks up engine and world-file changes."""
-    spec = importlib.util.spec_from_file_location(f"embody_world_{path.stem}", path)
-    if spec is None or spec.loader is None:
-        raise Rejected(f"cannot load {path}")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    if upgrade:
-        if not hasattr(mod, "define"):
-            raise Rejected(f"{path} has no define(session) function to upgrade with",
-                           hint="split build into define(s) for scripts and schemas and populate(s) for entities")
-        if not session.world_id:
-            raise Rejected("point the session at the world to upgrade first", hint="use(world_id)")
-        mod.define(session)
-        if hasattr(mod, "upgrade"):
-            mod.upgrade(session)
-        r = session.summary()
-        r["upgraded"] = True
-        return r
-    if not hasattr(mod, "build"):
-        raise Rejected(f"{path} has no build(session) function",
-                       hint="def build(s): s.create_world(...); s.define_schema(...); s.spawn(...)")
-    return mod.build(session) or session.summary()
+    `ref` is a world id (the folder name), a folder, a build.py, or a legacy single-file world. The folder's
+    build.py carries a WORLD manifest and define/populate/upgrade; scripts are the files in its scripts/; packs it
+    `requires` come from <workspace>/packs. See embody.workspace."""
+    return _load_world(session, ref, upgrade=upgrade)
+
+
+def load_world_file(session: Session, path: Path, upgrade: bool = False) -> dict[str, Any]:
+    """The old name: a path to a world file or folder."""
+    return _load_world(session, path, upgrade=upgrade)
+
+
+def init_workspace(root: Path) -> dict[str, Any]:
+    """Make a folder a workspace: worlds/, packs/, a .gitignore for the database, an .mcp.json for the agent."""
+    made = []
+    for sub in ("worlds", "packs"):
+        p = root / sub
+        if not p.exists():
+            p.mkdir(parents=True)
+            made.append(str(p))
+    gi = root / ".gitignore"
+    lines = ["embody.db", "embody.db-journal", "*.db-shm", "*.db-wal", ".embody.json", "mirror/", "__pycache__/"]
+    have = gi.read_text(encoding="utf-8").splitlines() if gi.exists() else []
+    add = [ln for ln in lines if ln not in have]
+    if add:
+        with gi.open("a", encoding="utf-8") as f:
+            if have and have[-1].strip():
+                f.write("\n")
+            f.write("\n".join(add) + "\n")
+        made.append(str(gi))
+    mcp = root / ".mcp.json"
+    if not mcp.exists():
+        mcp.write_text(json.dumps({"mcpServers": {"embody": {"command": "embody", "args": ["serve", "--as", "claude", "--author"]}}},
+                                  indent=2) + "\n", encoding="utf-8")
+        made.append(str(mcp))
+    ws = Workspace(root)
+    return {"ok": True, "root": str(root), "made": made, "worlds": [w["id"] for w in ws.list_worlds()], "packs": ws.list_packs(),
+            "hint": "create_world(name, id=...) makes worlds/<id>/ with a build.py; load_world(id) builds it into embody.db"}
 
 
 # ---- commands --------------------------------------------------------------------------
@@ -270,10 +292,16 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--seed", type=int, default=0)
     c.add_argument("--id")
     c.add_argument("--description", default="")
-    c = sub.add_parser("load", help="run a world file's build(session) (author)")
-    c.add_argument("file")
+    c = sub.add_parser("load", help="build a world from worlds/<id>/build.py (author)")
+    c.add_argument("ref", help="a world id, a world folder, or a world file")
     c.add_argument("--upgrade", action="store_true",
-                   help="run only define(session) against the current world: new code, same state")
+                   help="run the packs, scripts, define and upgrade against the current world: new code, same state")
+    c = sub.add_parser("init", help="make this folder a workspace: worlds/, packs/, .gitignore, .mcp.json")
+    c = sub.add_parser("save", help="write this world's state to worlds/<id>/saves/<name>.json (author)")
+    c.add_argument("name", nargs="?")
+    c = sub.add_parser("restore", help="a world from a save file (author)")
+    c.add_argument("path")
+    c.add_argument("--id", help="restore under a new id")
     c = sub.add_parser("use", help="point at a world without embodying")
     c.add_argument("world_id")
     c = sub.add_parser("join", help="embody an entity")
@@ -343,8 +371,17 @@ def main(argv: list[str] | None = None) -> int:
             r = s.create_world(args.name, seed=args.seed, id=args.id, description=args.description)
             emit(args, r, f"created {r['id']} ({r['name']}), root {r['root']}")
         elif args.cmd == "load":
-            r = load_world_file(s, Path(args.file), upgrade=args.upgrade)
+            r = load_world(s, args.ref, upgrade=args.upgrade)
             emit(args, r, f"{'upgraded' if args.upgrade else 'loaded'} {s.world_id}: {json.dumps(r, default=str)[:400]}")
+        elif args.cmd == "init":
+            r = init_workspace(Path.cwd())
+            emit(args, r, f"workspace at {r['root']}: made {len(r['made'])} item(s); worlds {r['worlds'] or 'none'}, packs {r['packs'] or 'none'}")
+        elif args.cmd == "save":
+            r = s.save(args.name)
+            emit(args, r, f"saved {r['world']} to {r['path']} ({r['entities']} entities, {r['events']} events)")
+        elif args.cmd == "restore":
+            r = s.restore(args.path, id=args.id)
+            emit(args, r, f"restored {r['id']} ({r['name']}), {r['entities']} entities")
         elif args.cmd == "use":
             emit(args, s.use(args.world_id))
         elif args.cmd == "join":
