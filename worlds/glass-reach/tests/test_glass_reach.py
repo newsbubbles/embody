@@ -60,12 +60,13 @@ def test_the_ridge_shows_the_reach_and_a_hard_check_finds_the_well():
     r = you.act("go", "Red Ridge")
     assert any("sheet of black glass" in t for t in scenes(r["events"]))
     r = you.act("check", params={"skill": "survival", "dc": 15})
+    seen = scenes(r["events"])
     if not r["result"]["success"]:
         assert story(gm)["found_well"] is False
     gm.patch("Reeve Ansel Varrick", {"skills": {"survival": 30}})
     r = you.act("check", params={"skill": "survival", "dc": 15})
     assert story(gm)["found_well"] is True and gm.inspect("The Deepwell")["state"]["hidden"] is False
-    assert any("way down" in t for t in scenes(r["events"]))
+    assert any("way down" in t for t in seen + scenes(r["events"]))  # whichever roll found it
     you.act("go", "The Deepwell")
     assert gm.inspect("Reeve Ansel Varrick")["parent"] == gm.inspect("The Deepwell")["id"]
 
@@ -292,3 +293,56 @@ def test_sefa_shows_the_way_to_a_friend_of_the_keth_too():
     r = you.act("talk", "Sefa of the Keth", {"about": "the well"})
     assert story(gm)["found_well"] is True and story(gm)["well_found_by"] == "sefa"
     assert any("I showed you" in t for t in scenes(r["events"]))
+
+
+def said(r, who=None):
+    return [e["payload"]["text"] for e in r["events"] if e["kind"] == "say" and (who is None or e["payload"].get("to") == who)]
+
+
+def test_word_left_with_ruhl_reaches_the_new_guard_and_nobody_else():
+    eng, gm, you = reach()
+    you.act("go", "The Gate Yard")
+    r = you.act("leave_word", "Captain Ruhl", {"for": "the new guard", "word": "I went north to the Landing. Follow when you can."})
+    assert "word_left" in kinds(r)
+    ruhl = gm.inspect("Captain Ruhl")
+    assert ruhl["state"]["word_left"][0]["where"] == "The Gate Yard"
+    # the word is Ruhl's secret: a player who inspects him does not read it
+    assert "word_left" not in you.inspect("Captain Ruhl")["state"]
+    # a spy asking after the reeve hears that word was left, not what it says
+    dram = eng.session("dram")
+    dram.join("glass-reach", "Dram Hollis")
+    dram.act("go", "The Gate Yard")
+    r = dram.act("talk", "Captain Ruhl", {"about": "where is the reeve"})
+    assert any("Not for you" in t for t in said(r)) and not any("Landing" in t for t in said(r))
+    # the new guard walks in and asks about anything: Ruhl hands the word over, as a whisper, once
+    harl = eng.session("harl")
+    harl.join("glass-reach", template="guard", name="Harl")  # the guard template starts in the yard
+    r = harl.act("talk", "Captain Ruhl", {"about": "the men"})
+    lines = said(r, gm.inspect("Harl")["id"])
+    assert any("Reeve Ansel Varrick left word for you, at The Gate Yard: 'I went north" in t for t in lines), lines
+    whisper = [e for e in r["events"] if e["kind"] == "say" and "left word" in e["payload"]["text"]][0]
+    assert whisper["reach"] == 0 if "reach" in whisper else True
+    r = harl.act("talk", "Captain Ruhl", {"about": "the men"})
+    assert not any("left word" in t for t in said(r))
+    # the reeve asking Ruhl himself is not handed his own word back
+    r = you.act("talk", "Captain Ruhl", {"about": "the men"})
+    assert not any("left word" in t for t in said(r))
+
+
+def test_word_left_for_anyone_and_a_name_and_the_check():
+    eng, gm, you = reach()
+    you.act("go", "The Gate Yard")
+    with pytest.raises(Rejected):
+        you.act("leave_word", "Captain Ruhl", {"for": "anyone"})
+    you.act("leave_word", "Captain Ruhl", {"for": "anyone", "word": "the cistern is low"})
+    you.act("leave_word", "Captain Ruhl", {"for": "Sefa", "word": "meet me on the ridge"})
+    harl = eng.session("harl")
+    harl.join("glass-reach", template="guard", name="Harl")
+    r = harl.act("talk", "Captain Ruhl", {"about": "the water"})
+    texts = said(r)
+    assert any("cistern is low" in t for t in texts) and not any("ridge" in t for t in texts)
+    # an older Reach learns to keep the word secret on upgrade
+    gm.patch("Captain Ruhl", {"secret": ["dialog", "gives", "gave"]})
+    load_world(gm, "glass-reach", upgrade=True)
+    ruhl = gm.inspect("Captain Ruhl")["id"]
+    assert gm.world.get(ruhl)["state"]["secret"] == ["dialog", "gives", "gave", "word_left"]

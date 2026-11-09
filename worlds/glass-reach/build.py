@@ -104,7 +104,7 @@ RUHL = {"faction": "House Varrick", "playable": True, "body": 4, "wits": 2, "wil
         }}
 
 DRAM = {"faction": "House Dreyer", "playable": True, "body": 3, "wits": 3, "will": 3, "skills": {"blade": 3, "stealth": 1, "resolve": 2}, "vigor": 7, "max_vigor": 7,
-        "secret": ["dialog", "gives", "gave", "faction", "orders", "brief"], "orders": "the reeve, in the ring, before the moon turns",
+        "secret": ["dialog", "gives", "gave", "faction", "orders", "brief", "word_left"], "orders": "the reeve, in the ring, before the moon turns",
         "waiting": False,
         "brief": "You are Dram Hollis, Dreyer's blade under a Carrier's papers. Your orders: the reeve, in the ring, before the moon "
                  "turns, and the Keth kept thirsty. The yard is a ring by old law and a reeve called out in it must answer. Nobody "
@@ -180,7 +180,7 @@ TEMPLATES = {
              "brief": "You are Keth. The Deepwell is yours and the Low Well is a grave. You walk the Flats with the broken step and "
                       "the Thresher does not hear you. The Hold has a new reeve; Taan wants to know careful or afraid."},
     "dreyer": {"type": "person", "place": "The Salt Road", "doc": "a House Dreyer agent come up the Salt Road under another name",
-               "state": {"faction": "House Dreyer", "secret": ["dialog", "gives", "gave", "faction", "brief"],
+               "state": {"faction": "House Dreyer", "secret": ["dialog", "gives", "gave", "faction", "brief", "word_left"],
                          "body": 3, "wits": 3, "will": 3, "skills": {"blade": 1, "stealth": 2, "parley": 2}},
                "brief": "You are Dreyer's, under another name. The house lost the writ, the Hold and the water and means to have "
                         "them back: the Keth kept thirsty, the reeve kept weak, the Flats empty for the taking. Dram Hollis is in the "
@@ -256,7 +256,7 @@ def define(s):
     """Schemas. The scripts are the files in scripts/ and the packs. Safe to run again on a live world."""
     s.define_schema("person", extends="combatant", doc="Someone of the Reach: walks, carries, talks, and fights by the rules.",
                     state={"dialog": {}, "default_line": "Hm.", "gives": {}, "gave": {}, "asleep": False, "follows": None,
-                           "secret": ["dialog", "gives", "gave"]},
+                           "word_left": [], "secret": ["dialog", "gives", "gave", "word_left"]},
                     actions={
                         "go": {"script": "go", "doc": "Walk to a connected place (loud on deep sand)", "targets": "place", "scope": "exits", "duration": 10},
                         "creep": {"script": "creep", "doc": "Walk with the broken step: twice as long, the sand does not hear you",
@@ -269,11 +269,16 @@ def define(s):
                                  "params": {"item": "id or name of a thing you hold"}},
                         "talk": {"script": "talk", "doc": "Talk to someone about something", "targets": "creature", "scope": "here", "duration": 2,
                                  "params": {"about": "the topic, in your words"}},
+                        "leave_word": {"script": "leave_word", "doc": "Leave word with someone here for someone who is not: they keep it and pass it on when that one talks to them",
+                                       "targets": "creature", "scope": "here", "duration": 2,
+                                       "params": {"for": "who it is for: a name, 'the new guard', 'a Keth', or 'anyone'", "word": "what to tell them"}},
                         "follow": {"script": "follow", "doc": "Go where they go, until you stay", "targets": "creature", "scope": "here"},
                         "stay": {"script": "stay", "doc": "Stop following"},
                         "watch": {"script": "watch", "doc": "Look into the next place without stepping in: who and what is there now", "targets": "place", "scope": "exits", "duration": 5},
                     },
-                    listeners=[{"script": "person_on", "kinds": ["talked"], "unless_embodied": True}])
+                    listeners=[{"script": "leave_word", "fn": "keep", "kinds": ["word_left"]},
+                               {"script": "person_on", "kinds": ["talked"], "unless_embodied": True},
+                               {"script": "leave_word", "kinds": ["talked"], "unless_embodied": True}])
     s.define_schema("fighter", extends="person", doc="A person who fights without a mind: in a duel, or against the outlawed.",
                     behaviors=[{"script": "fighter_tick", "every": 6}])
     s.define_schema("carrier", extends="person", doc="Trades glass for water.",
@@ -403,6 +408,10 @@ def upgrade(s):
             want = {k: table[k] for k in ("playable", "brief", "secret") if k in table and st.get(k) != table[k]}
             if want:
                 s.patch(names[who], want)
+    for e in s.find(type="person", limit=500):
+        sec = list(s.world.get(e["id"])["state"].get("secret") or [])  # inspect hides the secret list itself
+        if "word_left" not in sec:
+            s.patch(e["id"], {"secret": sec + ["word_left"]})
     root = s.summary()["root"]
     install_rules(s, root)
     s.set_rule(root, "reach_story", kinds=STORY_KINDS)
