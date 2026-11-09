@@ -185,10 +185,10 @@ def test_thirst_on_the_open_road_and_water_from_a_skin_or_a_source():
     you.act("go", "Scar Gate, the Hold")
     r = you.act("fill", "Waterskin")
     assert state(gm, "Waterskin")["left"] == 3 and state(gm, "The cistern")["left"] == 11
-    # under the ridge the rock itself is the source and the Keth do not thirst there
+    # under the ridge the rock itself is the source: the Keth do not thirst there, and thirsty, Taan drinks from it
     gm.patch("Elder Taan", {"water": 2})
     gm.clock(step=60)
-    assert state(gm, "Elder Taan")["water"] == 2
+    assert state(gm, "Elder Taan")["water"] == 6
 
 
 def test_the_ring_holds_during_a_duel():
@@ -341,3 +341,132 @@ def test_crawl_is_for_the_down_and_self_verbs_are_not_done_to_others():
     assert all(gm.world.is_a(gm.inspect(t)["type"], "place") for v, t in aff if v == "crawl")
     assert not any(v == "attack" and t is None for v, t in aff)
 
+
+def test_a_body_nobody_embodies_drinks_when_it_is_thirsty_and_water_is_in_reach():
+    # Ruhl with a skin on his belt: thirsty, he drinks from it on his own. Ossa beside her casks never thirsts, and
+    # thirsty beside them she drinks from them. The reeve, embodied, decides for himself.
+    eng, gm, you = reach()
+    gm.spawn("waterskin", "Captain Ruhl", "Ruhl's skin", state={"left": 2})
+    gm.patch("Captain Ruhl", {"water": 4})
+    gm.clock(step=60)
+    gm.clock(step=60)
+    ruhl = state(gm, "Captain Ruhl")
+    assert ruhl["water"] >= 6 and ruhl["thirsty"] is False and state(gm, "Ruhl's skin")["left"] == 1
+    ruhl_id = gm.inspect("Captain Ruhl")["id"]
+    assert any(e["payload"]["by"] == ruhl_id for e in gm.world.events(0, kinds=["drank"], limit=5000))
+    gm.patch("Ossa the Carrier", {"water": 2})
+    gm.clock(step=60)
+    assert state(gm, "Ossa the Carrier")["water"] == 6 and state(gm, "Water casks")["left"] == 5
+    you.act("go", "The Gate Yard")
+    you.act("go", "The Salt Road")
+    gm.patch("Reeve Ansel Varrick", {"water": 3, "thirsty": True})
+    gm.clock(step=60)
+    assert state(gm, "Reeve Ansel Varrick")["water"] == 1 and state(gm, "Waterskin")["left"] == 2
+
+
+def test_the_tremor_settles_after_two_quiet_minutes():
+    eng, gm, you = reach()
+    for place in ["The Gate Yard", "The Salt Road", "The Glass Flats"]:
+        you.act("go", place)
+    assert state(gm, "The Glass Flats")["tremor"] == 1
+    gm.clock(step=60)
+    assert state(gm, "The Glass Flats")["tremor"] == 1
+    gm.clock(step=70)
+    flats = state(gm, "The Glass Flats")
+    assert flats["tremor"] == 0 and flats["settling"] is False
+    assert any(e["payload"].get("why") == "quiet" for e in gm.world.events(0, kinds=["tremor"], limit=5000))
+    # a second footfall before the first has settled keeps the count, and the quiet is counted from the last one
+    you.act("go", "The Salt Road")
+    you.act("go", "The Glass Flats")
+    assert state(gm, "The Glass Flats")["tremor"] == 1
+    gm.clock(step=60)
+    you.act("go", "The Salt Road")
+    you.act("go", "The Glass Flats")
+    assert state(gm, "The Glass Flats")["tremor"] == 2
+    gm.clock(step=100)
+    assert state(gm, "The Glass Flats")["tremor"] == 2
+    gm.clock(step=30)
+    assert state(gm, "The Glass Flats")["tremor"] == 1
+
+
+def test_walking_out_of_the_ring_ends_the_duel_and_your_own_side_marks_it():
+    eng, gm, you = reach()
+    you.act("go", "The Gate Yard")
+    weak(gm, "Captain Ruhl")
+    you.act("challenge", "Captain Ruhl")
+    me = gm.inspect("Reeve Ansel Varrick")["id"]
+    assert len(gm.world.hyperedges(me, "duel")) == 1
+    you.act("go", "Scar Gate, the Hold")
+    # the ring's end is called in the yard you just left: the log has it, your eyes did not
+    over = gm.world.events(0, kinds=["duel_over"], limit=5000)
+    assert over and over[0]["payload"]["how"] == "left" and over[0]["payload"]["loser"] == me
+    assert gm.world.hyperedges(me, "duel") == []
+    st = [e for e in gm.world.events(0, kinds=["standing"], limit=5000) if e["target_id"] == me]
+    assert st and st[-1]["payload"]["faction"] == "House Varrick" and st[-1]["payload"]["delta"] == -2
+    # out of the ring, Ruhl is nobody's duelist: the yard may be struck into again
+    gm.act_as("Reeve Ansel Varrick", "go", "The Gate Yard")
+    gm.spawn("fighter", "The Gate Yard", "Hired blade", state={"faction": "House Dreyer"})
+    gm.act_as("Hired blade", "attack", "Captain Ruhl")
+
+
+def test_terms_agreed_in_the_ring_are_a_yield():
+    eng, gm, you = reach()
+    you.act("go", "The Gate Yard")
+    you.act("challenge", "Captain Ruhl")
+    gm.patch("Reeve Ansel Varrick", {"will": 25})
+    r = you.act("parley", "Captain Ruhl", {"offer": "stand down and keep your post"})
+    assert r["result"]["agreed"] is True
+    ks = kinds(r)
+    assert "agreed" in ks and "yielded" in ks and "duel_over" in ks
+    me = gm.inspect("Reeve Ansel Varrick")["id"]
+    assert state(gm, "Captain Ruhl")["yielded"] == me
+    assert gm.world.hyperedges(me, "duel") == []
+    over = [e for e in r["events"] if e["kind"] == "duel_over"][0]["payload"]
+    assert over["how"] == "yielded" and over["winner"] == me
+
+
+def test_a_trade_and_a_return_are_not_gifts():
+    eng, gm, you = reach()
+    for place in ["The Gate Yard", "The Salt Road", "The Carriers' Landing"]:
+        you.act("go", place)
+    me = gm.inspect("Reeve Ansel Varrick")["id"]
+    ossa = gm.inspect("Ossa the Carrier")["id"]
+    gm.spawn("thing", me, "Emberglass", state={"kind": "ember", "portable": True})
+    r = you.act("give", "Ossa the Carrier", {"item": "Emberglass"})
+    assert "traded" in kinds(r) and not any(e["kind"] == "standing" and e["target"] == me for e in r["events"])
+    # the ward she keeps is a gift
+    r = you.act("give", "Ossa the Carrier", {"item": "Belt ward"})
+    gifts = [e for e in r["events"] if e["kind"] == "standing" and e["target"] == me]
+    assert gifts and gifts[0]["payload"]["delta"] == 1 and gifts[0]["payload"]["faction"] == "the Carriers"
+    assert state(gm, "Belt ward")["given_by"] == me
+    # handing it back moves nothing for her
+    r = gm.act_as("Ossa the Carrier", "give", "Reeve Ansel Varrick", {"item": "Belt ward"})
+    assert not any(e["kind"] == "standing" and e["target"] == ossa for e in r["events"])
+    assert gm.inspect("Belt ward")["parent"] == me
+
+
+def test_show_follow_stay_and_watch():
+    eng, gm, you = reach()
+    me = gm.inspect("Reeve Ansel Varrick")["id"]
+    # show: Dram reads the writ's words off the page in your hand, and the page stays yours
+    gm.spawn("letter", me, "Letter of credit", state={"text": "Pay the bearer twelve skins."})
+    r = you.act("show", "Dram Hollis", {"item": "Letter of credit"})
+    shown = [e for e in r["events"] if e["kind"] == "shown"][0]["payload"]
+    assert shown["text"] == "Pay the bearer twelve skins." and r["result"]["text"] == shown["text"]
+    assert gm.inspect("Letter of credit")["parent"] == me
+    with pytest.raises(Rejected):
+        you.act("show", "Dram Hollis", {"item": "The cistern"})
+    # watch: who is in the yard, seen from the hold, for your eyes only
+    r = you.act("watch", "The Gate Yard")
+    assert r["result"]["who"] == ["Captain Ruhl"] and "Rack of practice blades" in r["result"]["things"]
+    with pytest.raises(Rejected):
+        you.act("watch", "The Glass Flats")
+    assert not any(e["kind"] == "watched" for e in gm.perceive(from_entity="Captain Ruhl", cursor=0, events=500)["events"])
+    # follow: Dram comes along when you go, and stays put after stay
+    gm.act_as("Dram Hollis", "follow", "Reeve Ansel Varrick")
+    r = you.act("go", "The Gate Yard")
+    assert gm.inspect("Dram Hollis")["parent"] == gm.inspect("The Gate Yard")["id"]
+    assert any(e["kind"] == "arrived" and e["payload"].get("following") == me for e in r["events"])
+    gm.act_as("Dram Hollis", "stay")
+    you.act("go", "Scar Gate, the Hold")
+    assert gm.inspect("Dram Hollis")["parent"] == gm.inspect("The Gate Yard")["id"]

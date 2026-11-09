@@ -25,4 +25,8 @@ def on(ctx, event):
     elif k == "agreed":
         shift_standing(ctx, by, f, 2, "terms with " + t.name)
     elif k == "given":
+        # a gift is something they keep: a trade (the thing is gone by now) or a return (they gave it first) is not one
+        item = ctx.get(event.payload.get("item"))
+        if item is None or item.parent is None or item.parent.id != t.id or item.state.given_before_by == t.id:
+            return
         shift_standing(ctx, by, f, 1, "a gift to " + t.name)

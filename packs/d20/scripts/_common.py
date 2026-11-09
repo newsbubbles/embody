@@ -22,6 +22,17 @@ def held(who, flag):
             return it
     return None
 
+def water_here(ctx, place):
+    # the place itself if it is a source, else a thing here that is one and has something left
+    if place is None:
+        return None
+    if place.state.water_source:
+        return place
+    for p in ctx.children(place, "thing"):
+        if p.state.water_source and (p.state.left is None or int(p.state.left) > 0):
+            return p
+    return None
+
 def settle(ctx, who, cause):
     # derive the conditions from vigor and say what changed
     st = who.state

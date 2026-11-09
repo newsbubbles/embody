@@ -177,7 +177,7 @@ def test_ossa_trades_a_full_skin_for_emberglass_and_nothing_for_trinkets():
     gm.spawn("thing", me, "Emberglass", state={"kind": "ember", "portable": True})
     r = you.act("give", "Ossa the Carrier", {"item": "Emberglass"})
     held = [c["name"] for c in you.perceive()["holding"]]
-    assert "Full waterskin" in held and "Emberglass" not in held
+    assert "Guild waterskin" in held and "Emberglass" not in held
     assert "traded" in kinds(r)
     assert gm.inspect("Ossa the Carrier")["state"]["ember_bought"] == 1
     r = you.act("give", "Ossa the Carrier", {"item": "Waterskin"})
@@ -210,3 +210,39 @@ def test_upgrade_is_idempotent():
     assert gm.world.store.count("edge", "world_id=?", (gm.world.id,)) == edges
     assert len(gm.recall(entity="Reeve Ansel Varrick")["goals"]) == goals
     assert len(gm.world.edges(gm.inspect("Reeve Ansel Varrick")["id"], "standing", "out")) == 4
+
+
+def test_ruhl_and_dram_answer_the_questions_the_first_reeve_asked():
+    eng, gm, you = reach()
+    r = you.act("talk", "Dram Hollis", {"about": "why did you stay when the convoy left"})
+    assert any("where the counting is" in (e["payload"].get("text") or "") for e in r["events"] if e["kind"] == "say")
+    you.act("go", "The Gate Yard")
+    for about, bit in [("the road north", "Salt Road runs north"), ("can you spare me some men", "I spare you none"),
+                       ("will you stand with me", "I hold the ring")]:
+        r = you.act("talk", "Captain Ruhl", {"about": about})
+        assert any(bit in (e["payload"].get("text") or "") for e in r["events"] if e["kind"] == "say"), about
+
+
+def test_a_held_dram_does_not_walk_through_his_guard():
+    eng, gm, you = reach()
+    ruhl = gm.inspect("Captain Ruhl")["id"]
+    gm.patch("Dram Hollis", {"held_by": ruhl})
+    gm.clock(step=240)
+    assert gm.inspect("Dram Hollis")["parent"] == gm.inspect("Scar Gate, the Hold")["id"]
+    assert gm.inspect("Dram Hollis")["state"]["waiting"] is False
+    assert any("tests the grip" in t for t in scenes(you.perceive(cursor=0, events=500)["events"]))
+
+
+def test_sefa_shows_the_way_to_a_friend_of_the_keth_too():
+    eng, gm, you = reach()
+    for place in ["The Gate Yard", "The Salt Road", "The Glass Flats", "Red Ridge"]:
+        you.act("go", place)
+    you.act("talk", "Sefa of the Keth", {"about": "water"})
+    assert story(gm)["found_well"] is False
+    me = gm.inspect("Reeve Ansel Varrick")["id"]
+    keth = gm.inspect("the Keth")["id"]
+    gm.unlink(me, keth, "standing")
+    gm.link(me, keth, "standing", {"value": 1, "public": True})
+    r = you.act("talk", "Sefa of the Keth", {"about": "the well"})
+    assert story(gm)["found_well"] is True and story(gm)["well_found_by"] == "sefa"
+    assert any("I showed you" in t for t in scenes(r["events"]))

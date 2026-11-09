@@ -88,6 +88,9 @@ RUHL = {"faction": "House Varrick", "body": 4, "wits": 2, "will": 3, "skills": {
             "keth|desert|water|well": "'The Keth have water under the rock somewhere north. Dreyer tried to take it and poisoned a well instead. They will not talk to a Hold man. Might talk to you.'",
             "thresher|sand|flats|dune": "'Walk the Flats loud and the sand comes up and eats you. The Keth walk it like they are dancing. Learn that or stay off the glass.'",
             "fight|duel|ring|challenge": "'The yard is a ring by old law. Called out in it, a reeve answers or the men stop being his. I did not make the law.'",
+            "road|north|ridge|salt|landing|way": "'The Salt Road runs north from the yard to the Carriers' Landing, then on over the glass to Red Ridge. Keth ground past the Landing. A Hold man on the ridge is a target. You might be something else.'",
+            "spare|lend|escort|come|along|borrow": "'Nine men for a wall that wants twenty. I spare you none, and I go nowhere while that clerk is inside my gate. Ask me again when he is not.'",
+            "back|stand|support|help|side|behind": "'In the ring I hold the ring, Reeve. I do not step into it. Outside the ring, say the word and the Hold's blades are yours. That is the law, and it is what I would do anyway.'",
         }}
 
 DRAM = {"faction": "House Dreyer", "body": 3, "wits": 3, "will": 3, "skills": {"blade": 3, "stealth": 1, "resolve": 2}, "vigor": 7, "max_vigor": 7,
@@ -99,6 +102,7 @@ DRAM = {"faction": "House Dreyer", "body": 3, "wits": 3, "will": 3, "skills": {"
             "papers|guild|carrier|clerk|book": "'Carriers' book, all in order. Water in, glass out, the Guild's cut. I count.'",
             "dreyer|house": "'Dreyer? Gone. Lost the writ, lost the Hold, lost the water. A house that loses is a story, not a house.'",
             "ring|duel|fight|blade": "'A fine old custom, the ring. Any man may call. Any reeve must answer. I read it in the Hold's own book.'",
+            "convoy|stay|stayed|why|here|left": "'Why stay? The Guild left a tally to keep and a clerk to keep it. A man stays where the counting is.' He does not blink.",
         }}
 
 OSSA = {"faction": "the Carriers", "body": 2, "wits": 4, "will": 3, "skills": {"parley": 3, "lore": 2, "resolve": 1},
@@ -205,8 +209,13 @@ def define(s):
                         "drop": {"script": "drop", "doc": "Put down something you hold", "targets": "thing", "scope": "held"},
                         "give": {"script": "give", "doc": "Hand something you hold to someone here", "targets": "creature", "scope": "here",
                                  "params": {"item": "id or name of a thing you hold"}},
+                        "show": {"script": "show", "doc": "Show something you hold to someone here; they read it, you keep it", "targets": "creature", "scope": "here",
+                                 "params": {"item": "id or name of a thing you hold"}},
                         "talk": {"script": "talk", "doc": "Talk to someone about something", "targets": "creature", "scope": "here", "duration": 2,
                                  "params": {"about": "the topic, in your words"}},
+                        "follow": {"script": "follow", "doc": "Go where they go, until you stay", "targets": "creature", "scope": "here"},
+                        "stay": {"script": "stay", "doc": "Stop following"},
+                        "watch": {"script": "watch", "doc": "Look into the next place without stepping in: who and what is there now", "targets": "place", "scope": "exits", "duration": 5},
                     },
                     listeners=[{"script": "person_on", "kinds": ["talked"], "unless_embodied": True}])
     s.define_schema("fighter", extends="person", doc="A person who fights without a mind: in a duel, or against the outlawed.",

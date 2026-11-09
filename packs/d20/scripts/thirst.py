@@ -5,7 +5,7 @@ def tick(ctx):
     if st.dead:
         return
     here = me.parent
-    if here is None or here.state.water_source:
+    if here is None or water_here(ctx, here) is not None:
         return
     loss = 2 if here.state.open else 1
     water = max(0, int(st.water if st.water is not None else 10) - loss)

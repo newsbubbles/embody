@@ -1,11 +1,6 @@
+use("common")
 def source_here(ctx):
-    here = ctx.actor.parent
-    if here.state.water_source:
-        return here
-    for p in ctx.children(here, "thing"):
-        if p.state.water_source and (p.state.left is None or int(p.state.left) > 0):
-            return p
-    return None
+    return water_here(ctx, ctx.actor.parent)
 
 def check(ctx):
     if ctx.target.parent.id != ctx.actor.id:

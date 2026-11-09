@@ -1,7 +1,12 @@
 use("common")
+QUIET = 120  # seconds of quiet before the tremor count drops by one
+
 def bump(ctx, place, n, why):
     tremor = int(place.state.tremor or 0) + n
-    ctx.patch(place, {"tremor": tremor})
+    ctx.patch(place, {"tremor": tremor, "tremor_t": ctx.t})
+    if not place.state.settling:
+        ctx.patch(place, {"settling": True})
+        ctx.schedule(QUIET, "tremor_settles", target=place)
     if tremor >= 3 and not place.state.thresher_coming:
         ctx.patch(place, {"thresher_coming": True})
         ctx.emit("tremor", target=place, reach=1, tremor=tremor, why=why,
@@ -10,6 +15,23 @@ def bump(ctx, place, n, why):
     elif tremor == 2:
         ctx.emit("tremor", target=place, reach=1, tremor=tremor, why=why,
                  text="A grain-slide runs off the dune face for no reason you can see.")
+
+def settle_tremor(ctx, place):
+    # two minutes of quiet and the sand forgets one footfall; while the thresher is coming nothing settles
+    since = ctx.t - float(place.state.tremor_t or 0)
+    if place.state.thresher_coming:
+        ctx.patch(place, {"settling": False})
+        return
+    if since < QUIET:
+        ctx.schedule(QUIET - since, "tremor_settles", target=place)
+        return
+    tremor = max(0, int(place.state.tremor or 0) - 1)
+    ctx.patch(place, {"tremor": tremor, "tremor_t": ctx.t})
+    if tremor > 0:
+        ctx.schedule(QUIET, "tremor_settles", target=place)
+    else:
+        ctx.patch(place, {"settling": False})
+        ctx.emit("tremor", target=place, reach=1, tremor=0, why="quiet", text="The dune is still. Whatever listened has lost the thread.")
 
 def safe_exit(ctx, place):
     for e in ctx.edges(place, "connects_to", "out"):
@@ -43,7 +65,7 @@ def surface(ctx, place):
             ctx.move(c, safe)
             ctx.emit("arrived", target=safe, reach=1, who=c.id, place=safe.id, quiet=True, fled=place.id)
             ctx.emit("scene", target=safe, reach=0, text=(c.name + " scrambles onto the rock, " + ("untouched." if ok else "bleeding, thrown clear by the first pass.")))
-    ctx.patch(place, {"tremor": 0, "thresher_coming": False})
+    ctx.patch(place, {"tremor": 0, "thresher_coming": False, "settling": False, "tremor_t": ctx.t})
     ctx.schedule(10, "thresher_sinks", target=place)
 
 def on(ctx, event):
@@ -60,6 +82,10 @@ def on(ctx, event):
         vein = ctx.get(event.target)
         if vein is not None and vein.parent is not None and vein.parent.state.deep_sand:
             bump(ctx, vein.parent, 2, "harvest")
+    elif k == "tremor_settles":
+        place = ctx.get(event.target)
+        if place is not None:
+            settle_tremor(ctx, place)
     elif k == "thresher_surfaces":
         place = ctx.get(event.target)
         if place is not None:

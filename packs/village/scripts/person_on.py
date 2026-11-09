@@ -42,6 +42,7 @@ def hand_over(ctx, g, asker):
     if item:
         for it in ctx.self.children():
             if (it.name or "").lower() == str(item).lower():
+                ctx.patch(it, {"given_by": ctx.self.id, "given_before_by": it.state.given_by})
                 ctx.move(it, asker)
                 ctx.emit("given", target=asker, reach=1, item=it.id, by=ctx.self.id)
                 return True

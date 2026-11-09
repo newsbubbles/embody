@@ -19,7 +19,7 @@ Status: alpha. The first vertical slice was built in one day (2026-11-08) and pl
 - Minds in the engine: secret `memory`, `brief` and `goals` (`intend`), `recall` as the permission-aware graph query, per-entity cursors, `knows` edges with an opinion floor and the last exchanges, `known_places`, addressed speech (`say(to=...)`, `say_as`) and speech into the room, `fork_world`, turn-based play (`clock(turn=n)`), deep-merging `patch`, scoped affordances, per-viewer event filtering, `ambient` facts and `clock` in every perceive, `timers` and `unschedule`.
 - Content: `worlds/ferry-at-dusk/` on the `village` pack (five places, four NPCs with goals and opinions of each other, a storyline that checks facts with two routes to the ferryman, fog, night and dawn on timers, sleep and wake, followers, chores with durations that settle a debt relation, drink and tipsiness; split into define/populate/upgrade so a live world takes new code and additions), `worlds/glass-reach/` on `packs/d20/` (a desert hold, a hidden well, three factions with standings, a reusable d20 rule set where every rule is a verb: `check` against a DC, `attack` with wounds, down and dead, wards, `yield` and honor, duels that a root rule turns into a ring, `threaten` and `parley` as opposed rolls, thirst as a body behavior, fighters that fight without a mind, a thresher under the glass, a storyline with a truce or a lost ending), `worlds/two-rooms/` (a legacy single-file world).
 - Workspace (round 6): a world is a folder, `worlds/<id>/` with `build.py` (manifest, define, populate, upgrade), `scripts/` as files with `use()` includes, `changes.jsonl` written by live authoring and replayed by a fresh build, `saves/`, `notes/`, `tests/`; packs under `packs/`; `create_world` scaffolds the folder and starts a git repository; `save` and `restore`; `embody init`; the database at the workspace root.
-- Tooling: 102 tests, markdown mirror, `tools/watch.py` live graph viewer with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
+- Tooling: 111 tests, markdown mirror, `tools/watch.py` live graph viewer with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
 
 ## Found in the first playtest
 
@@ -101,6 +101,33 @@ Gaps
 - [x] (round 5, the Glass Reach) `check` has no difficulty and no consequence; the narrator decides what a 16 means. `packs/d20/` carries the rules as verbs (`check` against a DC with a `checked` event, opposed rolls for `threaten` and `parley`, `attack` with wounds, down and dead), world scripts first, engine conventions if they hold.
 - [x] (round 5) `sleep` lists creatures as targets; a holder verb that should be `self` only. Affordances no longer pair a creature's own targetless verbs (`sleep`, `brace`, `check`) with the creatures around the actor.
 
+## Found in the fourth playtest
+
+Source: worlds/glass-reach/notes/glass-reach-2026-11-09.md (the narrator, with Nate as Reeve Ansel Varrick on his phone). The whole spine ran on rules with no blow landed. Nate on the t=240 timer that walked Dram into the yard: it made the other characters feel like they have agency and can affect his experience. More of that: timers that move people with their own aims. Every fix below is in the packs or the Glass Reach; the engine did not change.
+
+Bugs
+
+- [x] (round 7, 2026-11-09, d20 pack) NPCs never drank: Ossa reached water 0 and a wound beside six casks, Ruhl and Hollis stood at 1 a step from the cistern. `thirst` does not bite beside a `water_source`, and a `quench` behavior on every combatant drinks from a held skin or a source here when water falls to 3. Embodied seats decide for themselves.
+- [x] (round 7, d20 pack) A loud step on the Flats counted forever: `tremor` never decayed. After 120 quiet seconds it falls by one, with a `tremor` event (`why: quiet`); a new footfall restarts the quiet.
+- [x] (round 7, d20 pack) Terms agreed in the ring did not end the duel; the narrator had to `act_as` a yield. `agreed` between two duelists is a yield now.
+- [x] (round 7, d20 pack) A reeve who walked out of the yard was still in a duel. Leaving the ring ends it (`how: left`) and costs 2 standing with your own side. The rule hears `arrived`: `moved` is a primitive and never reaches a listener, which the scripting guide now says.
+- [x] (round 7, d20 and village packs) A trade and a return counted as gifts: the skin Nico handed back raised House Varrick. Handed things remember who gave them (`given_by`, `given_before_by`); a thing gone by the next tick or returned to its giver moves no standing.
+- [x] (round 7, the Glass Reach) Dram walked through Ruhl's guard at t=240 after Ruhl had said "He stays." A Dram with `held_by` or `bound` stays, with a scene line; the narrator sets `held_by` when the reeve has him taken.
+- [x] (round 7, the Glass Reach) Sefa promised the well and the world had no path for it; the author patched the Deepwell by hand. Sefa reveals the well to a friend of the Keth who asks about water, as Nico does.
+- [x] (round 7, the Glass Reach) The traded skin was named "Full waterskin" when it was empty. Ossa's trade spawns a "Guild waterskin" with full and empty descriptions.
+- [x] (round 7, the Glass Reach) Ruhl had no line for the road north, for sparing men or for standing with the reeve; Dram had none for why he stayed. The tables answer what the first reeve asked.
+- [x] (round 7) The playtest's live authoring (`changes.jsonl`: the ledger page, the un-hidden well, the patched story) replayed into every fresh build of the sample world, so a new game and the tests started with the well found. It is a record now, in `worlds/glass-reach/notes/`, and the sample ships with no changes file.
+
+Gaps
+
+- [x] (round 7, village pack) No whisper: a word to Ruhl at the door was heard by Hollis. `say(to=X, reach=0)` already reaches only X; the skill says so now.
+- [x] (round 7, village pack) Nothing to do with a letter but hand it over, and no way to see into the next place or walk with someone. `show`, `follow`, `stay` and `watch` are verbs a world's person schema binds.
+- [ ] Two deeds in one intent ("go to the yard and talk to Ruhl") cost a phone player two messages. A chained intent (go, then talk on arrival) is open.
+- [ ] No gesture or emote verb; a smile rides inside the `say` text.
+- [ ] `act_as` results carry no `t` or `elapsed`.
+- [ ] `fill` does not say how much the source holds after; `read` with duration 0 still takes a whole turn (the turn floor).
+- [ ] The narrator walked the player into a known timer (Dram at t=240) without a warning line. The skill could tell the narrator to read `timers` before a move that lands on one.
+
 ## Directions from the design talks
 
 These were agreed in conversation on 2026-11-08 and are not built. Order of attack is at the end.
@@ -171,6 +198,7 @@ Direction from Nate on 2026-11-08, after the second round shipped: a hosted embo
 2c. (done, round 4) Fix pass from the third playtest: one clock across processes, located witnessing, act results that carry the news, light `wait`, the ferry village with goals, chores and a debt.
 2d. (done, round 5) The desert world with TTRPG rules as actions: `packs/d20/` and `worlds/glass-reach/`, rules that hear everything under their entity, `always` behaviors, self verbs listed once. Next: a playtest of the Glass Reach from the phone, with a mind on Dram or Taan.
 2e. (done, round 6) Worlds as folders: `build.py` with a manifest, scripts as files, packs, `use()` includes, live authoring written to the folder and replayed, `create_world` starts a git repository, `save` and `restore`, `embody init`, the database at the workspace root.
+2f. (done, round 7) Fix pass from the fourth playtest, all in the packs and the Glass Reach, nothing in the engine: bodies drink, the tremor settles, the ring ends on leaving or on agreed terms, trades and returns are not gifts, show, follow, stay and watch, a held Dram stays, Sefa shows the well, the tables answer the road questions.
 3. The lint for names in prose that match no entity; an engine default duration per verb; the `overheard` tail.
 4. Sample worlds inside the package (the rest of the workspace split is done), then the release.
 5. Hosted, many players: grants and claims in the engine, the network transport and `wait` over it, then the client without an agent, accounts and rosters, and the security audit before anything is public.

@@ -15,6 +15,8 @@ def reveal_well(ctx, st, how):
     ctx.patch(ctx.find(type="story", limit=1)[0], {"found_well": True, "well_found_by": how})
     if how == "nico":
         scene(ctx, st.ridge, "Nico looks at you a long moment, then points down the back of the ridge, to a shadow in the rock you had taken for nothing. A way down.")
+    elif how == "sefa":
+        scene(ctx, st.ridge, "Sefa says nothing for a while. Then she walks you to the back of the ridge and shows you where the rock is not rock: a lip of worn stone, cool air coming up. 'You did not find this. I showed you. Remember which.'")
     else:
         scene(ctx, st.ridge, "Goat sign, then a worn lip of stone, then cool air coming up out of the rock. There is a way down the back of the ridge.")
 
@@ -49,13 +51,14 @@ def on(ctx, event):
         if p.get("place") == st.ridge and p.get("success") and str(p.get("skill")) in ["survival", "lore", "track", "search"] and int(p.get("dc") or 0) >= 15:
             reveal_well(ctx, st, "found")
     elif k == "talked":
-        if event.target == st.nico:
+        if event.target in [st.nico, st.sefa]:
+            # the two Keth who know the way: either shows it to a friend of the Keth who asks about water
             about = str(p.get("about", "")).lower()
             asker = ctx.get(p.get("by"))
             keth = ctx.get(st.keth)
-            if asker is not None and ("water" in about or "well" in about or "cistern" in about or "keth" in about):
+            if asker is not None and asker.id != event.target and ("water" in about or "well" in about or "cistern" in about or "keth" in about):
                 if asker.state.faction == "the Keth" or keth_standing(ctx, asker, keth) >= 1:
-                    reveal_well(ctx, st, "nico")
+                    reveal_well(ctx, st, "nico" if event.target == st.nico else "sefa")
     elif k == "agreed":
         if event.target == st.taan and not st.truce:
             offer = str(p.get("offer", "")).lower()
@@ -74,6 +77,11 @@ def on(ctx, event):
     elif k == "dram_moves":
         dram = ctx.get(st.dram)
         if dram is None or dram.state.down or dram.state.dead or st.dram_done:
+            return
+        if dram.state.held_by or dram.state.bound:
+            # someone has him: he does not walk through a guard. A narrator sets held_by when the reeve has him taken.
+            holder = ctx.get(dram.state.held_by) if dram.state.held_by else None
+            scene(ctx, dram.parent, "Dram Hollis tests the grip on his arm" + (", " + holder.name + "'s," if holder is not None else "") + " finds it firm, and goes back to counting under his breath.")
             return
         ctx.move(dram, st.yard)
         ctx.emit("arrived", target=st.yard, reach=-1, who=dram.id, place=st.yard, quiet=False)

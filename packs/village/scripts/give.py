@@ -16,5 +16,6 @@ def check(ctx):
 
 def apply(ctx):
     it = find_item(ctx)
+    ctx.patch(it, {"given_by": ctx.actor.id, "given_before_by": it.state.given_by})
     ctx.move(it, ctx.target)
     ctx.emit("given", target=ctx.target, reach=1, item=it.id, by=ctx.actor.id)

@@ -20,14 +20,23 @@ The numbers, so a narrator can explain a roll:
 - At half vigor you are `wounded`; at 0 you are `down` and can only yield, drink or crawl; `kill` finishes
   someone down; striking someone who yielded to you is `dishonor` and every faction hears of it.
 - A `challenge` makes a duel between two people in a place. While it stands nobody else there may strike,
-  and the two may strike only each other. It ends when one is down, dead or yields.
+  and the two may strike only each other. It ends when one is down, dead or yields, when one agrees to the
+  other's `parley` (that is a yield on terms), or when one walks out of the ring: that one lost, and their own
+  faction marks them down 2 for stepping back.
 - `threaten` is opposed will (resolve) with +2 for a weapon in hand and +2 for friends at the target's side.
   Cowed people give way in the dialog tables. `parley` is wits + parley against will + resolve; success emits
   `agreed` with the offer and the world decides what that buys.
-- Water: `water` (0 to 10) falls by 1 per minute under shade and 2 on open ground, nothing beside a source.
-  At 3 you are thirsty; at 0 you lose vigor instead. `drink` from a waterskin (+4), `fill` one at a source.
+- Water: `water` (0 to 10) falls by 1 per minute under shade and 2 on open ground, nothing beside a source (a
+  place with `water_source`, or a cask or cistern here with something `left`). At 3 you are thirsty; at 0 you
+  lose vigor instead. `drink` from a waterskin (+4), `fill` one at a source. A body nobody embodies drinks on
+  its own when it is thirsty and water is in reach (the `quench` behavior): a skin in hand first, then a source
+  here, filling its skin while it is there. An embodied seat decides for itself.
+- A gift (`given`) is worth 1 with the receiver's faction only if they keep it: something they trade away on
+  the spot, or something that was theirs to begin with (`given_by` on the thing names who handed it over),
+  moves nothing.
 - Deep sand (`deep_sand` on a place) keeps a `tremor` count: each loud arrival adds 1, each harvest adds 2, a
-  quiet arrival adds nothing. At 3 the thresher is thirty seconds away. When it surfaces everyone there
+  quiet arrival adds nothing. Two minutes of quiet and the count drops by one, down to zero, when a `tremor`
+  event says the dune is still. At 3 the thresher is thirty seconds away. When it surfaces everyone there
   rolls survival against 13: pass and you reach the nearest rock; fail and it takes 4 vigor off you first.
 """
 
@@ -61,7 +70,8 @@ def define(s):
     s.define_schema("combatant", extends="creature",
                     doc="Someone the d20 rules apply to: three stats, skills, vigor, water, and the verbs of a fight.",
                     state=COMBATANT_STATE, actions=COMBATANT_ACTIONS,
-                    behaviors=[{"script": "thirst", "every": 60, "always": True}])
+                    behaviors=[{"script": "thirst", "every": 60, "always": True},
+                               {"script": "quench", "every": 60}])
     s.define_schema("faction", extends="entity", doc="A side. Hidden; people name it in state.faction, standing edges point at it.",
                     state={"hidden": True, "hostile": {}})
     s.define_schema("waterskin", extends="thing", doc="Holds water. left out of capacity.",
@@ -81,6 +91,6 @@ define_rules = define  # the old name
 def install_rules(s, root):
     """The four world rules on the root. set_rule is idempotent."""
     s.set_rule(root, "rules_guard", kinds=["before_act", "act"])
-    s.set_rule(root, "duel_rule", kinds=["before_act", "downed", "killed", "yielded"])
+    s.set_rule(root, "duel_rule", kinds=["before_act", "downed", "killed", "yielded", "arrived", "agreed"])
     s.set_rule(root, "factions_rule", kinds=["hit", "killed", "cowed", "agreed", "given", "dishonor"])
-    s.set_rule(root, "thresher_rule", kinds=["arrived", "harvested", "thresher_surfaces", "thresher_sinks"])
+    s.set_rule(root, "thresher_rule", kinds=["arrived", "harvested", "tremor_settles", "thresher_surfaces", "thresher_sinks"])
