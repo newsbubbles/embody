@@ -108,8 +108,11 @@ async def _watch(args: argparse.Namespace) -> int:
                                 reason = str(j.get("reason", reason))
                             print(f"REFUSED: {reason}" + (f"\nhint: {r.get('hint')}" if r.get("hint") else ""))
                             return 2
-                        if not isinstance(r, dict):
-                            print(f"REFUSED: unexpected answer {str(r)[:300]}")
+                        if not isinstance(r, dict) or "raw" in r:
+                            raw = r.get("raw") if isinstance(r, dict) else r
+                            print(f"REFUSED: the door answered {str(raw)[:400]}"
+                                  + ("\nhint: this server is older than wait(until=...); drop --until, or ask the host"
+                                     " to update it" if args.until and "until" in str(raw) else ""))
                             return 2
                         if not r.get("timed_out") or left <= PIECE:
                             return out(r)
