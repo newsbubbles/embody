@@ -13,7 +13,7 @@ The expression is one line of the engine's script subset (no imports, no assignm
 | `t` | world time in seconds |
 | `ambient` | the hour, light and weather where you stand (a dict: `ambient.get('time_of_day')`) |
 | `here` | the name of your place |
-| `present` | the names of who is here, hidden ones left out |
+| `present` | the names of who is here (people and creatures, not things), hidden ones left out |
 | `me` | your own state, the whole of it: `me['water']`, `me['vigor']`, `me.get('wounded')` |
 | `events` | what touched you since the wait began, each with `seq`, `t`, `kind`, `actor`, `target`, `text`, `player` |
 | `heard(word, by='')` | someone said something with that word in it (and the speaker's name has `by` in it) |

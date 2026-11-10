@@ -52,6 +52,9 @@ def test_until_reads_time_place_people_and_my_own_state():
     gm.patch("Traveler", {"water": 2})
     assert you.wait(timeout=0, until="me.get('water', 10) < 3", **NOW)["fired"] is True
     assert you.wait(timeout=0, until="did('say', by='Mara')", **NOW)["timed_out"] is True
+    # who is here means people: a thing with a name like someone's does not come in (the Keth jars, 2026-11-10)
+    gm.spawn("thing", gm.inspect("Ashford Square")["id"], "Mara's ale jug", state={"portable": False})
+    assert you.wait(timeout=0, until="came('jug')", **NOW)["timed_out"] is True
 
 
 def test_until_sees_only_what_the_watcher_may_know_and_cannot_write():

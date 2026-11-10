@@ -1158,7 +1158,8 @@ class Session:
         w = self.world
         ent = w.get(me) if me else None
         here = w.get(ent["parent_id"]) if ent and ent["parent_id"] else None
-        near = [c for c in w.children(here["id"]) if c["id"] != me and not c["state"].get("hidden")] if here else []
+        near = [c for c in w.children(here["id"]) if c["id"] != me and not c["state"].get("hidden")
+                and w.is_a(c["type"], "creature")] if here else []  # who is here: people, not the jars by the cistern
         names: dict[str, str] = {}
 
         def nm(i: str | None) -> str | None:
