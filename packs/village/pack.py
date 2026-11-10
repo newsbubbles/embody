@@ -1,4 +1,4 @@
-"""Village verbs: go, take, drop, give, show, talk, leave_word, read, follow, stay, watch, and person_on, the listener that
+"""Village verbs: go, take, drop, put, give, show, talk, leave_word, read, follow, stay, watch, and person_on, the listener that
 answers from a person's dialog table while nobody embodies them. Extracted from the Ferry at Dusk, used by the
 Glass Reach too.
 
@@ -8,6 +8,9 @@ own, so a world may replace any of them with a file of the same name in its scri
 
 - go: to a connected place; via a door-like entity when the connection has one (locked doors refuse).
 - take, drop: portable things here or held; give: something you hold to someone here (`gives` tables can answer).
+- put: `params {"item": thing you hold}` onto or into a holder here: a thing whose `state.holds` lists what it takes
+  (["any"], or state flags such as ["weapon"]) and, optionally, `room` (how many). What lies on a holder is
+  within reach of everyone in its place, and `take` takes it back down.
 - show: something you hold to someone here; they get a `shown` event with its `text` (or description), it stays yours.
 - talk: `params {"about": topic}`; the person answers from `dialog` through person_on, or with `default_line`.
 - leave_word: `params {"for": who, "word": message}` with someone here, for someone who is not: the keeper stores it
@@ -21,4 +24,4 @@ own, so a world may replace any of them with a file of the same name in its scri
 - a whisper is not a verb: `say(text, to=someone, reach=0)` reaches that one person and nobody else in the room.
 """
 
-PACK = {"name": "village", "description": "go, take, drop, give, show, talk, leave_word, read, follow, stay, watch and the dialog-table listener person_on."}
+PACK = {"name": "village", "description": "go, take, drop, put, give, show, talk, leave_word, read, follow, stay, watch and the dialog-table listener person_on."}

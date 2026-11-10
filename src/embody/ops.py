@@ -1238,8 +1238,16 @@ class Session:
             card["embodied_by"] = emb["id"]
             if w.idle(e["id"]):
                 card["idle"] = True  # the seat has done nothing for a while; standing_orders in its state say what holds
-        if w.children(e["id"]) and not full:
-            card["contains"] = len(w.children(e["id"]))
+        kids = w.children(e["id"])
+        if kids and not full:
+            card["contains"] = len(kids)
+        seen = [c for c in kids if not c["state"].get("hidden")]
+        if e["state"].get("holds") is not None:
+            card["holding"] = [{"id": c["id"], "name": c["name"]} for c in seen]  # what lies on the rack is in plain sight
+        elif w.is_a(e["type"], "creature"):
+            bears = [{"id": c["id"], "name": c["name"]} for c in seen if c["state"].get("weapon")]
+            if bears:
+                card["bears"] = bears  # a blade at the hip shows, whatever the description still says
         return card
 
     def _place_card(self, e: dict[str, Any]) -> dict[str, Any]:

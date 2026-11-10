@@ -1149,7 +1149,7 @@ class World:
                        alternatives=known)
 
     def reachable(self, actor_id: str, target_id: str) -> tuple[bool, str]:
-        """Can actor act on target? self, container, siblings, inventory, or a connected place."""
+        """Can actor act on target? self, container, siblings, inventory, what lies on a holder here, or a connected place."""
         if actor_id == target_id:
             return True, ""
         actor = self.need(actor_id)
@@ -1162,6 +1162,11 @@ class World:
             if target["state"].get("hidden"):
                 return False, f"{target_id} is hidden"
             return True, ""
+        holder = self.get(target["parent_id"]) if target["parent_id"] else None
+        if (holder is not None and holder["state"].get("holds") is not None and actor["parent_id"] is not None
+                and holder["parent_id"] == actor["parent_id"] and not holder["state"].get("hidden")
+                and not target["state"].get("hidden")):
+            return True, ""  # what lies on a rack or in an open chest here is within reach
         if actor["parent_id"]:
             for e in self.edges(actor["parent_id"], "connects_to", "out"):
                 # The next place is reachable, and so is whatever the passage goes through (a door).

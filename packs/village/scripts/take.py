@@ -3,7 +3,9 @@ def check(ctx):
         return "you already hold it"
     if not ctx.target.state.portable:
         return "it will not budge"
-    if ctx.target.parent.id != ctx.actor.parent.id:
+    holder = ctx.target.parent
+    if holder.id != ctx.actor.parent.id and not (holder.state.holds is not None and holder.parent is not None
+                                                 and holder.parent.id == ctx.actor.parent.id):
         return "it is not here"
     return True
 

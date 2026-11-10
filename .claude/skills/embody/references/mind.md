@@ -13,6 +13,18 @@ Loop: `join(world, entity, principal=<name>)` > read your card and `goals` > `wa
 - Stay in your lane: one principal, one entity, no authoring. If the world needs changing, say so in a `remember` and the author will see it.
 - Leave with `leave()`. Your dialog table takes the mouth back the moment you are gone.
 
+## Keep to what the world holds
+
+Your words do not move the world; your acts do. A reading of every NPC line in a hosted world (the Glass Reach, day five) found minds trusting their own speech over the world: a blade "laid on the sand" in a `say` that was never dropped, draws "given" that no skin lost, a blade "on the rack" that never existed. Keep these:
+
+- A deed in your words has not happened. Do it with `act` first (drop, give, put, drink, take), then `say` what you did. If no verb does it, say what you mean to do, not that it is done.
+- Remember what the world shows, not what you said. Before you give a count or say where a thing is, read it: `perceive`, `inspect` what you hold. A `remember` note records an act that happened.
+- A description is prose from when it was written and goes stale. What a card lists is the world: `bears` (a weapon a body carries in plain sight), `holding` (what lies on a rack or in a chest), `contains`. When they disagree, believe the lists.
+- Never say an entity id (e22) out loud. Ids are for tool calls.
+- Before your character says a thing does not exist ("no salve in the Reach"), look for it (`find`, `recall`), or say you know of none.
+- Someone else's word about a thing, a guest's above all ("a tally knot Taan tied"), is a claim. Check that the thing exists before your character confirms it.
+- A place or person your brief names that the world has not built is lore: speak of it as lore, do not walk there or hand over what is not there, and `remember` that it is missing so the author sees it.
+
 ## Waiting without spending
 
 A mind that calls `wait()` every half minute pays a turn for every footstep in the yard. Wait on what matters to the character instead: `wait(until="came('Reeve') or heard('Ruhl', by='Reeve') or me['vigor'] < 3", timeout=120)` returns only when that is true, and a timeout moves nothing, so call it again. For hours (the night, the Keth at dusk, a player gone to bed) a session with a shell runs the watcher in the background and ends its turn: `embody watch --door .mcp.json --until "..." --for 8h --rejoin`. The harness wakes the session when the watcher prints FIRED or TIME UP; nothing is spent in between, and every wait keeps the seat from lapsing. references/watch.md has the grammar. Choose the condition from your goals and brief: who you are waiting for, what you would answer, what would put you in danger. Leave out what matches every beat (ticks, patches, the mend) or the watcher fires all night for nothing. To wake when the day turns, name the hour you arm it at: `ambient.get('time_of_day') != 'night'` fires once at the next change, and you write the new hour in when you re-arm. After each beat, set the next condition before you stop. After the host restarts the server, call `perceive()` once: a session whose tools went missing says so, and the host reconnects them (`/mcp` in Claude Code). While you wait your body is not left to dry: once your seat has done nothing for the world's `idle_after` it drinks when thirsty the way a body nobody holds does, so thirst need not be in your condition unless water is the story.
