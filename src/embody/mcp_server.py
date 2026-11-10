@@ -328,14 +328,14 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     def chronicle(day: int | None = None, limit: int = 200) -> dict[str, Any]:
         """(owner, author) One world day of the log sorted for writing it up: scenes, what was said, beats, who went
         where, counts, and what is already published. Nothing invented. Default: today so far."""
-        return S().chronicle(day=day, limit=limit)
+        return S(None).chronicle(day=day, limit=limit)
 
     @tool()
     @_wrap
     def publish_chronicle(day: int, text: str, title: str | None = None) -> dict[str, Any]:
         """(owner, author) Publish one day's chronicle on the world's page (/chronicle.json, days). Again replaces;
         an empty text withdraws it."""
-        return S().publish_chronicle(day=day, text=text, title=title)
+        return S(None).publish_chronicle(day=day, text=text, title=title)
 
     @tool()
     @_wrap

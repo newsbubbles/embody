@@ -146,9 +146,14 @@ def test_a_published_day_is_on_the_chronicle_feed_once_in_its_last_telling(tmp_p
     gm, server, t, base = _serve(eng, w, tmp_path)
     try:
         w.set_meta({"public_feed": True})
-        gm.use("two-rooms")
-        gm.publish_chronicle(1, "Day one.", title="One")
-        gm.publish_chronicle(1, "Day one, in the host's hand.", title="One")  # the feed keeps 30 s, so one look
+        tok = gm.invite("author", label="Chronicler")["token"]  # over the door, as a hosted owner or author does it
+        auth = {"authorization": f"Bearer {tok}"}
+        status, _, body = _call(base + "/op/chronicle", {}, headers=auth)
+        assert status == 200 and json.loads(body)["day"] == 1
+        assert _call(base + "/op/publish_chronicle", {"day": 1, "text": "Day one.", "title": "One"}, headers=auth)[0] == 200
+        status, _, body = _call(base + "/op/publish_chronicle", {"day": 1, "text": "Day one, in the host's hand.", "title": "One"},
+                                headers=auth)  # the feed keeps 30 s, so one look
+        assert status == 200 and json.loads(body)["ok"]
         d = json.loads(_call(base + "/chronicle.json")[2])
         assert d["days"] == [{"day": 1, "title": "One", "text": "Day one, in the host's hand.", "t": d["days"][0]["t"]}]
     finally:

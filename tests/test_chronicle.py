@@ -64,3 +64,18 @@ def test_a_day_is_published_replaced_and_withdrawn():
         gm.publish_chronicle(5, "Days that have not come.")
     with pytest.raises(Rejected):
         s.publish_chronicle(1, "I was here.")
+
+
+def test_the_chronicle_tools_answer_through_the_mcp_server():
+    import anyio
+    import json
+    from embody.mcp_server import build_server
+    eng, w, i, gm, s = played()
+    srv = build_server(gm, None, eng)
+
+    async def call(name, args):
+        r = await srv.call_tool(name, args)
+        assert not r.is_error, r.content
+        return json.loads("".join(getattr(b, "text", "") for b in r.content))
+    assert anyio.run(call, "chronicle", {})["day"] == 1
+    assert anyio.run(call, "publish_chronicle", {"day": 1, "text": "Day one."})["ok"]
