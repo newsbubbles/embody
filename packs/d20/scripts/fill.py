@@ -7,6 +7,8 @@ def check(ctx):
         return "you are not holding it"
     if ctx.target.state.capacity is None:
         return "it holds no water"
+    if ctx.target.state.left is not None and int(ctx.target.state.left) >= int(ctx.target.state.capacity):
+        return "it is already full: drink from it first"
     if source_here(ctx) is None:
         return "there is no water here to fill it from"
     return True
