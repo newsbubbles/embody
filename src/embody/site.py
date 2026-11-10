@@ -2,7 +2,7 @@
 answers built on the server from the world as it is.
 
   GET /chronicle.json    the world's own prose (scene events by default), oldest first: no player's words
-  GET /reach.json        the clock, the day's phases, and counts (awake, people, open seats): no names, no places
+  GET /reach.json        the clock, the day's phases, and counts (bodies held, people, open seats): no names, no places
   POST /seat-request     someone asking for a seat; kept in a file beside the database for the owner's `requests()`
 
 The two feeds answer only for a world whose meta says `public_feed: true`, so a site folder alone never makes a world's
@@ -212,8 +212,8 @@ class Site:
         ck = w.clock()
         out: dict[str, Any] = {"clock": {"t": round(w.t), "rate": ck["rate"], "running": ck["running"], "day_seconds": day,
                                          "phases": self._phases(w, day)}}
-        out["awake"] = sum(1 for p in w.principals()
-                           if p.get("entity_id") and w.get(p["entity_id"]) and not w.idle(p["entity_id"]))
+        # awake: bodies someone holds now, a player or a mind (a mind that waits on a watcher is still there)
+        out["awake"] = sum(1 for p in w.principals() if p.get("entity_id") and w.get(p["entity_id"]))
         people = str(meta.get("people_type") or "person")
         is_person: dict[str, bool] = {}
         everyone = w.find(limit=None)
