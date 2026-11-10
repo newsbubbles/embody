@@ -144,6 +144,7 @@ Gaps
 - [ ] Some of Taan's `say` rows are written twice.
 - [ ] A person with no dialog answers a stock "Hm.", which reads as the engine, not the character.
 - [x] The Glass Reach has no rest verb: vigor lost to thirst or a blade comes back only by water or a hand (the reeve sat at vigor 2 for a day). Now `mend` (rest), `tend` and `medicine` in packs/d20.
+- [ ] Glassroot salve comes back slowly, for a price (Nate, 2026-11-10): the Deepwell grows it, Taan's camp makes a dose every few days, the Hold trades for it. Iska's four doses and the water cost of tending ran from 2026-11-10; read a week of play on 2026-11-17 (doses used, tends tried, water spent on healing) before choosing the rate.
 - [ ] Live authoring on the server is recorded inside the container and lost on the next deploy; the database keeps it, git does not. A pull-back script (scripts, rules, timers out of the live world, into the world's folder) is open.
 
 ## Directions from the design talks
