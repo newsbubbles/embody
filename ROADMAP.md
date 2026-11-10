@@ -166,6 +166,7 @@ These were agreed in conversation on 2026-11-08 and are not built. Order of atta
 - [ ] Revival for the story: a character a storyline needs comes back by rule (a successor in the seat, a healer's visit), named in the world's policy, never by the host's hand alone.
 - [ ] A hold on all hosts: the narrator or owner stops every NPC and idle body (their behaviors and routines) while the clock and the players go on. For a scene that must not be crossed, or for repairs.
 - [ ] A soak for every pack that uses up something (shards, vigor, ammunition), like packs/d20/soak.py for water.
+- [ ] A loops audit (Nate, 2026-11-10): run a world with nobody playing and, for every number in state, add up what took it and what gave it back, by script and by source. Open loops (only falls, or a source nothing refills), stuck numbers (never move), and the balance of each (how many days until it runs out, or how far above its floor it settles) come back as a table an author reads. Write one side of a stat and the audit names the missing side; the rates set what is common, scarce or a quest.
 
 ### Canon and what is flexible
 
