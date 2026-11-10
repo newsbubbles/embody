@@ -25,6 +25,10 @@ The clock does not stop for an empty table. What keeps a hosted world from runni
 
 Before hosting a world with water (or anything else that runs out), soak it: `uv run python packs/d20/soak.py <world> --days 7` builds it in memory, holds every seat with someone who never acts, runs the clock, and prints each body's lowest water and hours thirsty and each source's lowest and refills; `--set "Story.truce=true"` soaks it as a story left it. Exit code 1 when thirst put anyone down. The Reach passes a week both with and without the truce.
 
+## Away from the keyboard
+
+A seat that has done nothing (no act, no line) for the world's `idle_after` is idle, and the world treats its body as one nobody plays, with three courtesies to everyone else. What was taken from someone goes home: a thing that passes between bodies by an act and not as a gift carries `taken_from`, and `reclaim(thing)` takes it back from an idle holder standing in the same place. Standing orders, set with `away(give=[...], answer=...)` before a player stops, say what else others may reclaim and the one line the body answers with. And the card shows `idle: true` with the orders, so another player's agent knows it may act instead of waiting. A world turns reclaim off with meta `reclaim: false`, and lists what everyone may know of the schedule with `public_timers` (what `timers()` shows a player).
+
 ## Invite links
 
 The page behind a link tells the agent to add the server and play in the session it is in. Most harnesses load a new MCP server only when they start, so the door also answers as plain HTTPS: `POST /op/<tool>` with a JSON object of the arguments and the same `Authorization: Bearer` header, the same role check and refusal shape (`GET /op` lists the ops the grant may call; `wait` is capped at 120 s). A guest never needs this repository, an install or a second session.

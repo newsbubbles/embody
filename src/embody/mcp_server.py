@@ -245,14 +245,17 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @_wrap
     def invite(role: str, entity: str | None = None, template: str | None = None, label: str = "",
                expires: float | None = None, scope: list[str] | None = None,
-               as_principal: str | None = None, brief: str = "") -> dict[str, Any]:
+               as_principal: str | None = None, brief: str = "",
+               limits: dict[str, Any] | None = None) -> dict[str, Any]:
         """(owner) Make a grant and return the paste for the friend: a link their agent reads once, within a day, for
         the token and its brief (the agent is told to open in the world and say nothing of the setup). role: author,
-        narrator, player, mind or observer. entity keeps a seat (player) or names the NPC held (mind; scope=[...]
+        builder, narrator, player, mind or observer. entity keeps a seat (player) or names the NPC held (mind; scope=[...]
         for more). template: the character it may make. expires: hours. brief: your word to this guest alone (their
-        orders, a first goal); it rides the page and the briefing their join() returns. The token is shown once."""
+        orders, a first goal); it rides the page and the briefing their join() returns. limits (builder, narrator,
+        author): {"under": <entity>, "types": [...], "scripts": "prefix_"}, the part of the world it may change, what
+        it may spawn, how its scripts are named; a builder needs under. The token is shown once."""
         return S(None).invite(role, entity=entity, template=template, label=label, expires=expires,
-                              principal=as_principal, scope=scope, brief=brief)
+                              principal=as_principal, scope=scope, brief=brief, limits=limits)
 
     @tool()
     @_wrap
@@ -334,6 +337,22 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
+    def reclaim(thing: str, principal: str | None = None) -> dict[str, Any]:
+        """Take back from an idle body where you stand what is yours (taken from you, or you are its owner) or what
+        its standing orders give you. perceive() lists what you may reclaim under `reclaim`."""
+        return S(principal).reclaim(thing)
+
+    @tool()
+    @_wrap
+    def away(give: list[dict[str, Any]] | None = None, answer: str | None = None, entity: str | None = None,
+             principal: str | None = None) -> dict[str, Any]:
+        """Standing orders for your body while your seat is idle (gone to bed, on a long watch). give=[{"item":
+        <name>, "to": <name> or "anyone"}]: who may reclaim() what from you. answer: one line your body says to
+        whoever speaks to it. away() with nothing clears them."""
+        return S(principal).away(give=give, answer=answer, entity=entity)
+
+    @tool()
+    @_wrap
     def remember(text: str, entity: str | None = None, principal: str | None = None) -> dict[str, Any]:
         """Write a note into your character's secret memory, kept by the engine: who you are, what you want, what
         you decided, what you think of someone. Whoever embodies this entity next reads the same notes.
@@ -362,8 +381,9 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def timers() -> list[dict[str, Any]]:
-        """What is scheduled and when: each pending timer with its kind, entity, world time and seconds to go."""
-        return s.timers()
+        """What is scheduled and when: each pending timer with its kind, entity, world time and seconds to go. A
+        player or a mind sees what everyone in the world knows: the next dusk, the next dawn, in words."""
+        return S(None).timers()
 
     @tool()
     async def wait(timeout: float = 30.0, kinds: list[str] | None = None, full: bool = False,
@@ -538,7 +558,26 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
         """(author) Write the markdown projection of the world (directories = containment, files = entities)."""
         return s.mirror(path)
 
+    every = srv.list_tools
+
+    async def list_tools() -> list[Any]:
+        """A grant sees the tools its role may call, not all of them: the engine would refuse the rest anyway, and
+        fewer tools mean fewer refusals and a plain answer to what the grant gives. The host's own process sees all."""
+        cur = _current.get()
+        tools = await every()
+        return tools if cur is None else [t for t in tools if shown(cur.role, t.name)]
+
+    srv.list_tools = list_tools  # type: ignore[method-assign]
     return srv
+
+
+def shown(role: str, tool: str) -> bool:
+    """Whether a role's tool list carries this tool: an op by the role table, the three tools that are not ops by
+    the op they stand beside."""
+    from .ops import OPS
+    if tool in OPS:
+        return allowed(role, tool)
+    return allowed(role, {"load_world": "create_world", "guide": "define_script"}.get(tool, "worlds"))
 
 
 async def _reply(send: Any, status: int, body: Any, ctype: str = "application/json",

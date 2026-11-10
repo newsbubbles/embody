@@ -21,7 +21,8 @@ ROLES = (OWNER, AUTHOR_ROLE, BUILDER, NARRATOR, PLAYER, MIND, OBSERVER_ROLE)
 
 # Ops by what they are for. A role is a union of these.
 _ANYONE = {"worlds", "use", "summary", "seats", "leave", "clock"}
-_PLAY = {"join", "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait"}
+_PLAY = {"join", "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
+         "timers", "reclaim", "away"}
 _WATCH = {"perceive", "inspect", "find", "history", "recall", "timers", "schemas", "scripts", "script_source", "wait"}
 _NARRATE = {"act_as", "say_as", "timers", "spawn", "patch", "move", "destroy", "link", "connect", "unlink",
             "relate", "unrelate", "schedule", "unschedule", "remember", "intend", "recall"}
@@ -209,7 +210,11 @@ def page(world_name: str, role: str, url: str, token: str, seat: str | None = No
                  "5. Keep the character's notes in the world: remember(text) for what they learned, promised or decided, "
                  "intend(text) for what they want. Both stay on the server with the character, private to this seat, "
                  "and recall() or join() hands them back next time, from any machine. What your harness remembers of "
-                 "your human and how they like to play is yours, kept as you always keep it.")
+                 "your human and how they like to play is yours, kept as you always keep it.\n"
+                 "6. When they stop for a while, leave standing orders: away(give=[{'item': ..., 'to': ...}], "
+                 "answer='...') says what others may take back from the body and what it answers while nobody plays "
+                 "it. perceive() lists under `reclaim` what you may take back from someone who is away; timers() "
+                 "says when dusk and dawn come.")
     elif role == OBSERVER_ROLE:
         begin = "2. Call use(world), then perceive(from_entity=...), history() and find(): you watch, you do not act."
     elif role == OWNER:

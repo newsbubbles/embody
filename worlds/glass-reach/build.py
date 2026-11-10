@@ -196,6 +196,8 @@ STORY_KINDS = ["arrived", "checked", "talked", "agreed", "dram_moves", "downed",
 HOSTED = {"rate": 4, "claim_lapse": 3600,
           # a seat that has not acted or spoken for an hour of the world (a quarter hour real) is idle: its body drinks
           "idle_after": 3600,
+          # what everyone in the Reach knows is coming: timers() tells a player or a mind the next of each
+          "public_timers": ["heat", "dusk", "night", "dawn"],
           # a body's water in the hosted day: one point every 2.4 world hours (36 real minutes of play at 4x), a look for
           # water every ten world minutes; the turn-based story keeps the pack's 60 s
           "pace": {"thirst": 8640, "quench": 600},
@@ -492,7 +494,8 @@ def host(s):
     routines ride it. Runs once: a second call renews the settings and the routines and leaves the spine where the
     first put it."""
     root = s.summary()["root"]
-    s.world.set_meta({"claim_lapse": HOSTED["claim_lapse"], "run_when_occupied": False, "idle_after": HOSTED["idle_after"]})
+    s.world.set_meta({"claim_lapse": HOSTED["claim_lapse"], "run_when_occupied": False, "idle_after": HOSTED["idle_after"],
+                      "public_timers": HOSTED["public_timers"]})
     s.world.set_pace(HOSTED["pace"])
     s.clock(run=True, rate=HOSTED["rate"], turn=0)
     if s.world.meta().get("hosted"):

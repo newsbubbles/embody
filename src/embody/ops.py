@@ -831,6 +831,7 @@ class Session:
             "knows": self._knows(me),
             "known_places": [{"id": pid, "name": w.get(pid)["name"]} for pid in w.known_places(me) if w.get(pid)],
             "affordances": [a for a in w.affordances(me)],
+            "reclaim": w.reclaimable(me),
             "events": self._events_for(me, w.events(since=cursor, touching=me, limit=events)),
             "cursor": w.store.next_seq(w.id) - 1,
         }
@@ -929,6 +930,8 @@ class Session:
         emb = w.embodied(e["id"])
         if emb:
             card["embodied_by"] = emb["id"]
+            if w.idle(e["id"]):
+                card["idle"] = True  # the seat has done nothing for a while; standing_orders in its state say what holds
         if w.children(e["id"]) and not full:
             card["contains"] = len(w.children(e["id"]))
         return card
@@ -1068,6 +1071,61 @@ class Session:
             except Rejected as r:
                 return {"ok": False, "done": done, "failed_at": i, "step": s, **r.to_dict()}
         return {"ok": True, "done": done}
+
+    def reclaim(self, thing: str) -> dict[str, Any]:
+        """Take back from an idle body where you stand what is yours (it was taken from you, or its `owner` is you)
+        or what that body's standing orders give you. An idle body is one whose seat has done nothing for a while:
+        a player gone to bed, a mind on a long watch. perceive() lists what you may reclaim. An awake holder you ask."""
+        self._tick()
+        w = self.world
+        me = self._me()
+        tid = self._resolve(thing)
+        ok = {r["id"]: r for r in w.reclaimable(me)}
+        if tid not in ok:
+            t = w.need(tid)
+            h = w.get(t["parent_id"]) if t["parent_id"] else None
+            if h is None or not w.is_a(h["type"], "creature") or h["id"] == me:
+                raise Rejected(f"nobody else holds {t['name']}", hint="take() what lies here")
+            if h["parent_id"] != w.need(me)["parent_id"]:
+                raise Rejected(f"{h['name']} is not here", hint="go where they are")
+            if not w.idle(h["id"]):
+                raise Rejected(f"{h['name']} is awake: ask them", hint=f"say(..., to='{h['name']}')")
+            raise Rejected(f"{t['name']} is not yours, and {h['name']}'s standing orders do not give it to you",
+                           hint="ask, trade, or wait for them", alternatives=[r["name"] for r in ok.values()])
+        r = ok[tid]
+        self._acted()
+        if r["why"] != "yours":
+            w.patch(tid, {"given_by": r["from"]})  # their orders gave it: a gift, not a taking
+        w.move(tid, me, actor=me)
+        w.emit("reclaimed", actor=me, target=tid, reach=1, payload={"from": r["from"], "why": r["why"]})
+        return {"ok": True, "reclaimed": tid, "name": r["name"], "from": r["from_name"], "why": r["why"]}
+
+    def away(self, give: list[dict[str, Any]] | None = None, answer: str | None = None,
+             entity: str | None = None) -> dict[str, Any]:
+        """Standing orders for your body while your seat is idle (you went to bed, your mind is on a long watch).
+        give=[{"item": <name>, "to": <name> or "anyone"}]: who may reclaim() what from you. answer: one line your
+        body says to whoever speaks to it. Others see them on your card while you are idle. away() with nothing
+        clears them; they stay set while you play and only work while you are idle. entity: which of a mind's
+        bodies (default the one you embody)."""
+        self._tick()
+        w = self.world
+        eid = self._resolve(entity) if entity else self._me()
+        held = w.embodied(eid)
+        if not self._privileged() and (held is None or held["id"] != self.pid) and eid not in self.scope:
+            raise Rejected("standing orders are for a body you hold", hint="away(...) for your own")
+        orders: dict[str, Any] = {}
+        for o in give or []:
+            if not isinstance(o, dict) or not o.get("item"):
+                raise Rejected("a give order is {'item': <name>, 'to': <name> or 'anyone'}",
+                               hint='give=[{"item": "the sword", "to": "Ansel"}]')
+            orders.setdefault("give", []).append({"item": str(o["item"]), "to": str(o.get("to") or "anyone")})
+        if answer:
+            if len(answer) > _SAY_MAX:
+                raise Rejected(f"a standing answer is at most {_SAY_MAX} characters", hint="one short line")
+            orders["answer"] = str(answer)
+        w.patch(eid, {"standing_orders": orders or None}, replace=True)
+        return {"ok": True, "entity": eid, "standing_orders": orders,
+                "hint": "they work while your seat is idle; away() clears them"}
 
     def say(self, text: str, reach: int = 1, to: str | None = None) -> dict[str, Any]:
         """Speak as the entity you embody. `to` addresses someone here; the room still hears it. Players and
@@ -1524,9 +1582,18 @@ class Session:
         return out
 
     def timers(self) -> list[dict[str, Any]]:
-        """What is scheduled and when (fog in 38 s, dawn in 200 s). Ticks of behaviors are left out."""
+        """What is scheduled and when (fog in 38 s, dawn in 200 s). Ticks of behaviors are left out. A player or a
+        mind sees what everyone in the world knows: the next of each kind the world's meta lists as `public_timers`
+        (the day's round, a market day), in world words, without what the timer carries."""
         self._tick()
-        return self._timers()
+        if self._privileged():
+            return self._timers()
+        public = set(self.world.meta().get("public_timers") or [])
+        out: dict[str, dict[str, Any]] = {}
+        for t in self._timers(limit=500):
+            if t["kind"] in public and t["kind"] not in out:
+                out[t["kind"]] = {"kind": t["kind"], "in": t["in"], "when": _in_words(t["in"]), "every": t["every"]}
+        return list(out.values())
 
     def summary(self) -> dict[str, Any]:
         self._tick()
@@ -1552,6 +1619,17 @@ class Session:
         """Author ops (spawn, patch, move, destroy) are the narrator's hand, not the character's. An entity actor
         on them made secret patches and notes show up in the embodying player's own feed. So: none."""
         return None
+
+
+def _in_words(seconds: float) -> str:
+    """World seconds from now, as a person would say it."""
+    m = seconds / 60.0
+    if m < 2:
+        return "now, or nearly"
+    if m < 90:
+        return f"in about {round(m)} minutes"
+    h = m / 60.0
+    return f"in about {round(h)} hours" if h < 36 else f"in about {round(h / 24)} days"
 
 
 def call(session: Session, op: str, **kw: Any) -> Any:
@@ -1593,6 +1671,7 @@ OPS = [
     "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats",
     "invite", "grants", "revoke", "evict",
     "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
+    "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate",
     "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",

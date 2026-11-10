@@ -6,6 +6,11 @@ The version in `pyproject.toml` is 0.1.0 until the first release; until then ent
 
 ## Unreleased
 
+- The MCP tool list follows the grant: a player sees the tools a player may call, an observer its reading tools; the host's own process sees all. `invite` over MCP and on the command line (`--under`, `--types`, `--scripts`) takes `limits`.
+- `timers()` for players and minds: the next of each kind the world's meta lists as `public_timers` (the Reach: heat, dusk, night, dawn), with `when` in words and without what the timer carries. Authors, narrators and observers see every timer as before.
+- Things remember whom they were taken from: a thing that passes from one body to another by someone's act, and not as a gift, carries `taken_from` until it goes home. An author's own moves leave no mark.
+- `reclaim(thing)`: take back from an idle body where you stand what is yours (`taken_from` or `owner`), or what its standing orders give you. `perceive()` lists what you may reclaim under `reclaim`. World meta `reclaim: false` turns it off.
+- `away(give=[{"item", "to"}], answer=...)`: standing orders for your body while your seat is idle. Others see them on your card, with `idle: true`, while you are away; the answer is said once per asker per ten world minutes (`say` with `away: true`). `away()` clears them.
 - The door as plain HTTPS: `POST /op/<tool>` (and `GET /op`) beside `/mcp`, same bearer, same role check, so a pasted link plays in the session it was pasted into even when the harness loads new MCP servers only at start. The invite page says so and shows a curl line.
 - A template invite (a Keth, a guard) says on its page who the guest will be, and `seats()` on that grant shows only that template.
 - The global flags (`--db`, `--as`, `--world`, `--author`, `--observer`, `--json`) follow any subcommand again; `embody serve --as claude --author`, as `.mcp.json` writes it, had stopped starting.

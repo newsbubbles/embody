@@ -244,6 +244,10 @@ def test_http_door_needs_a_bearer_and_serves_the_grants_session():
         assert status == 401 and body["ok"] is False and "grant" in body["reason"]
         status, body = _post(url, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token="nope")
         assert status == 401
+        status, body = _post(url, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token=inv["token"])
+        names = {t["name"] for t in body["result"]["tools"]}
+        assert {"join", "say", "act", "wait", "remember", "principals"} <= names  # a player sees what a player may call
+        assert not names & {"spawn", "invite", "define_script", "guide", "load_world", "act_as"}
         status, body = _post(url, {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
                                    "params": {"name": "join", "arguments": {}}}, token=inv["token"])
         assert status == 200, body

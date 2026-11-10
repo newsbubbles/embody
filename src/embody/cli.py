@@ -407,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--log-level", dest="log_level", default=None)
 
     c = sub.add_parser("invite", help="(owner) make a grant and print the link to send: embody --author --world W invite player --entity reeve --label Sam")
-    c.add_argument("role", help="owner (the host's own agent), author, narrator, player, mind or observer")
+    c.add_argument("role", help="owner (the host's own agent), author, builder, narrator, player, mind or observer")
     c.add_argument("--entity", help="the seat kept for them (player) or the NPC they hold (mind)")
     c.add_argument("--brief", default="", help="your word to this guest alone: orders, a first goal; rides the paste and their join()")
     c.add_argument("--scope", nargs="*", default=None, help="(mind) more entities they hold")
@@ -416,6 +416,9 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--expires", type=float, help="hours until the token stops working")
     c.add_argument("--url", help="server URL for the paste (default $EMBODY_URL)")
     c.add_argument("--principal", help="their principal id (default from the label)")
+    c.add_argument("--under", help="(builder, narrator, author) the entity whose subtree the grant may change")
+    c.add_argument("--types", nargs="*", default=None, help="the types the grant may spawn (default any)")
+    c.add_argument("--scripts", help="the prefix of the grant's scripts, schemas and event kinds")
     c = sub.add_parser("grants", help="(owner) list the grants on the world, without tokens")
     c = sub.add_parser("revoke", help="(owner) end a grant")
     c.add_argument("id")
@@ -469,7 +472,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "invite":
             eng.public_url = args.url or default_url()
             r = s.invite(args.role, entity=args.entity, template=args.template, label=args.label, expires=args.expires,
-                         principal=args.principal, scope=args.scope, brief=args.brief)
+                         principal=args.principal, scope=args.scope, brief=args.brief,
+                         limits={k: v for k, v in (("under", args.under), ("types", args.types), ("scripts", args.scripts))
+                                 if v is not None} or None)
             emit(args, r, f"grant {r['id']} for {r['principal']} ({r['role']}). Send them this:\n\n{r['paste']}"
                  + (f"\n\n(What the link serves, in case they cannot fetch it:\n\n{r['page']})" if r.get("link") else ""))
         elif args.cmd == "grants":

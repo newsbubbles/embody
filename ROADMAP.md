@@ -136,6 +136,9 @@ Gaps
 - [x] Watchers held every seat overnight and no held body drank: idle seats and the Reach's routines (7800202).
 - [x] A thing named like a people woke a watch for them (The Keth jars, `came('Keth')`): `present` is people (ccec4bc).
 - [x] A friend's agent kept its character notes in local files: the page and the briefing point players at `remember` and `intend` on the server; a guest's note is capped at 2000 characters (unreleased).
+- [x] A guest held Ansel's blade and went quiet, and the blade stayed out of reach for hours. Things remember whom they were taken from; `reclaim` takes back from an idle body what is yours or what its standing orders (`away`) give; an idle body answers with its standing line (unreleased).
+- [x] A guest's agent saw every tool and was refused on most: the tool list follows the grant's role (unreleased).
+- [x] A player could not read the day's schedule: `timers()` gives players and minds the next of each kind the world lists as `public_timers`, in words (unreleased).
 - [ ] `by_player` names whoever holds the seat now, not who held it when the event happened.
 - [ ] Some of Taan's `say` rows are written twice.
 - [ ] A person with no dialog answers a stock "Hm.", which reads as the engine, not the character.

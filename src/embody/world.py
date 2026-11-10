@@ -439,6 +439,7 @@ class World:
         self.store = store
         self.id = world_id
         self._running: list[Ctx] = []  # the contexts of the scripts running now, innermost last
+        self._answered: dict[tuple[str, str], float] = {}  # (idle body, asker) -> when its standing answer was said
         row = store.get("world", None, world_id)
         if row is None:
             raise Rejected(f"no world {world_id!r}", hint="use World.create or list worlds with store.list_worlds()")
@@ -878,6 +879,14 @@ class World:
         if parent == id or parent in self.subtree_ids(id):
             raise Rejected("cannot move an entity into itself")
         old = e["parent_id"]
+        if actor is not None and old and old != parent and self._is_body(old) and self._is_body(parent):
+            # A thing that passes from one body to another without a gift remembers whom it was taken from, until it
+            # goes home; reclaim() reads it. give() marks a gift (given_by) before it moves the thing.
+            st = e["state"]
+            if st.get("taken_from") == parent:
+                st.pop("taken_from")
+            elif st.get("given_by") != old and not st.get("taken_from"):
+                st["taken_from"] = old
         e["parent_id"] = parent
         e["pos"] = self._place_in_space(parent, pos)
         self._touch(e)
@@ -886,6 +895,31 @@ class World:
                   payload={"entity": id, "to": parent})
         self.emit("moved", actor=actor, target=id, reach=1, caused_by=caused_by,
                   payload={"from": old, "to": parent})
+
+    def _is_body(self, id: str) -> bool:
+        e = self.get(id)
+        return bool(e) and self.is_a(e["type"], "creature")
+
+    def reclaimable(self, who: str) -> list[dict[str, Any]]:
+        """What `who` may take back from an idle body standing where it stands: a thing whose `owner` it is, a thing
+        taken from it, or a thing that body's standing orders give it. World meta `reclaim: false` turns it off."""
+        if self._row["meta"].get("reclaim") is False:
+            return []
+        me = self.get(who)
+        if not me or not me["parent_id"]:
+            return []
+        out = []
+        for h in self.children(me["parent_id"]):
+            if h["id"] == who or not self.is_a(h["type"], "creature") or not self.idle(h["id"]):
+                continue
+            gives = (h["state"].get("standing_orders") or {}).get("give") or []
+            for t in self.children(h["id"]):
+                st = t["state"]
+                why = ("yours" if who in (st.get("owner"), st.get("taken_from")) else
+                       "their orders" if any(_order_gives(o, t, me) for o in gives) else None)
+                if why:
+                    out.append({"id": t["id"], "name": t["name"], "from": h["id"], "from_name": h["name"], "why": why})
+        return out
 
     def destroy(self, id: str, actor: str | None = None, caused_by: int | None = None) -> None:
         e = self.need(id)
@@ -1421,7 +1455,24 @@ class World:
             reach = reach - 1 if reach > 0 else reach
         else:
             target = who
-        return self.emit("say", actor=who, target=target, reach=reach, payload=payload, caused_by=caused_by)
+        ev = self.emit("say", actor=who, target=target, reach=reach, payload=payload, caused_by=caused_by)
+        if to and to != who:
+            self._answer_away(to, who, ev["seq"])
+        return ev
+
+    def _answer_away(self, body: str, asker: str, caused_by: int) -> None:
+        """A body whose seat is idle answers whoever speaks to it with its standing `answer`, once per asker per
+        ten world minutes, so two idle bodies never talk each other round."""
+        e = self.get(body)
+        line = ((e or {}).get("state", {}).get("standing_orders") or {}).get("answer")
+        if not line or not self.embodied(body) or not self.idle(body):
+            return
+        last = self._answered.get((body, asker))
+        if last is not None and self.t - last < 600:
+            return
+        self._answered[(body, asker)] = self.t
+        self.emit("say", actor=body, target=asker, reach=1, caused_by=caused_by,
+                  payload={"text": str(line), "to": asker, "away": True})
 
     # ---- principals -----------------------------------------------------------
 
@@ -1698,6 +1749,15 @@ class EventView(ScriptObject):
         self.target = ev["target_id"]
         self.payload = dict(ev["payload"])
         self.path = list(ev["path"])
+
+
+def _order_gives(order: Any, thing: dict[str, Any], to: dict[str, Any]) -> bool:
+    """A standing `give` order, {"item": <name or id>, "to": <name, id or "anyone">}, covers this thing for this body."""
+    if not isinstance(order, dict):
+        return False
+    item, whom = str(order.get("item", "")).lower(), str(order.get("to", "anyone")).lower()
+    return (item in (thing["id"].lower(), (thing["name"] or "").lower())
+            and whom in ("anyone", to["id"].lower(), (to["name"] or "").lower()))
 
 
 def _event_view(ev: dict[str, Any]) -> EventView:
