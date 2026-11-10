@@ -1335,7 +1335,7 @@ class World:
                "entity_id": entity_id,
                "cursor_seq": ecur if ecur is not None else (old["cursor_seq"] if old else self.store.next_seq(self.id) - 1),
                "role": role or (old.get("role") if old else None), "grant_id": grant_id or (old.get("grant_id") if old else None),
-               "last_seen": now}
+               "last_seen": now, "last_act": now}
         self.store.put("principal", row)
         self.emit("embodied", actor=entity_id, target=entity_id, reach=1,
                   payload={"principal": principal_id, "as": kind})
@@ -1363,11 +1363,20 @@ class World:
             return False
         return now - float(p["last_seen"]) > self.claim_lapse()
 
-    def touch(self, principal_id: str, now: float) -> None:
+    def touch(self, principal_id: str, now: float, acted: bool = False) -> None:
+        """A sign of life keeps the seat (`last_seen`); a deed (`acted`: an act, a line said) also keeps the world's
+        clock awake (`last_act`, see Engine.settle_clock)."""
         p = self.store.get("principal", self.id, principal_id)
-        if p and (p.get("last_seen") is None or now - float(p["last_seen"]) >= 5.0):
+        if p and (acted or p.get("last_seen") is None or now - float(p["last_seen"]) >= 5.0):
             p["last_seen"] = now
+            if acted:
+                p["last_act"] = now
             self.store.put("principal", p)
+
+    def rest_after(self) -> float:
+        """Real seconds after a player's last deed when a world that runs while occupied rests (world meta
+        `rest_after`, default 900). A seat held by a reader or a mind keeps its seat, not the clock."""
+        return float(self._row["meta"].get("rest_after", 900.0))
 
     def release_lapsed(self, now: float) -> list[str]:
         """Seats whose invitee went quiet past the lapse: released, so their bodies run on behaviors again."""

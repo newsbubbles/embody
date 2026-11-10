@@ -138,11 +138,18 @@ class Engine:
         return w.step(dt) if dt > 0 else []
 
     def settle_clock(self, w: World) -> bool:
-        """A world whose meta says `run_when_occupied` runs while a grant holder is in a body and waits, paused, when
-        none is. The host's own sessions do not count: they are the keyboard, not a guest. Returns running."""
+        """A world whose meta says `run_when_occupied` runs while a guest is playing and rests, paused, when none is.
+        Playing is a deed (an act or a line said) within the world's `rest_after` (default a quarter hour) by a grant
+        holder in a body who is not a mind: a seat kept warm by reading, waiting or watching keeps the seat, not the
+        clock, and minds follow the players' time rather than make it, so a night with every seat held and nobody at
+        the keyboard costs the bodies nothing. The host's own sessions do not count: they are the keyboard, not a
+        guest. Returns running."""
         if not w.meta().get("run_when_occupied"):
             return bool(w.clock()["running"])
-        occupied = any(p.get("grant_id") and p.get("entity_id") for p in w.principals())
+        now, rest = self.wall(), w.rest_after()
+        occupied = any(p.get("grant_id") and p.get("entity_id") and p.get("role") != MIND
+                       and p.get("last_act") is not None and now - float(p["last_act"]) <= rest
+                       for p in w.principals())
         if occupied != bool(w.clock()["running"]):
             w.set_clock(running=occupied)
             if occupied:
@@ -277,6 +284,12 @@ class Session:
             raise Rejected(f"the entity you embodied ({p['entity_id']}) no longer exists",
                            hint="join another entity")
         return p["entity_id"]
+
+    def _acted(self) -> None:
+        """A guest's deed: keeps the seat and wakes a resting world before the deed lands, so it lands in running time."""
+        if self.grant is not None and self.world_id:
+            self.world.touch(self.pid, self.engine.wall(), acted=True)
+            self.engine.settle_clock(self.world)
 
     def _need(self, cap: str) -> None:
         """The author's hand: a narrator has it for what its role lets through (grants.ROLE_OPS keeps schemas,
@@ -897,6 +910,7 @@ class Session:
         while you were deciding), so a player or a mind never has to perceive again to catch up."""
         self._tick()
         me = self._me()
+        self._acted()
         p = self._principal()
         since = p["cursor_seq"] if p else self.world.store.next_seq(self.world.id) - 1
         tid = self._resolve(target) if target else None
@@ -939,6 +953,7 @@ class Session:
         minds are capped: one line is at most _SAY_MAX characters, and at most _SAY_BURST lines a minute."""
         self._tick()
         me = self._me()
+        self._acted()
         if not self._privileged():
             if len(text) > _SAY_MAX:
                 raise Rejected(f"a line is at most {_SAY_MAX} characters; this one is {len(text)}",
