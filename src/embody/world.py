@@ -59,6 +59,11 @@ class StateView(ScriptObject):
         return ent["state"].get(name)
 
     def _script_set(self, name: str, value: Any) -> None:
+        ctx = self._w._running[-1] if self._w._running else None
+        if ctx is not None and ctx._limits:
+            ctx._hold(self._id)
+            if name == "canon":
+                raise Rejected("canon is the owner's mark", hint="only the world's owner marks or lifts canon")
         self._w.patch(self._id, {name: value})
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -178,6 +183,22 @@ def _deep_merge(base: dict[str, Any], top: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+LIMITS_HEAD = "# limits: "
+
+
+def limits_of(source: str) -> dict[str, Any] | None:
+    """The limits a script carries on its first line (`# limits: {...}`), written there when a limited grant defined
+    it, so they travel with the source through files, saves and rebuilds."""
+    first = source.split("\n", 1)[0]
+    if not first.startswith(LIMITS_HEAD):
+        return None
+    try:
+        d = json.loads(first[len(LIMITS_HEAD):])
+    except ValueError:
+        raise Rejected("the script's limits line is not JSON", hint='# limits: {"under": "e12", "scripts": "bob_"}') from None
+    return d if isinstance(d, dict) and d else None
+
+
 def _ev(world: "World", x: Any) -> Any:
     """Normalize an entity reference from a script to an id string."""
     if isinstance(x, EntityView):
@@ -209,6 +230,43 @@ class Ctx(ScriptObject):
         self.rand = RandView(seed)
         self.logs: list[str] = []
         self.stopped = False
+        self._limits: dict[str, Any] | None = None  # set from the script before it runs
+        self._consent = False  # a verb someone chose: its script may touch them and what they carry
+
+    def run(self, s: Script, fn: str, args: list[Any], fuel: int) -> Any:
+        """Run one of a script's functions with this context. The script's limits ride the context, and the world
+        knows which context is running, so a write through an entity's state is held too."""
+        self._limits = s.limits
+        self._w._running.append(self)
+        try:
+            return s.call(fn, args, fuel=fuel)
+        finally:
+            self._w._running.pop()
+
+    def _hold(self, *ids: Any, any_: bool = False, kind: str | None = None) -> None:
+        """A script defined under a grant's limits writes only inside them: under its subtree, never on canon, its
+        event kinds in its own namespace. A verb's script may also touch the one who chose the verb."""
+        lim = self._limits
+        if not lim:
+            return
+        w = self._w
+
+        def ok(i: Any) -> bool:
+            if i is None or w.get(i) is None:
+                return False
+            if w.get(i)["state"].get("canon"):
+                return False
+            if self._consent and self._actor and w.within(i, self._actor):
+                return True
+            return not lim.get("under") or w.within(i, lim["under"])
+
+        ids = [_ev(w, i) for i in ids]
+        if ids and not (any(ok(i) for i in ids) if any_ else all(ok(i) for i in ids)):
+            raise Rejected(f"this script's hand reaches only under {lim.get('under')}, and never canon",
+                           hint="a script defined by a limited grant writes inside that grant's limits")
+        if kind is not None and not str(kind).startswith(lim.get("scripts") or "\0"):
+            raise Rejected(f"this script makes events in its own namespace only ({lim.get('scripts')}...), not {kind!r}",
+                           hint=f"name the kind {lim.get('scripts')}{kind}")
 
     # -- identity
     @property
@@ -267,40 +325,58 @@ class Ctx(ScriptObject):
     def patch(self, id: Any, changes: dict[str, Any] | None = None, **kw: Any) -> None:
         ch = dict(changes or {})
         ch.update(kw)
+        self._hold(id)
+        if self._limits and "canon" in ch:
+            raise Rejected("canon is the owner's mark", hint="only the world's owner marks or lifts canon")
         self._w.patch(_ev(self._w, id), ch, actor=self._actor, caused_by=self._caused_by)
 
     def spawn(self, type: str, parent: Any, name: str = "", state: dict[str, Any] | None = None,
               pos: Any = None) -> EntityView:
+        self._hold(parent)
+        lim = self._limits or {}
+        if lim and not self._w.may_spawn(type, lim):
+            raise Rejected(f"this script may not spawn a {type}", hint="spawn a type its grant's limits list")
+        if lim and "canon" in (state or {}):
+            raise Rejected("canon is the owner's mark", hint="only the world's owner marks or lifts canon")
         eid = self._w.spawn(type, _ev(self._w, parent), name=name, state=state, pos=pos,
                             actor=self._actor, caused_by=self._caused_by)
         return EntityView(self._w, eid)
 
     def move(self, id: Any, parent: Any, pos: Any = None) -> None:
+        self._hold(id, parent)
         self._w.move(_ev(self._w, id), _ev(self._w, parent), pos=pos, actor=self._actor, caused_by=self._caused_by)
 
     def set_pos(self, id: Any, pos: Any) -> None:
+        self._hold(id)
         self._w.set_pos(_ev(self._w, id), pos, actor=self._actor, caused_by=self._caused_by)
 
     def destroy(self, id: Any) -> None:
+        self._hold(id)
         self._w.destroy(_ev(self._w, id), actor=self._actor, caused_by=self._caused_by)
 
     def link(self, source: Any, target: Any, relation: str, data: dict[str, Any] | None = None, **kw: Any) -> str:
         d = dict(data or {})
         d.update(kw)
+        self._hold(source, target, any_=True)
         return self._w.link(_ev(self._w, source), _ev(self._w, target), relation, d,
                             actor=self._actor, caused_by=self._caused_by)
 
     def unlink(self, source: Any, target: Any, relation: str) -> int:
+        self._hold(source, target, any_=True)
         return self._w.unlink(_ev(self._w, source), _ev(self._w, target), relation,
                               actor=self._actor, caused_by=self._caused_by)
 
     def relate(self, relation: str, participants: list[Any], data: dict[str, Any] | None = None, **kw: Any) -> str:
         d = dict(data or {})
         d.update(kw)
+        self._hold(*participants)
         return self._w.relate(relation, [_ev(self._w, p) for p in participants], d,
                               actor=self._actor, caused_by=self._caused_by)
 
     def unrelate(self, id: str) -> None:
+        if self._limits:
+            h = self._w.store.get("hyperedge", self._w.id, id)
+            self._hold(*(h["participants"] if h else [None]))
         self._w.unrelate(id, actor=self._actor, caused_by=self._caused_by)
 
     def emit(self, kind: str, target: Any = None, reach: int = 1, payload: dict[str, Any] | None = None,
@@ -308,6 +384,7 @@ class Ctx(ScriptObject):
         p = dict(payload or {})
         p.update(kw)
         tgt = _ev(self._w, target) if target is not None else (self._owner or self._actor)
+        self._hold(*([tgt] if tgt else []), kind=kind)
         return self._w.emit(kind, actor=self._actor, target=tgt, reach=reach, payload=p,
                             caused_by=self._caused_by)["seq"]
 
@@ -321,15 +398,25 @@ class Ctx(ScriptObject):
         p = dict(payload or {})
         p.update(kw)
         tgt = _ev(self._w, target) if target is not None else (self._owner or self._actor)
+        self._hold(tgt, kind=kind)
         return self._w.schedule(after, kind, entity=tgt, payload=p, every=every, caused_by=self._caused_by)
 
     def set_rule(self, entity: Any, script: str, kinds: list[str] | None = None) -> None:
+        self._hold(entity)
+        self._hold_script(script)
         self._w.set_rule(_ev(self._w, entity), script, kinds, actor=self._actor, caused_by=self._caused_by)
 
     def clear_rule(self, entity: Any, script: str) -> None:
+        self._hold(entity)
+        self._hold_script(script)
         self._w.clear_rule(_ev(self._w, entity), script, actor=self._actor, caused_by=self._caused_by)
 
     # -- control
+    def _hold_script(self, script: str) -> None:
+        pre = (self._limits or {}).get("scripts")
+        if self._limits and not (pre and str(script).startswith(pre)):
+            raise Rejected(f"this script sets rules from its own namespace only ({pre}...)", hint=f"a script named {pre}...")
+
     def reject(self, reason: str, hint: str | None = None) -> None:
         raise Rejected(str(reason), hint)
 
@@ -351,6 +438,7 @@ class World:
     def __init__(self, store: Store, world_id: str):
         self.store = store
         self.id = world_id
+        self._running: list[Ctx] = []  # the contexts of the scripts running now, innermost last
         row = store.get("world", None, world_id)
         if row is None:
             raise Rejected(f"no world {world_id!r}", hint="use World.create or list worlds with store.list_worlds()")
@@ -470,6 +558,7 @@ class World:
 
     def define_script(self, id: str, source: str, doc: str = "") -> dict[str, Any]:
         Script(source, name=id)  # validate now, fail loudly
+        limits_of(source)
         old = self.store.get("script", self.id, id)
         row = {"world_id": self.id, "id": id, "source": source, "doc": doc,
                "version": (old["version"] + 1) if old else 1}
@@ -485,6 +574,7 @@ class World:
         s = self._script_cache.get(key)
         if s is None:
             s = Script(row["source"], name=id)
+            s.limits = limits_of(row["source"])
             self._script_cache[key] = s
         return s
 
@@ -566,6 +656,19 @@ class World:
         if not e["parent_id"]:
             return []
         return [c for c in self.children(e["parent_id"], type) if c["id"] != id]
+
+    def within(self, id: str, under: str) -> bool:
+        """id is under (or is) the entity `under`."""
+        return id == under or under in self.ancestors(id)
+
+    def may_spawn(self, type: str, limits: dict[str, Any]) -> bool:
+        """What a limited grant may make: any type when its limits list none, else one that is_a a listed type, or
+        a schema in its own namespace."""
+        types = limits.get("types")
+        pre = limits.get("scripts")
+        if pre and type.startswith(pre):
+            return True
+        return types is None or any(self.is_a(type, t) for t in types)
 
     def ancestors(self, id: str) -> list[str]:
         """Parent, grandparent, ... root."""
@@ -927,7 +1030,7 @@ class World:
                           params=params, event=_event_view(ev), verb=verb, caused_by=ev["seq"],
                           seed=self._seed_for(ev["seq"], node))
                 try:
-                    s.call(fn, [ctx, _event_view(ev)], fuel=20_000)
+                    ctx.run(s, fn, [ctx, _event_view(ev)], fuel=20_000)
                 except _Stop:
                     logs.extend(ctx.logs)
                     return logs
@@ -1063,8 +1166,9 @@ class World:
         if s.has("check"):
             ctx = Ctx(self, actor=actor_id, target=target_id, owner=owner, params=params, event=None, verb=verb,
                       caused_by=None, seed=self._seed_for(self.store.next_seq(self.id), "check"))
+            ctx._consent = True
             try:
-                res = s.call("check", [ctx], fuel=5_000)
+                res = ctx.run(s, "check", [ctx], fuel=5_000)
             except ScriptError as e:
                 raise Rejected(f"check for {verb!r} failed: {e.reason}", hint=e.hint) from None
             if res is False:
@@ -1087,8 +1191,9 @@ class World:
                            payload={"verb": verb, "params": params, "target": target_id})
             ctx = Ctx(self, actor=actor_id, target=target_id, owner=owner, params=params, event=_event_view(ev),
                       verb=verb, caused_by=ev["seq"], seed=self._seed_for(ev["seq"], "apply"))
+            ctx._consent = True
             try:
-                result = s.call("apply", [ctx], fuel=50_000)
+                result = ctx.run(s, "apply", [ctx], fuel=50_000)
             except ScriptError as e:
                 raise Rejected(f"{verb} failed while applying: {e.reason}", hint=e.hint) from None
             logs.extend(ctx.logs)
@@ -1260,7 +1365,7 @@ class World:
                       caused_by=None, seed=self._seed_for(seq, f"tick:{item['id']}:{self.t}"))
             self.store.begin()
             try:
-                s.call("tick", [ctx], fuel=50_000)
+                ctx.run(s, "tick", [ctx], fuel=50_000)
                 self.store.commit()
             except (ScriptError, Rejected) as e:
                 self.store.rollback()
@@ -1274,9 +1379,10 @@ class World:
             ctx = Ctx(self, actor=p.get("actor"), target=p.get("target"), owner=eid, params=p.get("params"),
                       event=_event_view(ev), verb=p.get("verb"), caused_by=ev["seq"],
                       seed=self._seed_for(ev["seq"], "finish"))
+            ctx._consent = True
             self.store.begin()
             try:
-                s.call("finish", [ctx], fuel=50_000)
+                ctx.run(s, "finish", [ctx], fuel=50_000)
                 self.store.commit()
             except (ScriptError, Rejected) as e:
                 self.store.rollback()

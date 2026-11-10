@@ -9,6 +9,10 @@ The version in `pyproject.toml` is 0.1.0 until the first release; until then ent
 - The door as plain HTTPS: `POST /op/<tool>` (and `GET /op`) beside `/mcp`, same bearer, same role check, so a pasted link plays in the session it was pasted into even when the harness loads new MCP servers only at start. The invite page says so and shows a curl line.
 - A template invite (a Keth, a guard) says on its page who the guest will be, and `seats()` on that grant shows only that template.
 - The global flags (`--db`, `--as`, `--world`, `--author`, `--observer`, `--json`) follow any subcommand again; `embody serve --as claude --author`, as `.mcp.json` writes it, had stopped starting.
+- Grant limits: `invite(..., limits={"under": ..., "types": [...], "scripts": "prefix_"})` for an author, narrator or builder. Every write op checks them; a script the grant defines carries them on its first line (`# limits: {...}`) and is held to them whoever's act runs it, including writes through `entity.state`. A verb's script may also touch the one who chose the verb.
+- The `builder` role: an author's hand under one entity (`limits.under` is required), without create, fork, save, restore, mirror or setting the clock.
+- Canon: an entity whose state says `canon: true` refuses patch, move and destroy (of it or anything holding it) from every grant but the owner, and from limited scripts; only the owner sets or lifts the mark.
+- The page and the join briefing say the character's notes go on the server, and that the agent's own memory of its human stays its own.
 - The skill, AGENTS.md and CLAUDE.md open with what a pasted link means: a hosted world, played in this session, no repository needed.
 
 ## 2026-11-10

@@ -10,6 +10,7 @@ from __future__ import annotations
 import collections
 import contextlib
 import functools
+import inspect
 import json
 import secrets
 import threading
@@ -17,11 +18,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from .grants import (LINK_HOURS, link_for, new_code, page, AUTHOR_ROLE, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, OWNER, PLAYER, ROLES, ROLE_DOC,
+from .grants import (LINK_HOURS, link_for, new_code, page, AUTHOR_ROLE, BUILDER, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, OWNER, PLAYER, ROLES, ROLE_DOC,
                      active, allowed, caps_for, new_token, paste, principal_id_for, role_for, token_hash)
 from .script import Script, ScriptError
 from .store import Store
-from .world import Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
+from .world import LIMITS_HEAD, Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
 from .workspace import Workspace, restore_world, save_world
 
 AUTHOR = "author"
@@ -236,6 +237,7 @@ class Session:
             self.role = role_for(self.capabilities)
         self.scope = list(scope or [])
         self.grant = grant
+        self.limits: dict[str, Any] = dict((grant or {}).get("limits") or {})
         self.default_fuel = 20_000
         self._building = False
 
@@ -292,6 +294,84 @@ class Session:
             return
         raise Rejected(f"this op needs the {cap!r} capability; you have {self.capabilities or 'none'}",
                        hint="connect with --as author to build worlds; embodied principals act through act()")
+
+    def _hold(self, op: str, args: dict[str, Any]) -> None:
+        """Canon and limits, before a write runs. Canon: an entity whose state says `canon` is the owner's; no other
+        role patches, moves or destroys it, and only the owner sets or lifts the mark. Limits (a grant's `under`,
+        `types`, `scripts`): the write lands inside them, and a script it defines carries them in its first line."""
+        w = self.world
+        ent = args.get("entity") if op in ("patch", "move", "destroy") else None
+        if ent is not None:
+            eid = self._resolve(ent)
+            hit = [x for x in (w.subtree_ids(eid) if op == "destroy" else [eid]) if (w.get(x) or {}).get("state", {}).get("canon")]
+            if hit:
+                raise Rejected(f"{w.need(hit[0])['name']} is canon: the owner's to change", hint="build beside it, or ask the owner")
+        if "canon" in ((args.get("changes") if op == "patch" else args.get("state") if op == "spawn" else None) or {}):
+            raise Rejected("canon is the owner's mark", hint="only the world's owner sets or lifts canon")
+        lim = self.limits
+        if not lim:
+            return
+        under, pre = lim.get("under"), lim.get("scripts") or ""
+        where = w.need(under)["name"] if under and w.get(under) else "nowhere"
+
+        def need(*refs: Any, any_: bool = False) -> None:
+            ok = [r is not None and (not under or w.within(self._resolve(r), under)) for r in refs]
+            if not (any(ok) if any_ else all(ok)):
+                raise Rejected(f"your grant reaches only under {where}", hint=f"work inside it: find(under='{where}')")
+
+        def named(x: Any, what: str) -> None:
+            if not str(x).startswith(pre):
+                raise Rejected(f"your {what} start with {pre}", hint=f"call it {pre}{x}")
+
+        if op in ("create_world", "fork_world", "save", "restore", "mirror"):
+            raise Rejected(f"{op} reaches the whole world; your grant is limited", hint="ask the owner")
+        if op == "clock" and any(args.get(k) is not None for k in ("run", "rate", "step", "turn")):
+            raise Rejected("the clock is the whole world's; your grant is limited", hint="clock() with no arguments reads it")
+        if op == "spawn":
+            need(args["parent"])
+            if not w.may_spawn(args["type"], lim):
+                raise Rejected(f"your grant may not make a {args['type']}", hint="a type its limits list, or a schema of yours",
+                               alternatives=list(lim.get("types") or []))
+        elif op in ("patch", "destroy", "act_as", "say_as"):
+            need(args["entity"])
+        elif op == "move":
+            need(args["entity"], args["parent"])
+        elif op in ("link", "unlink"):
+            need(args["source"], args["target"], any_=True)
+        elif op == "connect":
+            need(args["a"], args["b"], any_=True)
+        elif op == "relate":
+            need(*args["participants"])
+        elif op == "unrelate":
+            h = w.store.get("hyperedge", w.id, args["id"])
+            if h:
+                need(*h["participants"])
+        elif op == "schedule":
+            need(args.get("entity"))
+            named(args["kind"], "event kinds")
+        elif op == "unschedule":
+            item = [p for p in w.pending() if p["id"] == args["id"]]
+            if item:
+                need(item[0].get("entity_id"))
+        elif op in ("remember", "intend") and args.get("entity"):
+            need(args["entity"])
+        elif op in ("set_rule", "clear_rule"):
+            need(args["entity"])
+            named(args["script"], "scripts")
+        elif op == "define_script":
+            named(args["id"], "scripts")
+            src = args["source"]
+            if src.startswith(LIMITS_HEAD):
+                src = src.split("\n", 1)[1] if "\n" in src else ""
+            args["source"] = LIMITS_HEAD + json.dumps(lim, sort_keys=True) + "\n" + src
+        elif op == "define_schema":
+            named(args["id"], "schemas")
+            kw = args.get("kw") or {}
+            if kw.get("extends") and not w.may_spawn(kw["extends"], lim):
+                raise Rejected(f"your schemas may not extend {kw['extends']}", hint="extend a type your limits list")
+            for a in list((kw.get("actions") or {}).values()) + list(kw.get("listeners") or []) + list(kw.get("behaviors") or []):
+                if isinstance(a, dict) and "script" in a:
+                    named(a["script"], "scripts")
 
     def _allow(self, op: str) -> None:
         if allowed(self.role, op):
@@ -555,8 +635,8 @@ class Session:
         if self.role == PLAYER:
             how.insert(0, "this briefing is for you, not for them: say nothing of seats, grants, tokens or tools; open in the "
                           "world, with where they stand, who is near and what the body feels, then ask what they do")
-            how.append("keep the character's notes on the server, not in files: remember(text) and intend(text); recall() "
-                       "reads them back, next session or another machine")
+            how.append("keep the character's notes on the server: remember(text) and intend(text); recall() reads them back, "
+                       "next session or another machine (your own memory of your human stays yours)")
         if self.role == MIND:
             how.insert(0, "your card carries the secret brief: who you are and what you want; remember() and intend() keep your notes")
         out = {"role": self.role, "role_doc": ROLE_DOC.get(self.role, ""), "world": w.name, "you": ent["name"] if ent else eid,
@@ -575,11 +655,13 @@ class Session:
 
     def invite(self, role: str, entity: str | None = None, template: str | None = None, label: str = "",
                expires: float | None = None, principal: str | None = None,
-               scope: list[str] | None = None, brief: str = "") -> dict[str, Any]:
-        """(owner) A grant that travels as a token. role: author, narrator, player, mind or observer. entity: the
+               scope: list[str] | None = None, brief: str = "", limits: dict[str, Any] | None = None) -> dict[str, Any]:
+        """(owner) A grant that travels as a token. role: author, builder, narrator, player, mind or observer. entity: the
         seat kept for this invite (player) or the NPC it holds (mind; scope=[...] for more). template: the character
         it may make. expires: hours. brief: the host's word to this guest alone (their orders, their first goal); it
-        rides the page and the briefing join() returns. Returns the token once, the link whose page carries it (good
+        rides the page and the briefing join() returns. limits (builder, narrator, author): under=<entity>, the part
+        of the world it may change; types=[...], what it may spawn; scripts=<prefix>, how its scripts and schemas are
+        named (default: from the principal). A builder needs under. Returns the token once, the link whose page carries it (good
         once, for a day) and the paste: the link with a line for the friend. Without a public URL the paste is the page."""
         self._tick()
         w = self.world
@@ -600,6 +682,7 @@ class Session:
         pid = principal or principal_id_for(label, role)
         if w.principal(pid) or w.store.query("grants", "world_id=? AND principal_id=? AND revoked=0", (w.id, pid), limit=1):
             raise Rejected(f"principal {pid!r} is taken", hint="another label or principal=")
+        lim, note = self._limits_for(role, limits, pid)
         token = new_token()
         now = self.engine.wall()
         url = self.engine.public_url or ""
@@ -612,21 +695,55 @@ class Session:
         text = page(w.name, role, url, token, seat=(w.get(eid)["name"] if eid and role != MIND else None),
                     scope_names=names, rate=ck["rate"] if ck["running"] or waits else 0.0, waits=waits,
                     briefing=(f"From the host, for you alone: {brief}" if brief else ""), template=template,
-                    template_doc=tdoc)
+                    template_doc=tdoc, limits_note=note)
         exp = (now + float(expires) * 3600.0) if expires else None
         code_exp = min(now + LINK_HOURS * 3600.0, exp) if exp else now + LINK_HOURS * 3600.0
         row = {"world_id": w.id, "id": "g" + secrets.token_hex(4), "principal_id": pid, "role": role, "scope": sc,
                "entity_id": eid, "template": template, "label": label, "token_hash": token_hash(token),
                "created": now, "expires": exp, "revoked": 0, "last_used": None, "brief": brief or None,
                "code_hash": token_hash(code) if link else None, "code_expires": code_exp if link else None,
-               "page": text if link else None}
+               "page": text if link else None, "limits": lim}
         w.store.put("grants", row)
-        return {"ok": True, "id": row["id"], "principal": pid, "role": role, "entity": eid, "scope": sc,
+        return {"ok": True, "id": row["id"], "principal": pid, "role": role, "entity": eid, "scope": sc, "limits": lim,
                 "template": template, "expires": row["expires"], "token": token, "url": self.engine.public_url,
                 "link": link, "link_expires": row["code_expires"], "paste": paste(w.name, role, link, text, label=label),
                 "page": text,
                 "hint": ("send them the paste: the link works once and for a day" if link else
                          "no public URL, so no link: send them the paste whole") + "; grants() lists grants without the token"}
+
+    def _limits_for(self, role: str, limits: dict[str, Any] | None, pid: str) -> tuple[dict[str, Any] | None, str]:
+        """Check an invite's limits and say them in a line for its page."""
+        if not limits and role != BUILDER:
+            return None, ""
+        w = self.world
+        lim = dict(limits or {})
+        bad = sorted(set(lim) - {"under", "types", "scripts"})
+        if bad:
+            raise Rejected(f"limits know under, types and scripts, not {bad}",
+                           hint="limits={'under': 'The Market Row', 'types': ['thing'], 'scripts': 'mara_'}")
+        if role not in (AUTHOR_ROLE, BUILDER, NARRATOR_ROLE):
+            raise Rejected(f"limits narrow a role that writes (builder, narrator, author), not a {role}",
+                           hint="a player or a mind is already held to its seat")
+        if role == BUILDER and not lim.get("under"):
+            raise Rejected("a builder builds under something", hint="limits={'under': 'The Market Row'}")
+        if lim.get("under"):
+            lim["under"] = self._resolve(lim["under"])
+        if lim.get("types") is not None:
+            lim["types"] = [w.schema(t)["id"] for t in lim["types"]]
+        pre = lim.get("scripts") or (pid.replace("-", "_") + "_")
+        if not (isinstance(pre, str) and pre[:1].isalpha() and pre.replace("_", "").isalnum() and pre.islower()):
+            raise Rejected(f"a script prefix is lower-case letters, digits and _, not {pre!r}", hint="scripts='mara_'")
+        for g in w.store.query("grants", "world_id=? AND revoked=0", (w.id,)):
+            other = (g.get("limits") or {}).get("scripts")
+            if other and active(g, self.engine.wall()) and (other.startswith(pre) or pre.startswith(other)):
+                raise Rejected(f"the prefix {pre!r} overlaps {other!r}, grant {g['id']}'s", hint="another scripts= prefix")
+        lim["scripts"] = pre
+        where = w.need(lim["under"])["name"] if lim.get("under") else "the whole world"
+        note = (f"   Your hand reaches {('under ' + where) if lim.get('under') else where} and what it holds; the rest you "
+                f"may read. You may spawn {', '.join(lim['types']) if lim.get('types') is not None else 'any type'}"
+                f" and the schemas you define. Your scripts, schemas and event kinds start with {pre}, and they keep "
+                f"your limits when they run. What the owner marked canon stays as it is.")
+        return lim, note
 
     def grants(self) -> list[dict[str, Any]]:
         """(owner) Every grant on this world, without the tokens."""
@@ -1491,10 +1608,23 @@ def allowed_ops(role: str) -> frozenset[str]:
     return ROLE_OPS.get(role, frozenset())
 
 
+# Ops that write where canon and a grant's limits are checked before they run (Session._hold).
+_HELD = frozenset({"spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "schedule",
+                   "unschedule", "act_as", "say_as", "remember", "intend", "set_rule", "clear_rule", "define_script",
+                   "define_schema", "clock", "create_world", "fork_world", "save", "restore", "mirror"})
+
+
 def _guard(name: str, fn: Callable[..., Any]) -> Callable[..., Any]:
+    sig = inspect.signature(fn)
+
     @functools.wraps(fn)
     def inner(self: Session, *a: Any, **kw: Any) -> Any:
         self._allow(name)
+        if name in _HELD and self.world_id and (self.limits or self.role != OWNER):
+            ba = sig.bind(self, *a, **kw)
+            ba.apply_defaults()
+            self._hold(name, ba.arguments)
+            return fn(*ba.args, **ba.kwargs)
         return fn(self, *a, **kw)
     return inner
 

@@ -16,7 +16,8 @@ import time
 from typing import Any
 
 OWNER, AUTHOR_ROLE, NARRATOR, PLAYER, MIND, OBSERVER_ROLE = "owner", "author", "narrator", "player", "mind", "observer"
-ROLES = (OWNER, AUTHOR_ROLE, NARRATOR, PLAYER, MIND, OBSERVER_ROLE)
+BUILDER = "builder"
+ROLES = (OWNER, AUTHOR_ROLE, BUILDER, NARRATOR, PLAYER, MIND, OBSERVER_ROLE)
 
 # Ops by what they are for. A role is a union of these.
 _ANYONE = {"worlds", "use", "summary", "seats", "leave", "clock"}
@@ -27,10 +28,13 @@ _NARRATE = {"act_as", "say_as", "timers", "spawn", "patch", "move", "destroy", "
 _AUTHOR = _NARRATE | _WATCH | {"create_world", "fork_world", "save", "restore", "define_schema", "define_script",
                                "set_rule", "clear_rule", "mirror"}
 _OWN = _AUTHOR | {"invite", "grants", "revoke", "evict"}
+# The ops that reach the whole world at once, never a builder's: a builder works inside its plot while the world plays.
+_WORLDWIDE = {"create_world", "fork_world", "save", "restore", "mirror"}
 
 ROLE_OPS: dict[str, frozenset[str]] = {
     OWNER: frozenset(_ANYONE | _PLAY | _OWN),
     AUTHOR_ROLE: frozenset(_ANYONE | _PLAY | _AUTHOR),
+    BUILDER: frozenset(_ANYONE | _PLAY | (_AUTHOR - _WORLDWIDE)),
     NARRATOR: frozenset(_ANYONE | _PLAY | _WATCH | _NARRATE),
     PLAYER: frozenset(_ANYONE | _PLAY),
     MIND: frozenset(_ANYONE | _PLAY),
@@ -40,7 +44,8 @@ ROLE_OPS: dict[str, frozenset[str]] = {
 ROLE_DOC = {
     OWNER: "everything, including invites and grants",
     AUTHOR_ROLE: "schemas, scripts, spawn, rules, the clock, and driving NPCs",
-    NARRATOR: "drive NPCs with act_as and say_as, set the clock, spawn under the world's fill policy; no schemas or scripts",
+    BUILDER: "an author's hand inside one part of the world (its limits: under, types, scripts), while the world plays",
+    NARRATOR: "drive NPCs with act_as and say_as, set the clock, spawn and patch (inside the grant's limits, if it has any); no schemas or scripts",
     PLAYER: "one seat: your own eyes, your own deeds",
     MIND: "the NPCs your grant names: their eyes, their secret brief and memory, nothing of anyone else's",
     OBSERVER_ROLE: "read everything, write nothing",
@@ -51,7 +56,7 @@ CAP_AUTHOR, CAP_NARRATOR, CAP_OBSERVER = "author", "narrator", "observer"
 
 
 def caps_for(role: str) -> list[str]:
-    return {OWNER: [CAP_AUTHOR], AUTHOR_ROLE: [CAP_AUTHOR], NARRATOR: [CAP_NARRATOR],
+    return {OWNER: [CAP_AUTHOR], AUTHOR_ROLE: [CAP_AUTHOR], BUILDER: [CAP_NARRATOR], NARRATOR: [CAP_NARRATOR],
             OBSERVER_ROLE: [CAP_OBSERVER]}.get(role, [])
 
 
@@ -153,7 +158,7 @@ def paste(world_name: str, role: str, link: str | None, page_text: str, label: s
 
 def page(world_name: str, role: str, url: str, token: str, seat: str | None = None,
          scope_names: list[str] | None = None, rate: float = 1.0, briefing: str = "", waits: bool = False,
-         template: str | None = None, template_doc: str = "") -> str:
+         template: str | None = None, template_doc: str = "", limits_note: str = "") -> str:
     """The text the invite link serves, written for the agent that reads it: add the server, join, and open the
     story. A player's agent is told to say nothing of the setup and to begin in the world."""
     url = url or "<server url>"
@@ -201,18 +206,26 @@ def page(world_name: str, role: str, url: str, token: str, seat: str | None = No
                  "name what is near and a way forward; if they ask how something works, answer briefly in the fiction's "
                  "terms. Only when they ask for the mechanics outright (stats, numbers, the rules) give them plainly, then "
                  "return to the story.\n"
-                 "5. Keep the character's notes in the world, never in files on your side: remember(text) for what they "
-                 "learned, promised or decided, intend(text) for what they want. Both stay on the server with the "
-                 "character, private to this seat, and recall() or join() hands them back next time, from any machine.")
+                 "5. Keep the character's notes in the world: remember(text) for what they learned, promised or decided, "
+                 "intend(text) for what they want. Both stay on the server with the character, private to this seat, "
+                 "and recall() or join() hands them back next time, from any machine. What your harness remembers of "
+                 "your human and how they like to play is yours, kept as you always keep it.")
     elif role == OBSERVER_ROLE:
         begin = "2. Call use(world), then perceive(from_entity=...), history() and find(): you watch, you do not act."
     elif role == OWNER:
         begin = ("2. Call use(world) for the owner's view, or join(world, entity) to walk in it. invite(role, entity=..., "
                  "label=...) makes a grant for a friend and returns the link to send them; grants() lists them, "
                  "revoke(id) ends one, seats() shows who is in and what is open; act_as and say_as drive any NPC.")
+    elif role == BUILDER:
+        begin = ("2. Call use(world), then find(under=...) to see your part of the world. You build there while people "
+                 "play: spawn, patch, connect, define_schema and define_script with your own names, set_rule and "
+                 "schedule on what is yours, act_as and say_as for the people you made. The rest of the world you may "
+                 "read, not change.")
     else:
         begin = ("2. Call use(world) for the author's view, or join(world, entity) to walk in it. act_as and say_as "
                  "drive any NPC; clock() reads and sets the time; seats() shows who is in and what is open.")
+    if limits_note:
+        begin += "\n" + limits_note
     if not rate:
         pace = "The world is paused between acts: each act of yours moves it a turn, and nothing happens while you are away."
     elif waits:

@@ -109,6 +109,7 @@ _TYPE_NAMES = {"int": int, "float": float, "str": str, "list": list, "dict": dic
 
 class Script:
     """A parsed, validated script. Call its top-level functions with `call`."""
+    limits: "dict | None" = None  # a limited grant's reach, from its first line (world.limits_of)
 
     def __init__(self, source: str, name: str = "<script>"):
         self.name = name

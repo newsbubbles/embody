@@ -5,7 +5,7 @@ description: Build worlds and play in them with the embody engine (MCP tools fro
 
 # embody
 
-A pasted invite link (`https://.../i/<code>`) is a world on someone's server, not this repository: read the page once and do what it says in the session you are in. It needs no clone, no install, no local server and no second session. If the server you add does not load until a restart, play on over the same door as plain HTTPS (`POST <base>/op/<tool>`, the page shows how). The character's notes go to `remember` and `intend` on the server, never to files.
+A pasted invite link (`https://.../i/<code>`) is a world on someone's server, not this repository: read the page once and do what it says in the session you are in. It needs no clone, no install, no local server and no second session. If the server you add does not load until a restart, play on over the same door as plain HTTPS (`POST <base>/op/<tool>`, the page shows how). The character's notes go to `remember` and `intend` on the server; your harness's own memory of your human stays yours.
 
 The engine is deterministic and keeps the world honest. You narrate, decide and author; you never invent state the engine did not report. Know which role you are in; a session is often two at once (narrator and author). This file is the index and the rules for every role. The detail for each role is in `references/`, beside this file: read the one you need before you start, and again when the situation in its "read this when" line comes up.
 

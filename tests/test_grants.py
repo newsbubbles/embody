@@ -507,12 +507,12 @@ def test_any_deed_marks_the_seat_in_use_and_waiting_does_not():
 
 
 def test_a_players_notes_live_on_the_server_with_the_character():
-    """A remote player's agent kept its notes in local files: memory is a world op, and the page and briefing say so."""
+    """A remote player's agent kept its notes in local files: memory is a world op, and the page and briefing say so, and leave the agent its own memory of its human."""
     eng, w, i = engine_with_two_rooms()
     gm = owner(eng)
     gm.patch("Prisoner", {"playable": True})
     inv = gm.invite("player", entity="Prisoner", label="p")
-    assert "remember(text)" in inv["page"] and "never in files" in inv["page"]
+    assert "remember(text)" in inv["page"] and "stay on the server with the character" in inv["page"] and "is yours" in inv["page"]
     p = eng.session_for_token(inv["token"])
     b = p.join()
     assert any("remember(text)" in line for line in b["briefing"]["how"])
