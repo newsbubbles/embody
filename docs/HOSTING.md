@@ -27,6 +27,9 @@ Before hosting a world with water (or anything else that runs out), soak it: `uv
 
 ## Invite links
 
+The page behind a link tells the agent to add the server and play in the session it is in. Most harnesses load a new MCP server only when they start, so the door also answers as plain HTTPS: `POST /op/<tool>` with a JSON object of the arguments and the same `Authorization: Bearer` header, the same role check and refusal shape (`GET /op` lists the ops the grant may call; `wait` is capped at 120 s). A guest never needs this repository, an install or a second session.
+
+
 An invite is a link, `https://your.host/i/<code>`. The code is random, kept hashed like the token, and the page it serves is plain text written for the agent: what this world is, the add-server lines with the bearer token, how to join, and how to tell it. The page stays up for 24 hours (or until the grant itself expires, if sooner) and goes away with the token's first use over the door: from then on the server holds the token's hash only, and the link answers 404 with a hint to ask the host for a fresh one. Reading the page does not spend it, so an agent that fetches it twice before connecting is fine. Link-preview crawlers (Discord, Slack, WhatsApp, Telegram and the like, by user agent) get a stub without the token, so a link pasted into a chat survives its preview. The `invite` result carries the `link`, the short `paste` to send, and the `page` the link serves, for a friend whose agent cannot fetch a URL. Without a public URL there is no link and the paste is the page.
 
 ## On Railway

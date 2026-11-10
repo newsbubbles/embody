@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from .grants import is_preview_bot, AUTHOR_ROLE, MIND, NARRATOR, OWNER, active, default_url, token_hash
+from .grants import is_preview_bot, AUTHOR_ROLE, MIND, NARRATOR, OWNER, active, allowed, default_url, token_hash
 from .ops import AUTHOR, OBSERVER, Engine, Rejected, Session
 
 # The grant session behind the HTTP request being served, set by the Bearer middleware for the request's
@@ -589,11 +589,53 @@ class Bearer:
         if sess is None:
             await _reply(send, 401, _NO_GRANT, extra=((b"www-authenticate", b"Bearer"),))
             return
+        if path == "/op" or path.startswith("/op/"):
+            await self._op(scope, receive, sess, path[len("/op/"):] if path.startswith("/op/") else "", send)
+            return
         tok = _current.set(sess)
         try:
             await self.app(scope, receive, send)
         finally:
             _current.reset(tok)
+
+    async def _op(self, scope: dict[str, Any], receive: Any, sess: Session, op: str, send: Any) -> None:
+        """The door as plain HTTPS, for an agent whose harness has not loaded the MCP server yet (most load one only
+        when they start): POST /op/<name> with a JSON object of the arguments, the same bearer, the same role check
+        and refusal shape as the tools. GET /op lists the ops this grant may call. wait is capped at 120 s."""
+        from .ops import OPS, call
+        if not op:
+            await _reply(send, 200, {"ops": sorted(o for o in OPS if allowed(sess.role, o)), "role": sess.role,
+                                     "how": "POST /op/<name> with a JSON object of its arguments"})
+            return
+        if scope.get("method") != "POST":
+            await _reply(send, 405, {"ok": False, "reason": "an op is a POST", "hint": f"POST /op/{op} with a JSON body"})
+            return
+        if op not in OPS:
+            await _reply(send, 404, {"ok": False, "reason": f"no op {op!r}", "hint": "GET /op lists the ops this grant may call"})
+            return
+        raw = b""
+        while True:
+            msg = await receive()
+            raw += msg.get("body", b"")
+            if not msg.get("more_body"):
+                break
+        try:
+            kw = json.loads(raw.decode("utf-8") or "{}")
+            if not isinstance(kw, dict):
+                raise ValueError("not an object")
+        except ValueError:
+            await _reply(send, 400, {"ok": False, "reason": "the body is not a JSON object", "hint": "send {} for no arguments"})
+            return
+        eng = self.hub.engine
+        if op == "wait":
+            kw["timeout"] = min(float(kw.get("timeout", 30.0)), 120.0)
+            out = await asyncio.to_thread(lambda: call(sess, op, **kw))
+        else:
+            def run() -> Any:
+                with eng.lock:
+                    return call(sess, op, **kw)
+            out = await asyncio.to_thread(run)
+        await _reply(send, 200, json.dumps(out, default=str).encode())
 
     async def _invite(self, scope: dict[str, Any], code: str, send: Any) -> None:
         """An invite link's page. A chat app's link preview gets a stub without the token, so pasting the link into a

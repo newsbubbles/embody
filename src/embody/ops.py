@@ -503,6 +503,12 @@ class Session:
         w = self.world
         root = w.get(w.root_id)
         templates = (root["state"].get("templates") or {}) if root else {}
+        mine = self.grant.get("template") if self.grant else None
+        if mine:  # an invite that makes one kind of newcomer shows that one
+            return {"world": w.id, "seats": [],
+                    "templates": [{"template": mine, "type": templates.get(mine, {}).get("type"),
+                                   "place": templates.get(mine, {}).get("place"), "doc": templates.get(mine, {}).get("doc", "")}],
+                    "hint": f"your invite makes a {mine}: ask the human for a name, then join(template='{mine}', name=...)"}
         return {"world": w.id, "seats": self._seat_rows(self.engine.wall()),
                 "templates": [{"template": k, "type": t.get("type"), "place": t.get("place"), "doc": t.get("doc", "")}
                               for k, t in templates.items()],
@@ -602,9 +608,11 @@ class Session:
         ck = w.clock()
         names = [w.get(x)["name"] for x in sc if w.get(x)]
         waits = bool(w.meta().get("run_when_occupied"))
+        tdoc = ((w.get(w.root_id)["state"].get("templates") or {}).get(template) or {}).get("doc", "") if template else ""
         text = page(w.name, role, url, token, seat=(w.get(eid)["name"] if eid and role != MIND else None),
                     scope_names=names, rate=ck["rate"] if ck["running"] or waits else 0.0, waits=waits,
-                    briefing=(f"From the host, for you alone: {brief}" if brief else ""))
+                    briefing=(f"From the host, for you alone: {brief}" if brief else ""), template=template,
+                    template_doc=tdoc)
         exp = (now + float(expires) * 3600.0) if expires else None
         code_exp = min(now + LINK_HOURS * 3600.0, exp) if exp else now + LINK_HOURS * 3600.0
         row = {"world_id": w.id, "id": "g" + secrets.token_hex(4), "principal_id": pid, "role": role, "scope": sc,

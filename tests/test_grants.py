@@ -522,3 +522,56 @@ def test_a_players_notes_live_on_the_server_with_the_character():
     again = eng.session_for_token(inv["token"])  # next session, another machine: same token, same notes
     again.join()
     assert again.perceive()["you"]["state"]["memory"][-1]["text"].startswith("The guard drinks at dusk")
+
+
+def test_a_pasted_link_plays_now_over_plain_https_as_the_one_newcomer_it_makes():
+    """Nate's fresh-session test, 2026-11-10: the server an invite adds loads only when the harness starts, so the
+    agent hand-rolled JSON-RPC; and a Keth invite showed all four templates. /op is the door as plain HTTPS, and a
+    template invite says who you will be."""
+    uvicorn = pytest.importorskip("uvicorn")
+    from embody.mcp_server import build_server, http_app
+    eng, w, i = engine_with_two_rooms()
+    port = _free_port()
+    eng.public_url = f"http://127.0.0.1:{port}/mcp"
+    gm = owner(eng)
+    gm.patch(w.root_id, {"templates": {"newcomer": {"type": "person", "place": "Hall", "doc": "a stranger off the road"},
+                                       "warden": {"type": "person", "place": "Hall", "doc": "the Warden's man"}}})
+    inv = gm.invite("player", template="newcomer", label="Kit")
+    base = f"http://127.0.0.1:{port}"
+    assert "join(template='newcomer'" in inv["page"] and "a stranger off the road" in inv["page"]
+    assert f"{base}/op/join" in inv["page"] and "Do not make the human restart" in inv["page"]
+    srv = build_server(gm, None, eng, http_only=True)
+    server = uvicorn.Server(uvicorn.Config(http_app(srv), host="127.0.0.1", port=port, log_level="error"))
+    t = threading.Thread(target=server.run, daemon=True)
+    t.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    assert server.started
+    tok = inv["token"]
+    try:
+        status, _, body = _get(f"{base}/op", token=tok)
+        ops = json.loads(body)["ops"]
+        assert status == 200 and "join" in ops and "remember" in ops and "define_script" not in ops
+        status, seats = _post(f"{base}/op/seats", {}, token=tok)
+        assert [x["template"] for x in seats["templates"]] == ["newcomer"] and seats["seats"] == []
+        status, r = _post(f"{base}/op/join", {"template": "warden", "name": "Kit"}, token=tok)
+        assert r["ok"] is False and "newcomer" in r["reason"]
+        status, r = _post(f"{base}/op/join", {"template": "newcomer", "name": "Kit"}, token=tok)
+        assert status == 200 and r["you"]["name"] == "Kit"
+        status, r = _post(f"{base}/op/say", {"text": "Evening."}, token=tok)
+        assert status == 200 and r.get("ok") is not False
+        status, r = _post(f"{base}/op/remember", {"text": "The hall smells of wet stone."}, token=tok)
+        assert r["ok"] is True
+        status, r = _post(f"{base}/op/wait", {"timeout": 0}, token=tok)
+        assert status == 200 and "t" in r
+        status, r = _post(f"{base}/op/define_script", {"id": "x", "source": "def main(): pass"}, token=tok)
+        assert r["ok"] is False and "author" in r["reason"]
+        status, r = _post(f"{base}/op/nothing", {}, token=tok)
+        assert status == 404
+        status, r = _post(f"{base}/op/perceive", {})
+        assert status == 401
+    finally:
+        server.should_exit = True
+        t.join(timeout=5)

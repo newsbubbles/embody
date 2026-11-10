@@ -178,3 +178,17 @@ def test_the_database_defaults_to_the_workspace_root_but_a_legacy_worlds_db_keep
     assert db_path(argparse.Namespace(db=None)) == Path("worlds") / "embody.db"
     assert Workspace.from_db(tmp_path / "worlds" / "embody.db").root == tmp_path
     assert Workspace.from_db(tmp_path / "embody.db").root == tmp_path
+
+
+def test_the_global_flags_may_follow_any_subcommand(tmp_path, capsys):
+    """.mcp.json writes `embody serve --as claude --author`: the flags after the subcommand broke when new
+    subcommands were added above the one that took them (Nate's fresh session, 2026-11-10)."""
+    from embody.cli import main
+    db = str(tmp_path / "w.db")
+    assert main(["worlds", "--db", db, "--as", "claude", "--author", "--json"]) == 0
+    for cmd in ("serve", "worlds", "watch", "seats", "invite"):
+        try:
+            main([cmd, "--db", db, "--as", "claude", "--author", "--world", "x", "--json", "--help"])
+        except SystemExit as e:
+            assert e.code == 0, cmd
+    assert "unrecognized" not in capsys.readouterr().err

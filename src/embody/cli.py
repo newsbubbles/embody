@@ -420,12 +420,15 @@ def main(argv: list[str] | None = None) -> int:
     c = sub.add_parser("revoke", help="(owner) end a grant")
     c.add_argument("id")
     c = sub.add_parser("seats", help="the open seats and templates of the world")
-    # the global flags again, so they may follow the subcommand (how .mcp.json files are written)
-    c.add_argument("--db", default=argparse.SUPPRESS)
-    c.add_argument("--as", dest="as_", default=argparse.SUPPRESS)
-    c.add_argument("--world", default=argparse.SUPPRESS)
-    c.add_argument("--author", action="store_true", default=argparse.SUPPRESS)
-    c.add_argument("--observer", action="store_true", default=argparse.SUPPRESS)
+    # the global flags again on every subcommand, so they may follow it (`embody serve --as claude --author` is how
+    # .mcp.json files are written); a subcommand that already has one keeps its own
+    for p in sub.choices.values():
+        have = {o for a in p._actions for o in a.option_strings}
+        for flags, kw in ((("--db",), {}), (("--as",), {"dest": "as_"}), (("--world",), {}),
+                          (("--author",), {"action": "store_true"}), (("--observer",), {"action": "store_true"}),
+                          (("--json",), {"action": "store_true"})):
+            if not have & set(flags):
+                p.add_argument(*flags, default=argparse.SUPPRESS, **kw)
 
     args = ap.parse_args(argv)
     if args.cmd == "serve":

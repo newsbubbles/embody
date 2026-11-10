@@ -6,10 +6,14 @@ The version in `pyproject.toml` is 0.1.0 until the first release; until then ent
 
 ## Unreleased
 
-- Character notes are on the server, and a player's agent is told so. `remember`, `intend` and `recall` were always player ops; the invite page and the join briefing now say to keep notes there, not in files on the agent's side. A guest's note is at most 2000 characters.
+- The door as plain HTTPS: `POST /op/<tool>` (and `GET /op`) beside `/mcp`, same bearer, same role check, so a pasted link plays in the session it was pasted into even when the harness loads new MCP servers only at start. The invite page says so and shows a curl line.
+- A template invite (a Keth, a guard) says on its page who the guest will be, and `seats()` on that grant shows only that template.
+- The global flags (`--db`, `--as`, `--world`, `--author`, `--observer`, `--json`) follow any subcommand again; `embody serve --as claude --author`, as `.mcp.json` writes it, had stopped starting.
+- The skill, AGENTS.md and CLAUDE.md open with what a pasted link means: a hosted world, played in this session, no repository needed.
 
 ## 2026-11-10
 
+- Character notes are on the server, and a player's agent is told so. `remember`, `intend` and `recall` were always player ops; the invite page and the join briefing now say to keep notes there, not in files on the agent's side. A guest's note is at most 2000 characters.
 - A hosted world lives while nobody plays. The clock keeps real time. A seat whose holder (player or mind) has done nothing for the world's `idle_after` is idle, and the body's behaviors marked `idle` run on it (d20 `quench`: a held body drinks when thirsty). An act or a line said marks the seat in use; waiting does not. `principal.acted_t` records it in world time.
 - `packs/d20/soak.py`: run a world for days with every seat held and idle, and see who went dry and which sources ran out. Exit code 1 when thirst put anyone down.
 - Glass Reach routines (content, not engine): the Keth water run at dusk under the truce, the Guild crawler at dawn. Players can interrupt both.
