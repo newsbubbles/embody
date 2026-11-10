@@ -255,7 +255,8 @@ def seed_reach(s, by_name):
     """Goals, standings and acquaintances for every seat. Idempotent: checks before it writes."""
     for who, goals in GOALS.items():
         eid = by_name[who]
-        have = {g.get("text") for g in (s.recall(entity=eid).get("goals") or [])}
+        # every goal the seat ever had, done or dropped too: a finished goal is not a missing one
+        have = {g.get("text") for g in (s.world.get(eid)["state"].get("goals") or [])}
         for text, why in goals:
             if text not in have:
                 s.intend(text, why=why, entity=eid)

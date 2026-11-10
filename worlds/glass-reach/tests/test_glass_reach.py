@@ -337,6 +337,16 @@ def test_upgrade_is_idempotent():
     assert len(gm.world.edges(gm.inspect("Reeve Ansel Varrick")["id"], "standing", "out")) == 4
 
 
+def test_upgrade_leaves_a_finished_goal_finished():
+    eng, gm, you = reach()
+    g = next(x for x in gm.recall(entity="Dram Hollis")["goals"] if x["text"].startswith("The reeve, in the ring"))
+    gm.intend(id=g["id"], status="done", entity="Dram Hollis")
+    load_world(gm, "glass-reach", upgrade=True)
+    goals = gm.world.get(gm.inspect("Dram Hollis")["id"])["state"]["goals"]
+    ring = [x for x in goals if x["text"].startswith("The reeve, in the ring")]
+    assert len(ring) == 1 and ring[0]["status"] == "done"  # not handed back to him on every boot
+
+
 def test_ruhl_and_dram_answer_the_questions_the_first_reeve_asked():
     eng, gm, you = reach()
     r = you.act("talk", "Dram Hollis", {"about": "why did you stay when the convoy left"})
