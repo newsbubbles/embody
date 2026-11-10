@@ -12,14 +12,15 @@ Status: alpha. The first vertical slice was built in one day (2026-11-08) and pl
 4. Worlds grow from play. What a narrator improvises is logged, reviewed and promoted to canon by the author, or dropped.
 5. Every harness is a first-class door: MCP, CLI, library. Instructions are written in engine terms with a per-harness table.
 
-## What exists (2026-11-09)
+## What exists (2026-11-10)
 
 - Engine: entity graph with containment, schemas with `extends`, actions with check and apply, events that bubble with reach, listeners along the bubble path, behaviors on the clock (`always` ones tick on embodied seats too), rules via `set_rule` that hear everything under their entity whatever the reach, relations as edges and hyperedges, event-sourced SQLite, deterministic state hash, seeded rand, a Python-subset interpreter for scripts.
 - Ops: 41 of them behind a Session with capabilities (author, observer, embodied). CLI and MCP server expose the same table. `wait` blocks on events and returns a light bundle. `act` returns everything that touched you since you last looked. One clock and one id counter however many processes share the database. The MCP server holds many principals behind one connection (`principal=` on the playing tools).
 - Minds in the engine: secret `memory`, `brief` and `goals` (`intend`), `recall` as the permission-aware graph query, per-entity cursors, `knows` edges with an opinion floor and the last exchanges, `known_places`, addressed speech (`say(to=...)`, `say_as`) and speech into the room, `fork_world`, turn-based play (`clock(turn=n)`), deep-merging `patch`, scoped affordances, per-viewer event filtering, `ambient` facts and `clock` in every perceive, `timers` and `unschedule`.
 - Content: `worlds/ferry-at-dusk/` on the `village` pack (five places, four NPCs with goals and opinions of each other, a storyline that checks facts with two routes to the ferryman, fog, night and dawn on timers, sleep and wake, followers, chores with durations that settle a debt relation, drink and tipsiness; split into define/populate/upgrade so a live world takes new code and additions), `worlds/glass-reach/` on `packs/d20/` (a desert hold, a hidden well, three factions with standings, a reusable d20 rule set where every rule is a verb: `check` against a DC, `attack` with wounds, down and dead, wards, `yield` and honor, duels that a root rule turns into a ring, `threaten` and `parley` as opposed rolls, thirst as a body behavior, fighters that fight without a mind, a thresher under the glass, a storyline with a truce or a lost ending), `worlds/two-rooms/` (a legacy single-file world).
 - Workspace (round 6): a world is a folder, `worlds/<id>/` with `build.py` (manifest, define, populate, upgrade), `scripts/` as files with `use()` includes, `changes.jsonl` written by live authoring and replayed by a fresh build, `saves/`, `notes/`, `tests/`; packs under `packs/`; `create_world` scaffolds the folder and starts a git repository; `save` and `restore`; `embody init`; the database at the workspace root.
-- Tooling: 111 tests, markdown mirror, `embody.watch` live graph viewer (run by `tools/watch.py`, served hosted at `/watch`) with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
+- Hosted (live on Railway since 2026-11-09): the Glass Reach with roles and grants, invites as one-use links, owner grants over the door, a steady 4x clock, idle seats whose bodies see to their water, the Reach's water routines, `wait(until=...)` and `embody watch` for minds and narrators that wait for hours, `packs/d20/soak.py`. CHANGELOG.md has the engine's changes by date.
+- Tooling: 154 tests, markdown mirror, `embody.watch` live graph viewer (run by `tools/watch.py`, served hosted at `/watch`) with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
 
 ## Found in the first playtest
 
@@ -128,6 +129,19 @@ Gaps
 - [ ] `fill` does not say how much the source holds after; `read` with duration 0 still takes a whole turn (the turn floor).
 - [ ] The narrator walked the player into a known timer (Dram at t=240) without a warning line. The skill could tell the narrator to read `timers` before a move that lands on one.
 
+## Found in the first hosted game (2026-11-09 and 10)
+
+- [x] Thirst was tuned for the turn-based story and dried the hosted Reach in minutes: a pace per world, a floor, a walk to water (2026-11-09).
+- [x] Minds looped `wait()` and paid a turn per footstep: `wait(until=...)` and `embody watch` (26ee343).
+- [x] Watchers held every seat overnight and no held body drank: idle seats and the Reach's routines (7800202).
+- [x] A thing named like a people woke a watch for them (The Keth jars, `came('Keth')`): `present` is people (ccec4bc).
+- [x] A friend's agent kept its character notes in local files: the page and the briefing point players at `remember` and `intend` on the server; a guest's note is capped at 2000 characters (unreleased).
+- [ ] `by_player` names whoever holds the seat now, not who held it when the event happened.
+- [ ] Some of Taan's `say` rows are written twice.
+- [ ] A person with no dialog answers a stock "Hm.", which reads as the engine, not the character.
+- [ ] The Glass Reach has no rest verb: vigor lost to thirst or a blade comes back only by water or a hand (the reeve sat at vigor 2 for a day).
+- [ ] Live authoring on the server is recorded inside the container and lost on the next deploy; the database keeps it, git does not. A pull-back script (scripts, rules, timers out of the live world, into the world's folder) is open.
+
 ## Directions from the design talks
 
 These were agreed in conversation on 2026-11-08 and are not built. Order of attack is at the end.
@@ -217,6 +231,8 @@ Decisions from Nate on 2026-11-09: an invite is a block of text a friend pastes 
 4. Sample worlds inside the package (the rest of the workspace split is done), then the release.
 5a. (done 2026-11-09) Hosted, the engine side: grants and roles checked on every op, claims with reservations and lapse, invites as tokens, the MCP server over HTTP with a bearer per grant, a ticker for running worlds, provenance and `say` caps, `AGENTS.md`, docs/HOSTING.md. 120 tests including the HTTP door.
 5b. The first friend. Done 2026-11-09 in the repository: six playable seats across the factions (the reeve, Dram, Ruhl, Ossa, Sefa, Nico), four templates (carrier, guard, keth, dreyer), a briefing, `host(s)` with the 4x clock that runs while anyone is in, a daily spine (heat, dusk, night, dawn, the cistern's day), `/health`, `EMBODY_WORKSPACE`, the Railway container (`Dockerfile`, `railway.json`, `deploy/start.sh`), docs/HOSTING.md. Open: the deploy itself (Railway sign-in is Nate's), the first tester's invite, and their notes in `worlds/glass-reach/notes/`.
+5b2. (done 2026-11-09 and 10) The first friend played. Deployed on Railway; one friend's game with five host minds on seats; his agent built a viewer of its own (LK-Studios/embody-viewer). Out of it: the thirst pace, invite links, the watch oracle and `embody watch`, the steady clock with idle seats and routines, the soak, notes on the server for players.
+5b3. Next: Nate tests the newcomer path from a fresh session of his own (a Keth from a template, invite gd19d113b), the same way a stranger would. Then the found-in-play list below.
 5c. The product: the client without an agent, accounts and rosters, world listings, `wait` as a server-sent stream, and the security audit before anything is public.
 
 ## How this file is kept

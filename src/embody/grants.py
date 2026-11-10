@@ -186,7 +186,10 @@ def page(world_name: str, role: str, url: str, token: str, seat: str | None = No
                  "refuses an act, say what stood in the way, not the error text. Anticipate a newcomer: if they seem lost, "
                  "name what is near and a way forward; if they ask how something works, answer briefly in the fiction's "
                  "terms. Only when they ask for the mechanics outright (stats, numbers, the rules) give them plainly, then "
-                 "return to the story.")
+                 "return to the story.\n"
+                 "5. Keep the character's notes in the world, never in files on your side: remember(text) for what they "
+                 "learned, promised or decided, intend(text) for what they want. Both stay on the server with the "
+                 "character, private to this seat, and recall() or join() hands them back next time, from any machine.")
     elif role == OBSERVER_ROLE:
         begin = "2. Call use(world), then perceive(from_entity=...), history() and find(): you watch, you do not act."
     elif role == OWNER:

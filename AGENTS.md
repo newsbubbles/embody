@@ -34,7 +34,7 @@ Hosting: `embody serve --http --port 8900 --url https://your.host/mcp` serves th
 
 - `uv sync --all-extras`, then `timeout 180 uv run pytest -q` (the suite covers `tests/`, the worlds' and the packs' own tests and runs in under twenty seconds; a hang means a clock bug, so always run it with a timeout).
 - Layout: `src/embody/script.py` the interpreter, `store.py` SQLite, `world.py` the graph, events, actions and clock, `ops.py` sessions, roles and the op table, `grants.py` roles, invites and tokens, `workspace.py` the folders (worlds, packs, scripts as files, `changes.jsonl`, save and restore), `mirror.py` the markdown projection, `cli.py` and `mcp_server.py` the two front doors (`mcp_server.py` also serves HTTP, with the viewer at `/watch`), `watch.py` and `watch.html` the read-only live viewer (`tools/watch.py` runs it locally).
-- DESIGN.md is the authority on what embody is. ROADMAP.md tracks where it stands. Change them when the design or the state changes.
+- DESIGN.md is the authority on what embody is. ROADMAP.md tracks where it stands. Change them when the design or the state changes. Every engine change (core, ops, server, packs) gets a line in CHANGELOG.md under Unreleased, saying what an agent or a host sees differently.
 - Libraries only when they bring a real efficiency gain. The engine depends on nothing but Python; the MCP server (and its HTTP form) is an extra.
 - Docs are written without em-dashes.
 - Stage named files only (never `git add .` or `commit -a`): the database, mirrors and play notes live beside the code.

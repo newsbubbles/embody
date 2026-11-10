@@ -31,6 +31,7 @@ OBSERVER = "observer"
 # against a runaway agent. Authors and narrators are not capped.
 _SAY_MAX = 1000
 _SAY_BURST = 30
+_NOTE_MAX = 2000  # a guest's remember() note, in characters
 _SAY_WINDOW = 60.0
 # State keys only the entity itself (its mind) and authors ever see.
 # State keys nobody but the host reads: a mind's memory, its brief and goals, and the host's plan for the world
@@ -548,6 +549,8 @@ class Session:
         if self.role == PLAYER:
             how.insert(0, "this briefing is for you, not for them: say nothing of seats, grants, tokens or tools; open in the "
                           "world, with where they stand, who is near and what the body feels, then ask what they do")
+            how.append("keep the character's notes on the server, not in files: remember(text) and intend(text); recall() "
+                       "reads them back, next session or another machine")
         if self.role == MIND:
             how.insert(0, "your card carries the secret brief: who you are and what you want; remember() and intend() keep your notes")
         out = {"role": self.role, "role_doc": ROLE_DOC.get(self.role, ""), "world": w.name, "you": ent["name"] if ent else eid,
@@ -978,6 +981,9 @@ class Session:
             eid = self._resolve(entity)
         else:
             eid = self._me()
+        if not self._privileged() and len(text) > _NOTE_MAX:
+            raise Rejected(f"a note is at most {_NOTE_MAX} characters; this one is {len(text)}",
+                           hint="keep the gist; split a long account into several notes")
         note = self.world.remember(eid, text, actor=eid)
         if entity is None:
             self.world._bump_cursor(self.pid)

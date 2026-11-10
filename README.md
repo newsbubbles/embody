@@ -61,7 +61,7 @@ Players make their own. [embody-viewer](https://github.com/LK-Studios/embody-vie
 
 ## Where it is going
 
-ROADMAP.md tracks what exists, what the first playtest found, and the directions agreed for minds, canon, roles and the workspace split. DESIGN.md stays the authority on what embody is.
+CHANGELOG.md says what changed in the engine, by date. ROADMAP.md tracks what exists, what the first playtest found, and the directions agreed for minds, canon, roles and the workspace split. DESIGN.md stays the authority on what embody is.
 
 ## Layout
 

@@ -504,3 +504,21 @@ def test_any_deed_marks_the_seat_in_use_and_waiting_does_not():
     m.wait(timeout=0, clock=lambda: 0.0, sleep=lambda s: None)
     mw.step(60)
     assert mw.idle(i["Guard"]) and mw.principal(m.pid)["entity_id"] == i["Guard"]
+
+
+def test_a_players_notes_live_on_the_server_with_the_character():
+    """A remote player's agent kept its notes in local files: memory is a world op, and the page and briefing say so."""
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.patch("Prisoner", {"playable": True})
+    inv = gm.invite("player", entity="Prisoner", label="p")
+    assert "remember(text)" in inv["page"] and "never in files" in inv["page"]
+    p = eng.session_for_token(inv["token"])
+    b = p.join()
+    assert any("remember(text)" in line for line in b["briefing"]["how"])
+    p.remember("The guard drinks at dusk. Promised him nothing.")
+    with pytest.raises(Rejected):
+        p.remember("x" * 2001)
+    again = eng.session_for_token(inv["token"])  # next session, another machine: same token, same notes
+    again.join()
+    assert again.perceive()["you"]["state"]["memory"][-1]["text"].startswith("The guard drinks at dusk")
