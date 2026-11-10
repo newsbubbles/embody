@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from .grants import is_preview_bot, AUTHOR_ROLE, MIND, NARRATOR, OWNER, active, allowed, default_url, token_hash
+from .grants import is_preview_bot, AUTHOR_ROLE, MIND, NARRATOR, OWNER, active, allowed, default_url, origin_of, request_origin, token_hash
 from .ops import AUTHOR, OBSERVER, Engine, Rejected, Session
 
 # The grant session behind the HTTP request being served, set by the Bearer middleware for the request's
@@ -615,6 +615,13 @@ class Bearer:
             await self.app(scope, receive, send)
             return
         path = scope.get("path") or ""
+        origin = request_origin.set(origin_of(dict(scope.get("headers") or []), scope.get("scheme") or "http"))
+        try:
+            await self._route(scope, receive, send, path)
+        finally:
+            request_origin.reset(origin)
+
+    async def _route(self, scope: dict[str, Any], receive: Any, send: Any, path: str) -> None:
         if path == "/health" and scope.get("method") == "GET":
             await _reply(send, 200, {"ok": True, "embody": "up"})  # no world data, no grant
             return
@@ -689,7 +696,7 @@ class Bearer:
             return
         eng = self.hub.engine
         with eng.lock:
-            status, body = eng.invite_page(code.strip("/"))
+            status, body = eng.invite_page(code.strip("/"), origin=request_origin.get())
         if isinstance(body, str):
             await _reply(send, status, body.encode("utf-8"), ctype="text/plain; charset=utf-8")
         else:
@@ -767,6 +774,7 @@ def serve(args: argparse.Namespace) -> int:
     if http:
         caps = [AUTHOR]  # the hosting process owns the database; everyone else comes in on a grant
         eng.public_url = getattr(args, "url", None) or default_url() or f"http://{host}:{port}/mcp"
+        eng.public_url_fixed = bool(getattr(args, "url", None) or os.environ.get("EMBODY_URL"))
     session = eng.session(principal, world_id=args.world if args.world and eng.store.get("world", None, args.world) else None,
                           capabilities=caps, name=getattr(args, "name", "") or principal)
     srv = build_server(session, db, eng, http_only=http)

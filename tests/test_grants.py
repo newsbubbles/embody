@@ -592,3 +592,49 @@ def test_a_players_page_says_how_to_wait_in_a_running_world():
     assert "curl -s -X POST https://r.example/op/wait" in p and "grep -q '\"fired\": true'" in p
     assert "op/wait -H" not in page("The Reach", "observer", "https://r.example/mcp", "TOK", rate=4.0)
     assert "op/wait -H" not in page("The Reach", "player", "https://r.example/mcp", "TOK", rate=0.0)
+
+
+def test_invite_pages_name_the_host_the_request_came_in_on():
+    uvicorn = pytest.importorskip("uvicorn")
+    from embody.grants import HOST_MARK
+    from embody.mcp_server import build_server, http_app
+    eng, w, i = engine_with_two_rooms()
+    port = _free_port()
+    eng.public_url = f"http://127.0.0.1:{port}/mcp"
+    gm = owner(eng)
+    gm.patch("Prisoner", {"playable": True})
+    keys = gm.invite("owner", label="Co-host")
+    old = gm.invite("player", entity="Prisoner", label="Sam")
+    assert eng.public_url in old["page"] and HOST_MARK not in old["page"]  # minted with no request: the default
+    srv = build_server(gm, None, eng, http_only=True)
+    server = uvicorn.Server(uvicorn.Config(http_app(srv), host="127.0.0.1", port=port, log_level="error"))
+    t = threading.Thread(target=server.run, daemon=True)
+    t.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    assert server.started
+
+    def call_as(host: str, path: str, body: dict | None = None) -> tuple[int, bytes]:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method="POST" if body is not None else "GET",
+                                     data=json.dumps(body).encode() if body is not None else None,
+                                     headers={"host": host, "x-forwarded-proto": "https", "content-type": "application/json",
+                                              "authorization": f"Bearer {keys['token']}"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, r.read()
+
+    try:
+        _, body = call_as("reach.example", "/op/invite", {"role": "player", "entity": "Prisoner", "label": "Ana"})
+        inv = json.loads(body)
+        assert inv["link"].startswith("https://reach.example/i/") and "https://reach.example/mcp" in inv["page"]
+        status, page = call_as("other.example", inv["link"][len("https://reach.example"):])
+        text = page.decode()
+        assert status == 200 and "https://other.example/mcp" in text  # the host the agent reached, not the minting one
+        assert "reach.example" not in text and HOST_MARK not in text and "127.0.0.1" not in text
+        eng.public_url_fixed = True  # the operator named a URL: it wins over the Host header
+        _, body = call_as("reach.example", "/op/invite", {"role": "player", "entity": "Prisoner", "label": "Kit"})
+        assert json.loads(body)["link"].startswith(f"http://127.0.0.1:{port}/i/")
+    finally:
+        server.should_exit = True
+        t.join(timeout=5)

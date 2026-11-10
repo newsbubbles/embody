@@ -6,6 +6,7 @@ The version in `pyproject.toml` is 0.1.0 until the first release; until then ent
 
 ## Unreleased
 
+- Invite pages carry no host name. A stored page names its server by a mark the door fills in with the host the agent reached it on (`X-Forwarded-Host` and `-Proto` behind a proxy), and an invite minted over the door uses the host it came in on, unless the operator set `--url` or `$EMBODY_URL`. A custom domain needs no change to any page or link already out.
 - A player's agent is told how to wait. The invite page for a player or mind in a running world says to `wait(until="heard('', by=...)")` for the answer before telling the human, never to loop on a bare `wait()`, and carries a background watch loop over `/op/wait` for between the human's turns (a guest has no checkout and no `embody watch`). The skill has a player reference, `references/player.md`, and its index points players at it.
 - The MCP tool list follows the grant: a player sees the tools a player may call, an observer its reading tools; the host's own process sees all. `invite` over MCP and on the command line (`--under`, `--types`, `--scripts`) takes `limits`.
 - `timers()` for players and minds: the next of each kind the world's meta lists as `public_timers` (the Reach: heat, dusk, night, dawn), with `when` in words and without what the timer carries. Authors, narrators and observers see every timer as before.

@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from .grants import (LINK_HOURS, link_for, new_code, page, AUTHOR_ROLE, BUILDER, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, OWNER, PLAYER, ROLES, ROLE_DOC,
+from .grants import (HOST_MARK, LINK_HOURS, link_for, request_origin, new_code, page, AUTHOR_ROLE, BUILDER, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, OWNER, PLAYER, ROLES, ROLE_DOC,
                      active, allowed, caps_for, new_token, paste, principal_id_for, role_for, token_hash)
 from .script import Script, ScriptError
 from .store import Store
@@ -73,6 +73,7 @@ class Engine:
         self.wall: Callable[[], float] = time.time  # real time, for grants that expire and seats that lapse
         self.lock = threading.RLock()  # one op at a time on one store; servers take it around every call
         self.public_url: str | None = None  # where a hosted server is reached; printed into invites
+        self.public_url_fixed = False  # the operator named the URL (--url, $EMBODY_URL): it wins over the request's host
         self._said: dict[str, collections.deque] = {}
 
     def worlds(self) -> list[dict[str, Any]]:
@@ -197,7 +198,15 @@ class Engine:
         g["page"] = None
         self.store.set("grants", g["world_id"], g["id"], code_hash=None, code_expires=None, page=None)
 
-    def invite_page(self, code: str) -> tuple[int, dict[str, Any] | str]:
+    def url_now(self) -> str | None:
+        """The MCP URL for an invite minted now: the operator's own, else the host this request came in on, else the
+        default (a Railway domain, or the address the server bound)."""
+        origin = request_origin.get()
+        if origin and not self.public_url_fixed:
+            return f"{origin}/mcp"
+        return self.public_url
+
+    def invite_page(self, code: str, origin: str | None = None) -> tuple[int, dict[str, Any] | str]:
         """What the door serves at /i/<code>: the page with the token while the link is good, else a refusal that says
         what happened and what to do. Reading the page does not spend the link; the token's first use does."""
         rows = self.store.query("grants", "code_hash=?", (token_hash(code),), limit=1)
@@ -212,7 +221,8 @@ class Engine:
             self.spend_link(g)
             return 410, {"ok": False, "reason": "this invite link is older than a day and has gone stale",
                          "hint": "ask the host for a fresh one"}
-        return 200, g.get("page") or ""
+        base = origin or (self.url_now() or "").removesuffix("/mcp")
+        return 200, (g.get("page") or "").replace(HOST_MARK, base)
 
 
 class Session:
@@ -685,27 +695,28 @@ class Session:
         lim, note = self._limits_for(role, limits, pid)
         token = new_token()
         now = self.engine.wall()
-        url = self.engine.public_url or ""
+        url = self.engine.url_now() or ""
         code = new_code()
         link = link_for(url, code)
         ck = w.clock()
         names = [w.get(x)["name"] for x in sc if w.get(x)]
         waits = bool(w.meta().get("run_when_occupied"))
         tdoc = ((w.get(w.root_id)["state"].get("templates") or {}).get(template) or {}).get("doc", "") if template else ""
-        text = page(w.name, role, url, token, seat=(w.get(eid)["name"] if eid and role != MIND else None),
+        stored = page(w.name, role, f"{HOST_MARK}/mcp" if link else url, token, seat=(w.get(eid)["name"] if eid and role != MIND else None),
                     scope_names=names, rate=ck["rate"] if ck["running"] or waits else 0.0, waits=waits,
                     briefing=(f"From the host, for you alone: {brief}" if brief else ""), template=template,
                     template_doc=tdoc, limits_note=note)
+        text = stored.replace(HOST_MARK, url.removesuffix("/mcp"))
         exp = (now + float(expires) * 3600.0) if expires else None
         code_exp = min(now + LINK_HOURS * 3600.0, exp) if exp else now + LINK_HOURS * 3600.0
         row = {"world_id": w.id, "id": "g" + secrets.token_hex(4), "principal_id": pid, "role": role, "scope": sc,
                "entity_id": eid, "template": template, "label": label, "token_hash": token_hash(token),
                "created": now, "expires": exp, "revoked": 0, "last_used": None, "brief": brief or None,
                "code_hash": token_hash(code) if link else None, "code_expires": code_exp if link else None,
-               "page": text if link else None, "limits": lim}
+               "page": stored if link else None, "limits": lim}
         w.store.put("grants", row)
         return {"ok": True, "id": row["id"], "principal": pid, "role": role, "entity": eid, "scope": sc, "limits": lim,
-                "template": template, "expires": row["expires"], "token": token, "url": self.engine.public_url,
+                "template": template, "expires": row["expires"], "token": token, "url": url or None,
                 "link": link, "link_expires": row["code_expires"], "paste": paste(w.name, role, link, text, label=label),
                 "page": text,
                 "hint": ("send them the paste: the link works once and for a day" if link else

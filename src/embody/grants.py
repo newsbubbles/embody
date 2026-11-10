@@ -8,6 +8,7 @@ after a day, and from then on the engine holds only the token's hash.
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import os
 import re
@@ -134,6 +135,21 @@ _ADD_LINES = """Add the server (pick your harness; the URL and token are the sam
   Claude Code:  claude mcp add --transport http embody {url} --header "Authorization: Bearer {token}"
   Codex:        codex mcp add embody --url {url} --bearer-token-env-var EMBODY_TOKEN   (put the token in EMBODY_TOKEN)
   Anything else that speaks MCP: streamable HTTP at {url} with the header  Authorization: Bearer {token}"""
+
+
+# A stored invite page names its server by HOST_MARK; the door fills in the host the agent reached it on, so a new
+# domain needs no change to pages already minted, and no host name is written anywhere but the request.
+HOST_MARK = "<embody-host>"
+request_origin: contextvars.ContextVar[str | None] = contextvars.ContextVar("embody_origin", default=None)
+
+
+def origin_of(headers: dict[bytes, bytes], scheme: str = "http") -> str | None:
+    """scheme://host as the client saw it: a proxy's X-Forwarded-Host and -Proto first, else the Host header."""
+    host = (headers.get(b"x-forwarded-host") or headers.get(b"host") or b"").decode("latin-1").split(",")[0].strip()
+    if not re.fullmatch(r"[A-Za-z0-9.:\[\]-]+", host):
+        return None
+    proto = (headers.get(b"x-forwarded-proto") or b"").decode("latin-1").split(",")[0].strip().lower()
+    return f"{proto if proto in ('http', 'https') else scheme}://{host}"
 
 
 def default_url() -> str | None:
