@@ -4,7 +4,7 @@ Player: Nate, on his phone over Remote Control. Seat: Reeve Ansel Varrick (princ
 
 ## Setup
 
-- This narrator session had no `embody` MCP tools (the session started in D:\, not D:\embody), so play runs through the CLI: `uv run embody --as nate-gr --world glass-reach ...`. Works, but slower per turn.
+- This narrator session had no `embody` MCP tools (the session started outside the repository folder), so play runs through the CLI: `uv run embody --as nate-gr --world glass-reach ...`. Works, but slower per turn.
 - Narrator slip at t=0: I ran `act read` on the Crown's writ while gathering the opening, before Nate spoke. One turn passed (3 s). Harmless, but it was a deed he did not choose.
 
 ## What felt off
@@ -19,7 +19,7 @@ Player: Nate, on his phone over Remote Control. Seat: Reeve Ansel Varrick (princ
 
 - t=6: "go to the yard to talk to Ruhl about water" is two deeds (go, then talk). Kept to one act per turn: walked him to the yard and stopped with Ruhl waiting. On a phone this costs him an extra message for one intent. Maybe allow a chained stated intent (go, then talk on arrival) when the second deed only follows the first.
 
-## Session 3 (narrator over MCP, started from D:\embody)
+## Session 3 (narrator over MCP, started from the repository folder)
 
 - 2026-11-09: `embody` tools loaded this time. `use("glass-reach")`, then `join(..., "Reeve Ansel Varrick", principal="nate-gr")` kept Nate's seat under the same principal as before. World at t=19, 42 entities, nothing rebuilt.
 - Timers ahead: heat at t=200, Dram moves at t=240, dusk at t=500, cistern cracks at t=600. Turn is 3 s, so roughly 60 beats to heat, 74 to Dram.
