@@ -29,7 +29,7 @@ _NARRATE = {"act_as", "say_as", "timers", "spawn", "patch", "move", "destroy", "
             "relate", "unrelate", "schedule", "unschedule", "remember", "intend", "recall"}
 _AUTHOR = _NARRATE | _WATCH | {"create_world", "fork_world", "save", "restore", "define_schema", "define_script",
                                "set_rule", "clear_rule", "mirror"}
-_OWN = _AUTHOR | {"invite", "grants", "revoke", "evict"}
+_OWN = _AUTHOR | {"invite", "grants", "revoke", "evict", "requests"}
 # The ops that reach the whole world at once, never a builder's: a builder works inside its plot while the world plays.
 _WORLDWIDE = {"create_world", "fork_world", "save", "restore", "mirror"}
 

@@ -404,6 +404,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--host", default="127.0.0.1", help="bind address for --http (0.0.0.0 for a public host)")
     c.add_argument("--port", type=int, default=8900)
     c.add_argument("--url", help="the public URL printed into invites (default http://host:port/mcp, or $EMBODY_URL)")
+    c.add_argument("--site", help="a folder served at / beside the door (default $EMBODY_SITE, or worlds/<world>/site)")
     c.add_argument("--log-level", dest="log_level", default=None)
 
     c = sub.add_parser("invite", help="(owner) make a grant and print the link to send: embody --author --world W invite player --entity reeve --label Sam")

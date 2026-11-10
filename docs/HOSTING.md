@@ -91,6 +91,16 @@ The page for a player tells the agent how to tell it: say nothing of the setup, 
 
 Harness scope: the page tells the agent to run with the embody tools only, no filesystem and no shell. That is the invitee's side of the bargain; the host cannot enforce it, so the role keeps what the agent can do in the world small whatever it does at home.
 
+## A page for the world
+
+A hosted world can have a public face at `/`, beside the door, for people who have no grant yet.
+
+- The page is a folder of plain files: `--site <dir>`, `$EMBODY_SITE`, or the world folder's own `worlds/<world>/site/`. A path that names a dot-file or climbs out of the folder is not served; video answers byte ranges, which phones need. The folder stays out of git (films are large): `tools/stage_deploy.py --world <world> --site <dir>` stages the committed tree plus the site and prints the `railway up <stage> --path-as-root --no-gitignore --ci` that ships it.
+- `GET /chronicle.json`: the world's own prose, oldest first, the event kinds its meta lists as `public_chronicle` (default `scene`), with the day each came on and `now` (day and phase). Never what anyone said.
+- `GET /reach.json`: the clock, the day's phases (from the `public_timers`), and counts: `awake` (seats held by someone active), `people` (the meta's `people_type`, default `person`), `seats_open`, `last_event_ago` in real seconds, and the meta's `public_board` (up to three rows the owner keeps true with `set_meta`). No names, no places.
+- Both feeds answer only when the world's meta says `public_feed: true`. A site folder alone never makes a world's log public.
+- `POST /seat-request` takes `{name, contact, side, why}` (JSON, or a plain form post), checks it again (the meta's `seat_sides` when it lists them), ignores anything that fills the hidden `website` field, allows three an hour from one address, and appends it to `seat-requests.jsonl` beside the database. The address is never written down. The owner reads them with `requests()` and answers with `invite(...)`.
+
 ## The viewer
 
 The hosted server serves the live graph at `https://your.host/watch`: containment as a tree, passages as arcs, who embodies what, the clock, the event feed, each entity's state on click. It is the same page `tools/watch.py` serves on a laptop, mounted behind the bearer door:

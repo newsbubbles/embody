@@ -15,3 +15,4 @@ worlds/*.db-wal
 mirror/
 *.db-shm
 *.db-wal
+worlds/*/site/

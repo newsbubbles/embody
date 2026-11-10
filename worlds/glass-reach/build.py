@@ -498,6 +498,13 @@ def host(s):
                       "public_timers": HOSTED["public_timers"]})
     s.world.set_pace(HOSTED["pace"])
     s.clock(run=True, rate=HOSTED["rate"], turn=0)
+    # the landing page (worlds/glass-reach/site when deployed) reads the feeds; the board is the owner's to keep true
+    s.world.set_meta({"public_feed": True, "seat_sides": ["hold", "keth", "guild", "dreyer", "any"]})
+    if "public_board" not in s.world.meta():
+        s.world.set_meta({"public_board": [
+            {"label": "The wall", "text": "Eight men. It wants twenty.", "have": 8, "want": 20},
+            {"label": "The cistern", "text": "Cracked and dry. The Hold drinks what is carried in."},
+            {"label": "The water", "text": "Carried up by the Keth at dusk, while the terms hold.", "wet": True}]})
     if s.world.meta().get("hosted"):
         keep_routines(s, root)
         return

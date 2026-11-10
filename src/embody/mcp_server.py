@@ -265,6 +265,13 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
+    def requests(limit: int = 50) -> list[dict[str, Any]]:
+        """(owner) Seat requests people left on the world's page, newest first: name, how to reach them, the side
+        that draws them, why. Answer one with invite(...) and send the paste where they asked."""
+        return S(None).requests(limit)
+
+    @tool()
+    @_wrap
     def revoke(id: str) -> dict[str, Any]:
         """(owner) End a grant: its token stops working and its principal leaves the world."""
         return S(None).revoke(id)
@@ -601,9 +608,10 @@ class Bearer:
     viewer: its page is public, its data needs a grant that may read everything, and shows that grant's world) and
     GET /i/<code> (an invite link's page: the token and the brief for the agent that reads it, while the link is good)."""
 
-    def __init__(self, app: Any, hub: Hub):
+    def __init__(self, app: Any, hub: Hub, site: Any = None):
         self.app = app
         self.hub = hub
+        self.site = site  # site.Site: the world's public page and feeds, or None
 
     def _session(self, scope: dict[str, Any]) -> Session | None:
         auth = dict(scope.get("headers") or []).get(b"authorization", b"").decode("latin-1")
@@ -630,6 +638,9 @@ class Bearer:
             return
         if path.startswith("/i/"):
             await self._invite(scope, path[len("/i/"):], send)
+            return
+        if self.site is not None and path != "/mcp" and not path.startswith("/op") \
+                and await self.site.handle(scope, receive, send, path):
             return
         sess = self._session(scope)
         if sess is None:
@@ -734,13 +745,13 @@ class Bearer:
         await _reply(send, code, body, ctype=ctype)
 
 
-def http_app(srv: Any, host: str = "127.0.0.1") -> Bearer:
+def http_app(srv: Any, host: str = "127.0.0.1", site: Any = None) -> Bearer:
     """The hosted server as an ASGI app: the MCP streamable HTTP endpoint at /mcp behind the bearer check.
     DNS rebinding protection is off because the token is the guard and tunnels rewrite the Host header."""
     from mcp.server.transport_security import TransportSecuritySettings
     app = srv.streamable_http_app(streamable_http_path="/mcp", json_response=True, stateless_http=True, host=host,
                                   transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
-    return Bearer(app, srv.hub)
+    return Bearer(app, srv.hub, site)
 
 
 def ticker(engine: Engine, stop: threading.Event, period: float = 1.0) -> threading.Thread:
@@ -756,6 +767,23 @@ def ticker(engine: Engine, stop: threading.Event, period: float = 1.0) -> thread
     t = threading.Thread(target=loop, name="embody-ticker", daemon=True)
     t.start()
     return t
+
+
+def site_for(eng: Engine, args: argparse.Namespace) -> Any:
+    """The hosted world's public face: its page from --site, $EMBODY_SITE or the world folder's own `site/`, its feeds
+    (when the world's meta says public_feed), and seat requests kept beside the database."""
+    from .site import Site
+    world = getattr(args, "world", None) or os.environ.get("EMBODY_WORLD")
+    root = getattr(args, "site", None) or os.environ.get("EMBODY_SITE")
+    if not root and world and eng.workspace is not None:
+        own = Path(eng.workspace.root) / "worlds" / world / "site"
+        root = str(own) if own.is_dir() else None
+    if root and not Path(root).is_dir():
+        print(f"no site folder at {root}; serving the feeds only", flush=True)
+        root = None
+    if root:
+        print(f"site: {root} at /", flush=True)
+    return Site(eng, world, root=root, requests=eng.requests_path)
 
 
 def serve(args: argparse.Namespace) -> int:
@@ -786,7 +814,8 @@ def serve(args: argparse.Namespace) -> int:
     ticker(eng, stop)
     print(f"embody serving {db} at {eng.public_url} (bearer grants only; `embody invite` makes them)", flush=True)
     try:
-        uvicorn.run(http_app(srv, host), host=host, port=port, log_level=getattr(args, "log_level", None) or "warning")
+        uvicorn.run(http_app(srv, host, site=site_for(eng, args)), host=host, port=port,
+                    log_level=getattr(args, "log_level", None) or "warning")
     finally:
         stop.set()
     return 0

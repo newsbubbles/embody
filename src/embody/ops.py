@@ -74,6 +74,8 @@ class Engine:
         self.lock = threading.RLock()  # one op at a time on one store; servers take it around every call
         self.public_url: str | None = None  # where a hosted server is reached; printed into invites
         self.public_url_fixed = False  # the operator named the URL (--url, $EMBODY_URL): it wins over the request's host
+        db = Path(str(self.store.path)) if getattr(self.store, "path", None) not in (None, ":memory:") else None
+        self.requests_path: Path | None = db.with_name("seat-requests.jsonl") if db else None  # the site's seat requests
         self._said: dict[str, collections.deque] = {}
 
     def worlds(self) -> list[dict[str, Any]]:
@@ -755,6 +757,13 @@ class Session:
                 f" and the schemas you define. Your scripts, schemas and event kinds start with {pre}, and they keep "
                 f"your limits when they run. What the owner marked canon stays as it is.")
         return lim, note
+
+    def requests(self, limit: int = 50) -> list[dict[str, Any]]:
+        """(owner) Seat requests left on the world's page (/seat-request), newest first: who, how to reach them, which
+        side draws them, why. Kept beside the database, never in the world's log."""
+        from .site import read_requests
+        self._tick()
+        return read_requests(self.engine.requests_path, self.world.id, limit=max(1, min(int(limit), 500)))
 
     def grants(self) -> list[dict[str, Any]]:
         """(owner) Every grant on this world, without the tokens."""
@@ -1680,7 +1689,7 @@ def _until_script(until: str) -> Script:
 
 OPS = [
     "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats",
-    "invite", "grants", "revoke", "evict",
+    "invite", "grants", "revoke", "evict", "requests",
     "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
     "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
