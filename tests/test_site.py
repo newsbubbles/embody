@@ -139,3 +139,18 @@ def test_a_seat_request_is_checked_limited_and_kept_for_the_owner_alone(tmp_path
     finally:
         server.should_exit = True
         t.join(timeout=5)
+
+
+def test_a_published_day_is_on_the_chronicle_feed_once_in_its_last_telling(tmp_path):
+    eng, w, i = engine_with_two_rooms()
+    gm, server, t, base = _serve(eng, w, tmp_path)
+    try:
+        w.set_meta({"public_feed": True})
+        gm.use("two-rooms")
+        gm.publish_chronicle(1, "Day one.", title="One")
+        gm.publish_chronicle(1, "Day one, in the host's hand.", title="One")  # the feed keeps 30 s, so one look
+        d = json.loads(_call(base + "/chronicle.json")[2])
+        assert d["days"] == [{"day": 1, "title": "One", "text": "Day one, in the host's hand.", "t": d["days"][0]["t"]}]
+    finally:
+        server.should_exit = True
+        t.join(timeout=5)

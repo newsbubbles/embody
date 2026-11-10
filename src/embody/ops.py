@@ -1321,7 +1321,9 @@ class Session:
         return [self._card(r) for r in rows if self._privileged() or not r["state"].get("hidden")]
 
     def history(self, since: int = 0, until: int | None = None, kinds: list[str] | None = None,
-                touching: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+                touching: str | None = None, limit: int = 50, newest: bool = False) -> list[dict[str, Any]]:
+        """The event log, oldest first, `limit` events after `since` (`newest`: the last `limit`). The kinds the
+        engine keeps to itself (ticks, before_act, definitions) never count against the limit."""
         self._tick()
         w = self.world
         if AUTHOR not in self.capabilities and OBSERVER not in self.capabilities:
@@ -1330,7 +1332,165 @@ class Session:
             touching = self._resolve(touching)
         me = touching if not self._privileged() else None
         return self._events_for(me, w.events(since=since, until=until, kinds=kinds, touching=touching,
-                                             limit=min(limit, 500)))
+                                             limit=max(1, min(int(limit), 500)), skip=_INTERNAL_KINDS, newest=newest))
+
+    # ---- the chronicle --------------------------------------------------------------------------------------------
+
+    def _day_seconds(self) -> float:
+        return float(self.world.meta().get("day_seconds") or 86400)
+
+    def _published(self, day: int | None = None) -> dict[int, dict[str, Any]]:
+        """The chronicle as published: the last `chronicled` event of each day, withdrawn days left out."""
+        w = self.world
+        out: dict[int, dict[str, Any]] = {}
+        for r in w.store.query("event", "world_id=? AND kind='chronicled'", (w.id,), order="seq"):
+            p = r["payload"] or {}
+            d = int(p.get("day") or 0)
+            if day is not None and d != day:
+                continue
+            if p.get("text"):
+                out[d] = {"day": d, "title": p.get("title"), "text": p["text"], "seq": r["seq"], "t": round(float(r["t"]))}
+            else:
+                out.pop(d, None)
+        return out
+
+    def chronicle(self, day: int | None = None, limit: int = 200) -> dict[str, Any]:
+        """(owner, author) One world day of the log, sorted for whoever writes it up: the world's own prose
+        (`scenes`), what was said (`said`), what happened (`beats`), who went where (`travel`), counts by kind,
+        and what is already published for that day. Built from the log, nothing invented. The day defaults to the
+        current one; `day_seconds` in the world's meta sets its length (86400). Notes and intents stay their
+        owners'."""
+        self._need(AUTHOR)
+        self._tick()
+        w = self.world
+        D = self._day_seconds()
+        today = int(w.t // D) + 1
+        day = today if day is None else int(day)
+        if not 1 <= day <= today:
+            raise Rejected(f"day {day} is not in this world's past (it is day {today})", hint=f"chronicle(day=1..{today})")
+        lo, hi = (day - 1) * D, day * D
+        limit = max(1, min(int(limit), 1000))
+        rows = w.store.query("event", "world_id=? AND t>=? AND t<?", (w.id, lo, hi), order="seq")
+        skip = _INTERNAL_KINDS | _PRIVATE_KINDS | _CHRONICLE_QUIET
+        names: dict[str, str] = {}
+
+        def name(eid: str | None) -> str | None:
+            if not eid:
+                return None
+            if eid not in names:
+                e = w.get(eid)
+                names[eid] = (e["name"] or e["type"]) if e else eid
+            return names[eid]
+
+        def place(r: dict[str, Any]) -> str | None:
+            for eid in r.get("path") or []:
+                e = w.get(eid)
+                if e is not None and w.is_a(e["type"], "place"):
+                    return name(eid)
+            return None
+
+        held: dict[str, str | None] = {}
+
+        def seat(eid: str | None) -> str | None:
+            """Who holds a body now: player, mind or nobody (None). A role, never a label."""
+            if not eid:
+                return None
+            if eid not in held:
+                p = w.embodied(eid)
+                g = w.store.query("grants", "world_id=? AND principal_id=? AND revoked=0", (w.id, p["id"]), limit=1) if p else []
+                held[eid] = (g[0]["role"] if g else "host") if p else None
+            return held[eid]
+
+        def detail(p: dict[str, Any]) -> dict[str, Any]:
+            out = {}
+            for k, v in (p or {}).items():
+                if isinstance(v, str):
+                    out[k] = v if len(v) <= 160 else v[:157] + "..."
+                elif isinstance(v, (int, float, bool)) or v is None:
+                    out[k] = v
+                elif isinstance(v, list) and len(v) <= 6 and all(isinstance(x, (str, int, float)) for x in v):
+                    out[k] = [name(x) if isinstance(x, str) and w.get(x) else x for x in v]
+            return out
+
+        counts: dict[str, int] = {}
+        scenes, said, beats = [], [], []
+        travel: dict[str, list[str]] = {}
+        people: set[str] = set()
+        for r in rows:
+            k = r["kind"]
+            if k in _INTERNAL_KINDS or k in _PRIVATE_KINDS:
+                continue
+            counts[k] = counts.get(k, 0) + 1
+            t = round(float(r["t"]) - lo)
+            p = r["payload"] or {}
+            if k == "scene" and p.get("text"):
+                scenes.append({"t": t, "place": place(r), "text": p["text"]})
+            elif k == "say" and p.get("text"):
+                who = r["actor_id"]
+                people.add(who) if who else None
+                row = {"t": t, "who": name(who), "place": place(r), "text": p["text"]}
+                if p.get("to"):
+                    row["to"] = name(p["to"])
+                if seat(who) == "player":
+                    row["player"] = True
+                said.append(row)
+            elif k == "moved" and r["actor_id"] == r["target_id"] and p.get("to") and p.get("from") != p.get("to"):
+                route = travel.setdefault(name(r["target_id"]), [name(p.get("from"))] if p.get("from") else [])
+                route.append(name(p["to"]))
+                people.add(r["target_id"])
+            elif k not in skip:
+                row = {"t": t, "kind": k, "who": name(r["actor_id"]), "place": place(r)}
+                if r["target_id"] and r["target_id"] != r["actor_id"]:
+                    row["target"] = name(r["target_id"])
+                d = detail(p)
+                if d:
+                    row["detail"] = d
+                beats.append(row)
+                if r["actor_id"]:
+                    people.add(r["actor_id"])
+
+        def cap(xs: list[Any]) -> tuple[list[Any], int]:
+            return xs[:limit], max(0, len(xs) - limit)
+
+        out: dict[str, Any] = {"day": day, "today": today, "day_seconds": D, "from_t": round(lo), "to_t": round(min(hi, w.t)),
+                               "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1]))}
+        for key, xs in (("scenes", scenes), ("said", said), ("beats", beats)):
+            out[key], more = cap(xs)
+            if more:
+                out[f"{key}_more"] = more
+        out["travel"] = travel
+        out["people"] = sorted(({"name": name(e), "seat": seat(e)} for e in people if w.get(e)), key=lambda x: x["name"])
+        out["published"] = self._published(day).get(day)
+        out["hint"] = ("t is seconds into the day. Write the day in the world's voice from scenes, beats and travel. "
+                       "Words marked player are a guest's: retell them, never quote one without asking. "
+                       "Then publish_chronicle(day, text, title).")
+        return out
+
+    def publish_chronicle(self, day: int, text: str, title: str | None = None) -> dict[str, Any]:
+        """(owner, author) Put one day's chronicle on the world's page (`days` in /chronicle.json, for a world whose
+        meta says `public_feed`). Publishing a day again replaces it; an empty text withdraws it."""
+        self._need(AUTHOR)
+        self._tick()
+        w = self.world
+        today = int(w.t // self._day_seconds()) + 1
+        day = int(day)
+        if not 1 <= day <= today:
+            raise Rejected(f"day {day} has not happened (it is day {today})", hint="chronicle() shows the day so far")
+        text = str(text or "").strip()
+        if len(text) > 20000:
+            raise Rejected(f"a day's chronicle is at most 20000 characters (this one is {len(text)})",
+                           hint="cut it, or publish the day's best part")
+        if title is not None and len(str(title)) > 120:
+            raise Rejected("a title is at most 120 characters")
+        if not text and day not in self._published(day):
+            raise Rejected(f"day {day} has nothing published to withdraw", hint="publish_chronicle(day, text)")
+        self._record("publish_chronicle", day=day, title=title, chars=len(text))
+        ev = w.emit("chronicled", actor=self._actor_or_none(), target=w.root_id, reach=0,
+                    payload={"day": day, "title": str(title) if title else None, "text": text})
+        public = bool(w.meta().get("public_feed"))
+        return {"ok": True, "day": day, "seq": ev["seq"], "withdrawn": not text, "public": public,
+                "hint": "on /chronicle.json under days within 30 seconds (the feed keeps that long)" if public else
+                        "kept, not shown: the world's meta has no public_feed, so its page has no feeds"}
 
     # ---- acting -----------------------------------------------------------------------
 
@@ -1975,13 +2135,18 @@ def _until_script(until: str) -> Script:
 
 OPS = [
     "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats",
-    "invite", "grants", "revoke", "evict", "requests",
+    "invite", "grants", "revoke", "evict", "requests", "chronicle", "publish_chronicle",
     "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
     "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map", "measure",
     "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
 ]
+
+
+# What a chronicle leaves out of its beats: the bookkeeping of building and moving. Travel is told on its own.
+_CHRONICLE_QUIET = frozenset({"spawned", "patched", "linked", "unlinked", "related", "unrelated", "laid_out", "moved",
+                              "left", "chronicled", "scene", "say", "unscheduled"})
 
 
 _PLAY_OR_WATCH = frozenset({"worlds", "use", "summary", "seats", "join", "leave", "perceive", "inspect", "find", "history",

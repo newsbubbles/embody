@@ -317,9 +317,25 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def history(since: int = 0, until: int | None = None, kinds: list[str] | None = None,
-                touching: str | None = None, limit: int = 50, principal: str | None = None) -> list[dict[str, Any]]:
-        """Paged event log. Embodied principals see events that touched them."""
-        return S(principal).history(since=since, until=until, kinds=kinds, touching=touching, limit=limit)
+                touching: str | None = None, limit: int = 50, newest: bool = False,
+                principal: str | None = None) -> list[dict[str, Any]]:
+        """Paged event log, oldest first: `limit` events after seq `since`, or with newest=true the last `limit`.
+        Embodied principals see events that touched them."""
+        return S(principal).history(since=since, until=until, kinds=kinds, touching=touching, limit=limit, newest=newest)
+
+    @tool()
+    @_wrap
+    def chronicle(day: int | None = None, limit: int = 200) -> dict[str, Any]:
+        """(owner, author) One world day of the log sorted for writing it up: scenes, what was said, beats, who went
+        where, counts, and what is already published. Nothing invented. Default: today so far."""
+        return S().chronicle(day=day, limit=limit)
+
+    @tool()
+    @_wrap
+    def publish_chronicle(day: int, text: str, title: str | None = None) -> dict[str, Any]:
+        """(owner, author) Publish one day's chronicle on the world's page (/chronicle.json, days). Again replaces;
+        an empty text withdraws it."""
+        return S().publish_chronicle(day=day, text=text, title=title)
 
     @tool()
     @_wrap

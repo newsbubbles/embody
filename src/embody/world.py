@@ -1082,19 +1082,28 @@ class World:
         return int.from_bytes(h[:8], "big")
 
     def events(self, since: int = 0, until: int | None = None, kinds: list[str] | None = None,
-               touching: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        """Events after `since`. `touching`: only events whose path includes this id or its parent."""
+               touching: str | None = None, limit: int = 100, skip: Iterable[str] | None = None,
+               newest: bool = False) -> list[dict[str, Any]]:
+        """Events after `since`, oldest first. `touching`: only events whose path includes this id or its parent.
+        `kinds` and `skip` filter before the limit counts; `newest`: the last `limit` of them, not the first."""
         where = "world_id=? AND seq>?"
         params: list[Any] = [self.id, since]
         if until is not None:
             where += " AND seq<=?"
             params.append(until)
-        rows = self.store.query("event", where, params, order="seq", limit=None if touching else limit)
         if kinds:
-            rows = [r for r in rows if r["kind"] in kinds]
+            where += f" AND kind IN ({','.join('?' * len(kinds))})"
+            params.extend(kinds)
+        skip = sorted(set(skip or ()))
+        if skip:
+            where += f" AND kind NOT IN ({','.join('?' * len(skip))})"
+            params.extend(skip)
         if touching:
-            rows = self._located(touching, rows)[:limit]
-        return rows
+            rows = self._located(touching, self.store.query("event", where, params, order="seq"))
+            return rows[-limit:] if newest else rows[:limit]
+        if newest:
+            return list(reversed(self.store.query("event", where, params, order="seq DESC", limit=limit)))
+        return self.store.query("event", where, params, order="seq", limit=limit)
 
     def _located(self, who: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Keep the events `who` could have witnessed: its own, those on its path, and those in the place it

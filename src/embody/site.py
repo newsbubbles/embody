@@ -1,7 +1,8 @@
 """The public face of a hosted world, for anyone, with no grant: a landing page served from a folder at `/`, and three
 answers built on the server from the world as it is.
 
-  GET /chronicle.json    the world's own prose (scene events by default), oldest first: no player's words
+  GET /chronicle.json    the world's own prose (scene events by default), oldest first, and the days the owner published
+                         with publish_chronicle: no player's words unless the owner put them there
   GET /reach.json        the clock, the day's phases, and counts (bodies held, people, open seats): no names, no places
   POST /seat-request     someone asking for a seat; kept in a file beside the database for the owner's `requests()`
 
@@ -204,7 +205,16 @@ class Site:
             if text:
                 entries.append({"day": int(float(r["t"]) // day) + 1, "kind": r["kind"], "text": text, "t": round(float(r["t"]))})
         phases = self._phases(w, day)
-        return {"now": {"day": int(w.t // day) + 1, "phase": self._phase_now(phases, w.t, day)}, "entries": entries}
+        days: dict[int, dict[str, Any]] = {}
+        for r in w.store.query("event", "world_id=? AND kind='chronicled'", (w.id,), order="seq"):
+            p = r.get("payload") or {}
+            d = int(p.get("day") or 0)
+            if p.get("text"):
+                days[d] = {"day": d, "title": p.get("title"), "text": str(p["text"]), "t": round(float(r["t"]))}
+            else:
+                days.pop(d, None)  # withdrawn
+        return {"now": {"day": int(w.t // day) + 1, "phase": self._phase_now(phases, w.t, day)}, "entries": entries,
+                "days": [days[d] for d in sorted(days)]}
 
     def reach(self) -> dict[str, Any] | None:
         """The world right now, for anyone: the clock and counts, nothing anyone could be found by."""
