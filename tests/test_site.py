@@ -76,6 +76,8 @@ def test_the_page_is_served_at_the_root_with_byte_ranges_and_nothing_hidden(tmp_
         for path in ("/.secret", "/../outside.txt", "/%2e%2e/outside.txt", "/nothing.html"):
             status, _, _ = _call(base + path)
             assert status == 401, path  # not the site's: the door answers, and it wants a grant
+        status, _, body = _call(base + "/robots.txt")
+        assert status == 200 and b"Allow: /" in body  # a link preview needs it, or there is no card
         status, _, _ = _call(base + "/mcp", body={})
         assert status == 401  # the door is still the door
     finally:

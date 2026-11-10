@@ -78,6 +78,10 @@ class Site:
             return True
         f = self._file(path)
         if f is None:
+            if path == "/robots.txt" and self.root is not None:
+                # a link preview's crawler (X, Slack) reads this first; a refusal here reads as "keep out" and no card
+                await _send(send, 200, b"User-agent: *\nAllow: /\n", "text/plain; charset=utf-8", head=head)
+                return True
             return False
         await self._serve_file(scope, send, f, head)
         return True
