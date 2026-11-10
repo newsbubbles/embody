@@ -1,4 +1,4 @@
-"""The Glass Reach: a desert fief with table-top rules, nine places, seven NPCs, two seats to play.
+"""The Glass Reach: a desert fief with table-top rules, ten places, seven NPCs and Ruhl's nine, two seats to play.
 
     uv run embody --as gm --author load glass-reach
     uv run embody --as you join glass-reach "Reeve Ansel Varrick"
@@ -60,7 +60,7 @@ POLICY = {
     "fixed": [
         "the rules: d20 + stat + skill against a difficulty, opposed attacks, a ward stops fast blows and the slow blade passes it, "
         "water runs out, the Thresher comes to rhythm on deep sand, the ring holds during a duel; the engine rolls, the narrator tells",
-        "the seven NPCs, the nine places and the four sides",
+        "the seven NPCs, Ruhl's nine men, the ten places and the four sides",
         "the Deepwell is hidden until found or shown; Dram Hollis is Dreyer's and calls the reeve out at t=240; the cistern fails at t=600",
         "nobody but a Keth knows the way down to the Deepwell without finding it",
     ],
@@ -284,6 +284,8 @@ def define(s):
                                   "targets": "place", "scope": "exits", "duration": 20},
                         "take": {"script": "take", "doc": "Pick something up", "targets": "thing", "scope": "here"},
                         "drop": {"script": "drop", "doc": "Put down something you hold", "targets": "thing", "scope": "held"},
+                        "put": {"script": "put", "doc": "Put something you hold on or in a holder here (a rack, a chest); take gets it back",
+                                "targets": "thing", "scope": "here", "params": {"item": "id or name of a thing you hold"}},
                         "give": {"script": "give", "doc": "Hand something you hold to someone here", "targets": "creature", "scope": "here",
                                  "params": {"item": "id or name of a thing you hold"}},
                         "show": {"script": "show", "doc": "Show something you hold to someone here; they read it, you keep it", "targets": "creature", "scope": "here",
@@ -369,7 +371,7 @@ def populate(s):
     # the yard
     ruhl = s.spawn("fighter", yard, "Captain Ruhl", state=RUHL)["id"]
     s.spawn("thing", ruhl, "Guard's blade", state={"weapon": True, "damage": 2, "bonus": 0, "portable": True})
-    s.spawn("thing", yard, "Rack of practice blades", state={"portable": False,
+    s.spawn("thing", yard, "Rack of practice blades", state={"portable": False, **RACK,
         "description": "Wooden blades, weighted. Nobody dies in the ring on these. Nobody wins on them either."})
 
     # the landing
@@ -413,6 +415,7 @@ def populate(s):
     s.schedule(240, "dram_moves", entity=root)
     s.schedule(500, "dusk", entity=root)
     s.schedule(600, "cistern_cracks", entity=root)
+    keep_canon(s)
     lay_out(s)
     s.clock(run=False, turn=3)
     return s.summary()
@@ -463,6 +466,7 @@ def upgrade(s):
     s.set_rule(root, "reach_story", kinds=STORY_KINDS)
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
     keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
+    keep_canon(s)
     lay_out(s)
 
 
@@ -482,6 +486,8 @@ PLACES = [
     {"entity": "The Deepwell", "at": [4150, 1000, -25], "radius": 20, "floor": -32, "ceiling": -18,
      "note": "a cave in the ridge's foot, water at the bottom"},
     {"entity": "The Bone Field", "at": [2600, -1800, 0], "radius": 300, "note": "south across the flats, where the crawler died"},
+    {"entity": "The Low Well", "at": [3950, -250, -6], "radius": 40, "floor": -30,
+     "note": "a stone well-head in a hollow at the ridge's south foot, dry and poisoned"},
     {"entity": "The Deep", "at": [3000, -500, -60], "footprint": [[1500, -2500], [4500, -2500], [4500, 1500], [1500, 1500]],
      "floor": -200, "ceiling": -20, "note": "under the flats, the thresher's"},
     {"entity": "The cistern", "at": [0, 10, 0], "radius": 2},
@@ -493,6 +499,9 @@ PLACES = [
     {"entity": "Water casks", "at": [320, 3480, 0], "size": [6, 3, 1.5]},
     {"entity": "Tally post", "at": [290, 3520, 0]},
     {"entity": "Stone cups on cords", "at": [4152, 1004, -25]},
+    {"entity": "The Low Well's head", "at": [3950, -250, -6], "radius": 1.2},
+    {"entity": "Four cairns", "at": [3962, -244, -6], "size": [6, 1.5, 1]},
+    {"entity": "Bows on the wall", "at": [12, -18, 0], "note": "on pegs at the foot of the wall stair"},
 ]
 ROUTES = [
     {"a": "Scar Gate, the Hold", "b": "The Gate Yard", "route": [[10, 0], [20, 0]]},
@@ -502,6 +511,8 @@ ROUTES = [
     {"a": "The Glass Flats", "b": "Red Ridge", "route": [[400, 700], [1500, 800], [2800, 1000], [3900, 1100]]},
     {"a": "The Glass Flats", "b": "The Bone Field", "route": [[1800, 400], [2450, -1600]]},
     {"a": "Red Ridge", "b": "The Deepwell", "route": [[4100, 1050, 0], [4150, 1000, -25]]},
+    {"a": "The Glass Flats", "b": "The Low Well", "route": [[2800, 1000], [3600, 100], [3950, -250, -6]]},
+    {"a": "Red Ridge", "b": "The Low Well", "route": [[4050, 100, 0], [3950, -250, -6]]},
 ]
 
 
@@ -532,6 +543,109 @@ def keep_medic(s, iska):
         return
     s.spawn("medicine", iska, "Glassroot salve", state=SALVE)
     s.patch(iska, {"medic": True})
+
+
+# What the speech of the Reach kept naming and the first build never made: the Keth's poisoned well, and the nine men
+# Ruhl counts water for. Found by reading every line the NPCs said against what exists (2026-11-10).
+LOW_WELL = ("A hollow at the south foot of Red Ridge, out of the wind, where a well-head of fitted stone stands over a dry "
+            "throat. The Keth drew here before the Hold was built. The rope is gone, the bucket is gone, and nobody drinks.")
+LOW_WELL_HEAD = {"portable": False, "poisoned": True,
+                 "description": "Fitted stone, worn smooth at the lip by ropes. Far down there is still a dark shine, and a smell "
+                                "of iron and something worse. Dreyer's poison is in it yet."}
+CAIRNS = {"portable": False,
+          "description": "Four cairns in a row by the lip, two of them small. Every stone in them was carried up from the Deepwell."}
+RACK = {"holds": ["weapon"], "room": 8}  # a real blade can hang here beside the wooden ones; anyone in the yard can take it
+BOWS = {"portable": False,
+        "description": "Six short bows on pegs at the foot of the wall stair, strung, arrows standing in a jar beside them. "
+                       "What the Hold has for anything past the gate."}
+
+GUARD = {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "vigor": 6, "max_vigor": 6}
+# Ruhl's nine, in the order they are filled: a world that already has some of the Hold's men (a guest's guard, the
+# old man lent to the Keth) gets only the rest. Six of them can hold a blade; the old man, the boy and the cook cannot.
+NINE = [
+    ("The oldest of the nine", {"skills": {"blade": 1, "stealth": 1, "survival": 2}, "blade": False,
+        "description": "The oldest man on the Hold's wall, grey stubble, a sun-cured face, a slow way of standing. He has kept "
+                       "his temper through three reeves.",
+        "default_line": "The old one nods and keeps his mouth shut.",
+        "dialog": {"low well|well|keth": "'I walked the Flats when the Low Well still had a name. Ask the Keth what it is now.'"}}),
+    ("Brannoc Hale", {"blade": True,
+        "description": "Big and slow to speak, sunburnt to the collar. The best bow on the wall and the worst cook in the Hold.",
+        "default_line": "Brannoc looks at the captain before he answers. 'Ask Ruhl.'",
+        "dialog": {"water|draw|drink": "'A draw a man at the change of the watch, when there is a draw. The captain counts.'",
+                   "wall|bow|bows": "'Six bows and six of us who can pull one. The wall wants twenty. It gets us.'"}}),
+    ("Tobin Marsh", {"blade": True,
+        "description": "Narrow-faced, quick hands, a dice cup on a thong at his belt and no money to put in it.",
+        "default_line": "Tobin rattles the empty dice cup. 'Nothing to bet, nothing to say.'",
+        "dialog": {"reeve|varrick": "'He stood in the ring with no blade and bled for it. I had him at three to one against. I lost.'",
+                   "keth|terms": "'Keth water tastes of stone. I am not complaining.'"}}),
+    ("Edric Fane", {"blade": True,
+        "description": "Young for the wall and careful about it, his blade oiled every morning whether it needs it or not.",
+        "default_line": "Edric straightens. 'On watch.'",
+        "dialog": {"dreyer|hollis|clerk": "'He counted us every day from the shade. Nine. He had the number right.'"}}),
+    ("Osk Barran", {"blade": True,
+        "description": "Thick in the shoulder, a broken nose set crooked, a slow grin he does not use on the captain.",
+        "default_line": "Osk grins and says nothing.",
+        "dialog": {"flats|glass|sand|thresher": "'I went out on the glass once, loud. Once.'"}}),
+    ("Lute Callow", {"blade": True,
+        "description": "Thin, sharp-eyed, the one Ruhl puts over the gate at night because he does not sleep much anyway.",
+        "default_line": "Lute keeps his eyes on the road. 'Road's empty.'",
+        "dialog": {"road|salt|landing|crawler": "'Crawler at dawn, dust before it. Anything else on that road, I see it first.'"}}),
+    ("Pip", {"blade": False, "body": 2, "skills": {"stealth": 1, "survival": 1},
+        "description": "A boy of twelve or so, the Hold's runner, all elbows, too thin for a blade and too quick to keep indoors.",
+        "default_line": "Pip shrugs, already halfway to somewhere else.",
+        "dialog": {"water|cask|jars": "'I carry it, I don't count it. The captain counts it.'"}}),
+    ("Hobb", {"blade": False, "body": 2, "skills": {"survival": 1},
+        "description": "The Hold's cook, lame in the left leg from a fall off the wall, flour in the creases of his hands.",
+        "default_line": "Hobb stirs the pot. 'It is what it is.'",
+        "dialog": {"food|eat|cook|bread": "'Salt bread and what the crawler brings. Water first, then I cook with what is left.'"}}),
+    ("Garret Cole", {"blade": True,
+        "description": "Square and quiet, a Varrick man from before the writ, the captain's second when there is need of one.",
+        "default_line": "Garret waits for the captain's word.",
+        "dialog": {"captain|ruhl": "'Ruhl does not cross a line he has drawn. That is the whole of him.'"}}),
+]
+
+
+def keep_canon(s):
+    """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
+    bows on the Hold's wall, and Ruhl's nine. Each is made once: the well and the bows by name, the nine by a mark on
+    the story, so a guard who dies is not raised again on a reboot. The nine are posted in the Hold, where a body with
+    water at hand does not thirst; they drink when the Hold runs dry, like everyone under its roof."""
+    names = {e["name"]: e["id"] for e in s.find(limit=500)}
+    story = s.find(type="story", limit=1)[0]["id"]
+    st = s.world.get(story)["state"]
+    root = s.summary()["root"]
+    if "The Low Well" not in names:
+        well = s.spawn("place", root, "The Low Well", state={"description": LOW_WELL})["id"]
+        s.connect(st["flats"], well)
+        s.connect(st["ridge"], well)
+        s.spawn("thing", well, "The Low Well's head", state=LOW_WELL_HEAD)
+        s.spawn("thing", well, "Four cairns", state=CAIRNS)
+        s.patch(story, {"low_well": well})
+    if "Bows on the wall" not in names:
+        s.spawn("thing", st["hold"], "Bows on the wall", state=BOWS)
+    rack = names.get("Rack of practice blades")
+    if rack and s.world.get(rack)["state"].get("holds") is None:
+        s.patch(rack, RACK)
+    if st.get("garrison"):
+        return
+    hold, ruhl = st["hold"], st["ruhl"]
+    bodies = s.find(type="person", limit=500) + s.find(type="fighter", limit=500)
+    have = len({e["id"] for e in bodies if s.world.get(e["id"])["state"].get("faction") == "House Varrick"} - {ruhl, st["ansel"]})
+    for name, spec in NINE:
+        if have >= 9:
+            break
+        if name in names:
+            continue
+        spec = dict(spec)
+        armed = spec.pop("blade")
+        man = s.spawn("person", hold, name, state={**GUARD, **spec, "post": hold, "water": 10, "max_water": 10})["id"]
+        if armed:
+            s.spawn("thing", man, "Varrick blade", state={"weapon": True, "damage": 2, "bonus": 0, "portable": True,
+                                                         "description": "A plain House Varrick blade, the grip rewrapped in cord."})
+        s.link(ruhl, man, "knows", {"standing": 2, "note": "one of my nine", "met_t": 0, "count": 0})
+        s.link(man, ruhl, "knows", {"standing": 3, "note": "the captain; he counts the water", "met_t": 0, "count": 0})
+        have += 1
+    s.patch(story, {"garrison": True})
 
 
 def keep_routines(s, root):

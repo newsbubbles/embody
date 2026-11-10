@@ -516,7 +516,7 @@ def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_
     m = gm.map(depth=2)
     rows = {e["name"]: e for e in m["entities"]}
     places = [e for e in m["entities"] if e["type"] == "place"]
-    assert len(places) == 9 and all(e["own"] for e in places)
+    assert len(places) == 10 and all(e["own"] for e in places)
     assert rows["The Keth jars"]["own"] and rows["The Hold's ration cask"]["own"]  # spawned by the routines, placed after
     assert len(m["paths"]) >= 7 and all(p["drawn"] for p in m["paths"])
     ridge = gm.measure("Scar Gate, the Hold", "Red Ridge")
@@ -525,3 +525,80 @@ def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_
     gm.layout(placements=[{"entity": "The Carriers' Landing", "at": [320, 3600, 0]}])  # the owner moves it live
     load_world(gm, "glass-reach", upgrade=True, hosted=True)
     assert gm.measure("The Carriers' Landing")["a"]["at"] == [320, 3600, 0]
+
+
+def varrick_men(gm):
+    st = story(gm)
+    return {e["name"] for e in gm.find(type="person", limit=500) + gm.find(type="fighter", limit=500)
+            if gm.world.get(e["id"])["state"].get("faction") == "House Varrick"} - {"Captain Ruhl", "Reeve Ansel Varrick"}
+
+
+def test_the_low_well_and_ruhls_nine_are_in_the_world():
+    eng, gm, you = reach()
+    # the Keth's grave is a place off the Flats and the ridge: a dry, poisoned well-head nobody drinks from
+    well = gm.inspect("The Low Well")
+    assert well["type"] == "place" and not well["state"].get("hidden")
+    assert {c["name"] for c in well["contents"]} == {"The Low Well's head", "Four cairns"}
+    exits = {gm.world.get(e["target"])["name"] for e in gm.world.edges(well["id"], "connects_to", "out")}
+    assert exits == {"The Glass Flats", "Red Ridge"}
+    assert not gm.inspect("The Low Well's head")["state"].get("water_source")
+    # nine men under Ruhl in the Hold, six of them with a blade, and the captain knows every one
+    men = varrick_men(gm)
+    assert len(men) == 9 and "The oldest of the nine" in men
+    hold = gm.inspect("Scar Gate, the Hold")["id"]
+    armed = [m for m in men if any(c["name"] == "Varrick blade" for c in gm.inspect(m)["contents"])]
+    assert len(armed) == 6 and all(gm.inspect(m)["parent"] == hold for m in men)
+    ruhl = gm.inspect("Captain Ruhl")["id"]
+    known = {gm.world.get(e["target"])["name"] for e in gm.world.edges(ruhl, "knows", "out")}
+    assert men <= known
+    assert gm.inspect("Bows on the wall")["parent"] == hold
+    # they are people, not fighters: an outlaw under the Hold's roof is the captain's to deal with, not theirs
+    assert all(gm.inspect(m)["type"] == "person" for m in men)
+    # under the roof with water at hand nobody thirsts, the nine included
+    for _ in range(3):
+        gm.clock(step=60)
+    assert gm.inspect("Brannoc Hale")["state"]["water"] == 10
+
+
+def test_a_reach_with_some_of_the_hold_already_gets_only_the_rest_and_only_once():
+    eng, gm, you = reach()
+    st = story(gm)
+    for m in varrick_men(gm):
+        gm.destroy(m)
+    gm.destroy("The Low Well")
+    gm.patch(gm.find(type="story")[0]["id"], {"garrison": False, "low_well": None})
+    # an older Reach: a guest's guard and the old man lent to the Keth, no Low Well
+    kit = eng.session_for_token(gm.invite("player", label="Kit")["token"])
+    kit.join(template="guard", name="Kit")
+    gm.spawn("person", st["deepwell"], "The oldest of the nine", state={"faction": "House Varrick"})
+    load_world(gm, "glass-reach", upgrade=True)
+    men = varrick_men(gm)
+    assert len(men) == 9 and "Kit" in men and "Garret Cole" not in men  # the guest stands in for the ninth
+    assert len([e for e in gm.find(limit=500) if e["name"] == "The oldest of the nine"]) == 1
+    assert [e["name"] for e in gm.find(type="place", limit=50)].count("The Low Well") == 1
+    # a man who is gone stays gone: the nine are made once
+    gm.destroy("Brannoc Hale")
+    load_world(gm, "glass-reach", upgrade=True)
+    assert "Brannoc Hale" not in varrick_men(gm) and [e["name"] for e in gm.find(type="place", limit=50)].count("The Low Well") == 1
+
+
+def test_a_blade_hangs_on_the_rack_and_a_card_shows_the_blade_a_body_bears():
+    eng, gm, you = reach()
+    hollis = next(c for c in you.perceive()["present"] if c["name"] == "Dram Hollis")
+    assert [b["name"] for b in hollis["bears"]] == ["Thin blade"]  # seen at his hip, whatever the prose says
+    you.act("go", "The Gate Yard")
+    with pytest.raises(Rejected) as ex:
+        you.act("put", "Rack of practice blades", params={"item": "Waterskin"})
+    assert "does not take that" in str(ex.value)
+    with pytest.raises(Rejected):
+        you.act("put", "Captain Ruhl", params={"item": "Reeve's blade"})  # a person is not a rack
+    r = you.act("put", "Rack of practice blades", params={"item": "Reeve's blade"})
+    assert "put" in kinds(r)
+    rack = next(c for c in you.perceive()["present"] if c["name"] == "Rack of practice blades")
+    assert [h["name"] for h in rack["holding"]] == ["Reeve's blade"]
+    assert gm.inspect("Reeve's blade")["parent"] == gm.inspect("Rack of practice blades")["id"]
+    # whoever stands in the yard can take it down again
+    ruhl = eng.session("ruhl")
+    ruhl.join("glass-reach", "Captain Ruhl")
+    ruhl.act("take", "Reeve's blade")
+    assert gm.inspect("Reeve's blade")["parent"] == gm.inspect("Captain Ruhl")["id"]

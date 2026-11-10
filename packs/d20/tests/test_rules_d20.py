@@ -308,7 +308,7 @@ def test_loud_steps_and_digging_wake_the_thresher_the_broken_step_does_not():
     assert gm.world.events(since=0, kinds=["thresher_surfaces"], limit=5000)
     assert any("sand" in e["payload"]["text"].lower() for e in gm.world.events(since=0, kinds=["scene"], limit=5000))
     me = gm.inspect("Reeve Ansel Varrick")
-    assert me["parent"] in (gm.inspect("The Salt Road")["id"], gm.inspect("Red Ridge")["id"])
+    assert me["parent"] in (gm.inspect("The Salt Road")["id"], gm.inspect("Red Ridge")["id"], gm.inspect("The Low Well")["id"])  # any firm ground off the Flats
     assert state(gm, "The Glass Flats")["tremor"] == 0
     gm.clock(step=10)
     assert gm.inspect("The Thresher")["parent"] == gm.inspect("The Deep")["id"]
