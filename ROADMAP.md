@@ -142,6 +142,13 @@ These were agreed in conversation on 2026-11-08 and are not built. Order of atta
 - [x] (round 2) Partial world knowledge: `known_places` derived from the entity's own `moved` events.
 - [ ] An `overheard` tail of events that reached its place while it was not looking. A mind gets a worldview without a map.
 
+### Loops, after Westworld (Nate, 2026-11-10)
+
+- [ ] Storyline loops: a routine is a whole storyline that plays out in the world when no guest is in it (the Reach's are water runs; Westworld's were plots). A guest can step into one or break it.
+- [ ] Revival for the story: a character a storyline needs comes back by rule (a successor in the seat, a healer's visit), named in the world's policy, never by the host's hand alone.
+- [ ] A hold on all hosts: the narrator or owner stops every NPC and idle body (their behaviors and routines) while the clock and the players go on. For a scene that must not be crossed, or for repairs.
+- [ ] A soak for every pack that uses up something (shards, vigor, ammunition), like packs/d20/soak.py for water.
+
 ### Canon and what is flexible
 
 - [x] (round 2, ferry world `POLICY`, read by the narrator per the skill) A policy on the world root: `fixed` (places, people, storyline beats, named facts), `fill` (props of daily life the narrator may spawn on request), `voice` (whether NPC minds may speak beyond their dialog table). The player's preference picks within what the world allows, never past it.
