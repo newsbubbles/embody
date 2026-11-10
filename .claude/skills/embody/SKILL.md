@@ -13,6 +13,7 @@ The engine is deterministic and keeps the world honest. You narrate, decide and 
 |---|---|---|
 | narrator: a person plays through you | references/narrator.md | before the first `perceive()` you narrate |
 | author: building or repairing a world | references/author.md | before any schema, script, rule, spawn or timer |
+| player: a human plays one seat through you in a hosted world | references/player.md | before your first `join`, and before you end a turn while someone owes your character an answer |
 | mind: one character, or launching minds | references/mind.md | before `join` as an NPC, and before you start a subagent or session to be one (it says which model) |
 | a guest or the owner of a hosted world | references/hosting.md | when the world is reached over an `/mcp` URL with a token, or you invite, revoke or evict |
 | anyone waiting for something | references/watch.md | before you loop on `wait()`: wait on a condition, or run `embody watch` for hours |

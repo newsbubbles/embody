@@ -6,6 +6,7 @@ The version in `pyproject.toml` is 0.1.0 until the first release; until then ent
 
 ## Unreleased
 
+- A player's agent is told how to wait. The invite page for a player or mind in a running world says to `wait(until="heard('', by=...)")` for the answer before telling the human, never to loop on a bare `wait()`, and carries a background watch loop over `/op/wait` for between the human's turns (a guest has no checkout and no `embody watch`). The skill has a player reference, `references/player.md`, and its index points players at it.
 - The MCP tool list follows the grant: a player sees the tools a player may call, an observer its reading tools; the host's own process sees all. `invite` over MCP and on the command line (`--under`, `--types`, `--scripts`) takes `limits`.
 - `timers()` for players and minds: the next of each kind the world's meta lists as `public_timers` (the Reach: heat, dusk, night, dawn), with `when` in words and without what the timer carries. Authors, narrators and observers see every timer as before.
 - Things remember whom they were taken from: a thing that passes from one body to another by someone's act, and not as a gift, carries `taken_from` until it goes home. An author's own moves leave no mark.

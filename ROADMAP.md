@@ -139,6 +139,7 @@ Gaps
 - [x] A guest held Ansel's blade and went quiet, and the blade stayed out of reach for hours. Things remember whom they were taken from; `reclaim` takes back from an idle body what is yours or what its standing orders (`away`) give; an idle body answers with its standing line (unreleased).
 - [x] A guest's agent saw every tool and was refused on most: the tool list follows the grant's role (unreleased).
 - [x] A player could not read the day's schedule: `timers()` gives players and minds the next of each kind the world lists as `public_timers`, in words (unreleased).
+- [x] Nate's own test player (Isalit) waited on bare timeouts and never between his turns: nothing told a player's agent to wait on a condition, and the watcher was framed for minds. The page carries the habit and an HTTPS watch loop; `references/player.md` (unreleased).
 - [ ] `by_player` names whoever holds the seat now, not who held it when the event happened.
 - [ ] Some of Taan's `say` rows are written twice.
 - [ ] A person with no dialog answers a stock "Hm.", which reads as the engine, not the character.

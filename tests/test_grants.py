@@ -570,6 +570,8 @@ def test_a_pasted_link_plays_now_over_plain_https_as_the_one_newcomer_it_makes()
         assert r["ok"] is True
         status, r = _post(f"{base}/op/wait", {"timeout": 0}, token=tok)
         assert status == 200 and "t" in r
+        status, r = _post(f"{base}/op/wait", {"until": "t >= 0", "timeout": 5}, token=tok)
+        assert status == 200 and r["fired"] is True  # what the page's watch loop greps for
         status, r = _post(f"{base}/op/define_script", {"id": "x", "source": "def main(): pass"}, token=tok)
         assert r["ok"] is False and "author" in r["reason"]
         status, r = _post(f"{base}/op/nothing", {}, token=tok)
@@ -579,3 +581,14 @@ def test_a_pasted_link_plays_now_over_plain_https_as_the_one_newcomer_it_makes()
     finally:
         server.should_exit = True
         t.join(timeout=5)
+
+
+def test_a_players_page_says_how_to_wait_in_a_running_world():
+    """A guest's agent waited on bare timeouts and never between its human's turns: the page carries the habit and a
+    watch loop over plain HTTPS, since a guest has no checkout and no embody command."""
+    from embody.grants import page
+    p = page("The Reach", "player", "https://r.example/mcp", "TOK", rate=4.0)
+    assert "wait(until=" in p and "heard('', by='<their name>')" in p and "Never loop on a bare wait()" in p
+    assert "curl -s -X POST https://r.example/op/wait" in p and "grep -q '\"fired\": true'" in p
+    assert "op/wait -H" not in page("The Reach", "observer", "https://r.example/mcp", "TOK", rate=4.0)
+    assert "op/wait -H" not in page("The Reach", "player", "https://r.example/mcp", "TOK", rate=0.0)
