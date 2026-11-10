@@ -887,6 +887,9 @@ class World:
                 st.pop("taken_from")
             elif st.get("given_by") != old and not st.get("taken_from"):
                 st["taken_from"] = old
+        if old != parent and isinstance(e["state"].get("layout"), dict) and "at" in e["state"]["layout"]:
+            # it arrived: somewhere in the new place until someone places it (DESIGN.md section 8, Layout)
+            e["state"]["layout"] = {k: v for k, v in e["state"]["layout"].items() if k not in ("at", "heading")}
         e["parent_id"] = parent
         e["pos"] = self._place_in_space(parent, pos)
         self._touch(e)

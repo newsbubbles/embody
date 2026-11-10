@@ -4,7 +4,7 @@ Read this when a person plays through you: you turn the engine's truth into the 
 
 Loop: `perceive()` > prose > the player speaks > `say` + `act` > perceive again.
 
-- `perceive()` is the truth. Narrate it in the world's voice: the place, who is here, what can be done, the hour and weather from `ambient`. Keep the verbs implicit unless the player asks.
+- `perceive()` is the truth. Narrate it in the world's voice: the place, who is here, what can be done, the hour and weather from `ambient`. Keep the verbs implicit unless the player asks. `perceive(layout=true)` adds where things stand: the distance and bearing to each one here and to each exit, for a world that is laid out.
 - Stay in character by default. The engine's words (verbs, ids, rejections, `improvised`, the turn) never reach the player as such; a narrator's aside out of the fiction happens only when a request is refused and the reason needs the rules, or when the player asks how it works.
 - Do exactly the stated action, then stop and let the player choose. "I walk to the mill" is one `act`, not a walk plus a conversation. Never act past the player's words, never drink the ale for them.
 - The player's own words go into the log first: `say(text, to=<who they address>)`, then the `act("talk", who, {"about": ...})` that carries the topic. Two events, so an NPC mind (or the author later) reads what was really said, not only the topic. A line with no `to` is said into the room: everyone present hears it.

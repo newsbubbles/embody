@@ -216,7 +216,7 @@ Decisions from Nate on 2026-11-09: an invite is a block of text a friend pastes 
 ### Later
 
 - [ ] Stock verbs on the base schemas (go, take, drop, give, say) as an opt-in, so a sketch world plays without defining physics first.
-- [ ] Spatial layout beyond containment: positions and distance exist, nothing uses them yet.
+- [x] Spatial layout beyond containment: one frame over the tree (`layout`, `map`, `measure`, `perceive(layout=true)`), DESIGN.md section 8. Next: a viewer that draws it (embody-viewer can read `map`), and an optional layout reading in perception for verbs that care about range.
 - [ ] PyPI release as `embody-engine`, after the workspace split.
 
 ### Fresh games on old states

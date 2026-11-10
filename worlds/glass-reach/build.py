@@ -413,6 +413,7 @@ def populate(s):
     s.schedule(240, "dram_moves", entity=root)
     s.schedule(500, "dusk", entity=root)
     s.schedule(600, "cistern_cracks", entity=root)
+    lay_out(s)
     s.clock(run=False, turn=3)
     return s.summary()
 
@@ -462,7 +463,62 @@ def upgrade(s):
     s.set_rule(root, "reach_story", kinds=STORY_KINDS)
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
     keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
+    lay_out(s)
 
+
+# Where the Reach lies, from the canon: metres, north up, the Hold in the gap of the Scar at x = y = 0. The Salt Road
+# runs north to the Carriers' Landing, the Glass Flats spread east of it to Red Ridge (two Keth legs out, about 4 km),
+# the Deepwell is a cave in the ridge's foot, the Bone Field lies south across the flats, the Deep under them.
+FRAME = {"units": "m", "bounds": [[-3000, -6000], [9000, 9000]]}
+PLACES = [
+    {"entity": "Scar Gate, the Hold", "at": [0, 0, 0], "size": [30, 40, 12], "note": "the fort in the gap of the Scar"},
+    {"entity": "The Gate Yard", "at": [35, 0, 0], "size": [40, 30], "note": "the walled yard east of the Hold, the ring at its middle"},
+    {"entity": "The Salt Road", "at": [70, 800, 0], "footprint": [[60, -10], [80, -10], [80, 6000], [60, 6000]],
+     "note": "a packed salt strip running north from the yard gate"},
+    {"entity": "The Carriers' Landing", "at": [300, 3500, 0], "radius": 150, "note": "where the crawlers stand off the road"},
+    {"entity": "The Glass Flats", "at": [2000, 850, 0],
+     "footprint": [[120, -3000], [6000, -3000], [6000, 5000], [400, 5000], [120, 3000]], "note": "black glass and deep sand"},
+    {"entity": "Red Ridge", "at": [4200, 1200, 0], "size": [600, 2400, 80], "heading": 15, "note": "a long red spine, north by east"},
+    {"entity": "The Deepwell", "at": [4150, 1000, -25], "radius": 20, "floor": -32, "ceiling": -18,
+     "note": "a cave in the ridge's foot, water at the bottom"},
+    {"entity": "The Bone Field", "at": [2600, -1800, 0], "radius": 300, "note": "south across the flats, where the crawler died"},
+    {"entity": "The Deep", "at": [3000, -500, -60], "footprint": [[1500, -2500], [4500, -2500], [4500, 1500], [1500, 1500]],
+     "floor": -200, "ceiling": -20, "note": "under the flats, the thresher's"},
+    {"entity": "The cistern", "at": [0, 10, 0], "radius": 2},
+    {"entity": "The Keth jars", "at": [3, 10, 0], "radius": 0.6},
+    {"entity": "Notice by the cistern", "at": [0, 12.2, 1.5]},
+    {"entity": "The Hold's ration cask", "at": [-8, -14, 0], "radius": 0.6},
+    {"entity": "The Crown's writ", "at": [-14, 0, 1.6], "note": "on the west wall"},
+    {"entity": "Rack of practice blades", "at": [50, 10, 0], "size": [3, 0.6, 1.6]},
+    {"entity": "Water casks", "at": [320, 3480, 0], "size": [6, 3, 1.5]},
+    {"entity": "Tally post", "at": [290, 3520, 0]},
+    {"entity": "Stone cups on cords", "at": [4152, 1004, -25]},
+]
+ROUTES = [
+    {"a": "Scar Gate, the Hold", "b": "The Gate Yard", "route": [[10, 0], [20, 0]]},
+    {"a": "The Gate Yard", "b": "The Salt Road", "route": [[55, 0], [70, 0], [70, 40]]},
+    {"a": "The Salt Road", "b": "The Carriers' Landing", "route": [[80, 3400], [160, 3470]]},
+    {"a": "The Salt Road", "b": "The Glass Flats", "route": [[80, 700], [400, 700]]},
+    {"a": "The Glass Flats", "b": "Red Ridge", "route": [[400, 700], [1500, 800], [2800, 1000], [3900, 1100]]},
+    {"a": "The Glass Flats", "b": "The Bone Field", "route": [[1800, 400], [2450, -1600]]},
+    {"a": "Red Ridge", "b": "The Deepwell", "route": [[4100, 1050, 0], [4150, 1000, -25]]},
+]
+
+
+def lay_out(s):
+    """Lay the Reach out in the world's one frame. Each piece is written once: an entity that has a layout of its own,
+    a path that has a route and a root that has a frame are the owner's now, edited live, and a reboot leaves them as
+    they are. Only what exists is placed. Returns the layout op's warnings."""
+    w = s.world
+    root = s.summary()["root"]
+    ids = {e["name"]: e["id"] for e in s.find(limit=500)}
+    places = [p for p in PLACES if p["entity"] in ids and not w.get(ids[p["entity"]])["state"].get("layout")]
+    routes = [r for r in ROUTES if r["a"] in ids and r["b"] in ids
+              and not any(ed["target"] == ids[r["b"]] and ed["data"].get("route") for ed in w.edges(ids[r["a"]], "connects_to", "out"))]
+    frame = None if w.get(root)["state"].get("frame") else FRAME
+    if not (places or routes or frame):
+        return []
+    return s.layout(frame=frame, placements=places, paths=routes)["warnings"]
 
 SALVE = {"doses": 4, "heals": 3, "description": "A Keth pouch of glassroot salve: chewed root and fat, bitter, bound in a strip of hide.",
          "description_empty": "An empty Keth pouch. It still smells of glassroot."}
@@ -504,6 +560,7 @@ def keep_routines(s, root):
         spine = next((t for t in timers if t["kind"] == rides and t["every"]), None)
         if spine is not None:
             s.schedule(max(0.0, spine["in"]), kind, entity=root, every=spine["every"])
+    lay_out(s)  # the jars and the cask came after the first pass
 
 
 def host(s):

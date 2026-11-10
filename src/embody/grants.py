@@ -24,8 +24,9 @@ ROLES = (OWNER, AUTHOR_ROLE, BUILDER, NARRATOR, PLAYER, MIND, OBSERVER_ROLE)
 _ANYONE = {"worlds", "use", "summary", "seats", "leave", "clock"}
 _PLAY = {"join", "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
          "timers", "reclaim", "away"}
-_WATCH = {"perceive", "inspect", "find", "history", "recall", "timers", "schemas", "scripts", "script_source", "wait"}
-_NARRATE = {"act_as", "say_as", "timers", "spawn", "patch", "move", "destroy", "link", "connect", "unlink",
+_WATCH = {"perceive", "inspect", "find", "history", "recall", "timers", "schemas", "scripts", "script_source", "wait",
+          "map", "measure"}
+_NARRATE = {"act_as", "say_as", "timers", "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "layout",
             "relate", "unrelate", "schedule", "unschedule", "remember", "intend", "recall"}
 _AUTHOR = _NARRATE | _WATCH | {"create_world", "fork_world", "save", "restore", "define_schema", "define_script",
                                "set_rule", "clear_rule", "mirror"}

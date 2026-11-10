@@ -291,12 +291,13 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def perceive(cursor: int | None = None, from_entity: str | None = None, events: int = 30,
-                 principal: str | None = None) -> dict[str, Any]:
+                 principal: str | None = None, layout: bool = False) -> dict[str, Any]:
         """Everything you sense from where you are: place, who and what is here, exits, what you hold, who you know
         (with standing and the last exchanges), places you have been, the verbs you could try (with the reason when
         one is not possible), and events since your cursor. Your own card includes your secret memory and brief.
-        Authors and observers may pass from_entity to perceive as any entity (the NPC context bundle)."""
-        return S(principal).perceive(cursor=cursor, from_entity=from_entity, events=events)
+        Authors and observers may pass from_entity to perceive as any entity (the NPC context bundle). layout=true
+        adds where you stand in the world's frame, and the distance and bearing to what is here and to each exit."""
+        return S(principal).perceive(cursor=cursor, from_entity=from_entity, events=events, layout=layout)
 
     @tool()
     @_wrap
@@ -518,6 +519,35 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     def clear_rule(entity: str, script: str) -> dict[str, Any]:
         """(author) Detach a rule."""
         return s.clear_rule(entity, script)
+
+    @tool()
+    @_wrap
+    def layout(placements: list[dict[str, Any]] | None = None, paths: list[dict[str, Any]] | None = None,
+               frame: dict[str, Any] | None = None, replace: bool = False) -> dict[str, Any]:
+        """(author, narrator) Lay out many entities at once in the world's one frame (metres, z up, y north). The tree
+        says how the story moves; a layout says where things are, and neither bends the other. placements:
+        [{entity, at: [x, y, z], heading (degrees from north), one extent: radius | size [w, d, h] | footprint
+        [[x, y], ...], floor, ceiling, mesh (a reference for clients), note}]. paths: [{a, b, route: [[x, y, z], ...],
+        length}] on the connects_to edge between two places. frame: {units, bounds, geo: {lat, lon}} on the root.
+        Keys merge (None deletes one); replace=true sets each layout whole. Answers with warnings, not refusals,
+        for what only looks wrong. Read it back with map(); measure() is the ruler."""
+        return s.layout(placements=placements, paths=paths, frame=frame, replace=replace)
+
+    @tool()
+    @_wrap
+    def map(under: str | None = None, depth: int = 1, sketch: bool = True, width: int = 64) -> dict[str, Any]:
+        """(author, narrator, observer) The layout of a subtree, level by level: every entity under `under` (default
+        the world) to `depth` levels with its position (own or inherited) and extent, the paths between the places
+        with their lengths and bearings, what is not laid out yet, warnings, and a top-down text sketch (north up)."""
+        return s.map(under=under, depth=depth, sketch=sketch, width=width)
+
+    @tool()
+    @_wrap
+    def measure(a: str, b: str | None = None, point: list[float] | None = None) -> dict[str, Any]:
+        """(author, narrator, observer) The ruler. One entity: where it is, its extent, area, floor and ceiling. With b
+        or a point [x, y, z]: distance on the ground and in 3D, compass bearing, height difference, the gap from a's
+        edge, containment both ways, and whether the extents overlap."""
+        return s.measure(a, b=b, point=point)
 
     @tool()
     @_wrap

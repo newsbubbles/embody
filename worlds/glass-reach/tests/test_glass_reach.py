@@ -507,3 +507,21 @@ def test_a_reach_from_before_rest_mends_and_iska_carries_the_salve_once():
     gm.clock(step=21601)
     ruhl = gm.inspect("Captain Ruhl")["state"]
     assert not ruhl["down"] and ruhl["vigor"] >= 2
+
+
+def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_reboot():
+    eng = Engine(workspace=REPO)
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    load_world(gm, "glass-reach", hosted=True)
+    m = gm.map(depth=2)
+    rows = {e["name"]: e for e in m["entities"]}
+    places = [e for e in m["entities"] if e["type"] == "place"]
+    assert len(places) == 9 and all(e["own"] for e in places)
+    assert rows["The Keth jars"]["own"] and rows["The Hold's ration cask"]["own"]  # spawned by the routines, placed after
+    assert len(m["paths"]) >= 7 and all(p["drawn"] for p in m["paths"])
+    ridge = gm.measure("Scar Gate, the Hold", "Red Ridge")
+    assert 3500 < ridge["ground"] < 5000 and ridge["bearing"] in ("E", "ENE")  # two Keth legs out
+    assert gm.measure("Red Ridge", "The Deepwell")["dz"] == -25.0
+    gm.layout(placements=[{"entity": "The Carriers' Landing", "at": [320, 3600, 0]}])  # the owner moves it live
+    load_world(gm, "glass-reach", upgrade=True, hosted=True)
+    assert gm.measure("The Carriers' Landing")["a"]["at"] == [320, 3600, 0]

@@ -139,6 +139,18 @@ Reach, line of sight and hearing become distance checks when a space exists and 
 
 Slice scope: `space` and `pos` generic from the first schema; zero dims and 2D grid implemented; 3D later, as a number not a rewrite.
 
+### Layout: one frame over the tree (2026-11-10)
+
+The tree is how the story moves: what holds what, who can reach what, where a path goes. It is not a set of nested shapes. A cavern under a ridge, a yard inside a gate, a road that runs between two places: the tree says how you get there; the layout says where it is. They are two views of one world and neither bends the other, so laying out a world never means moving entities in the tree.
+
+- **One frame for the whole world.** The root's `frame` names it: `units` (metres), `up` (`z`), which axis is `north` (`y`), optional `bounds` and an optional `geo` anchor (a latitude and longitude for x = y = 0). Every layout in the world is in this frame. No relative spaces to compose, so a viewer, an agent and a script all read the same numbers.
+- **A layout on any entity** (`state.layout`, out of everyone's cards; read it with `map`, `measure` or `perceive(layout=true)`): `at` (x, y and optionally z), `heading` (degrees from north, clockwise), and an extent: `radius`, `size` (width, depth, height, a box turned by the heading) or `footprint` (a polygon of world x, y points). `floor` and `ceiling` make an extent a prism in z. `mesh` is a reference a client may load (a URL, an asset id); the engine never reads it. Extents are 2.5D on purpose: a footprint and a height is what an agent can reason about with plain measurements; real geometry belongs to a mesh.
+- **Paths carry their own geometry.** A `connects_to` edge may carry `route` (points in the frame) and `length` (metres along it). The story path and the drawn path are the same edge.
+- **What has no layout inherits.** A body or a thing without its own `at` is at its container's. When an entity changes container its own `at` is dropped (it arrived; it is somewhere in the new place until someone places it), and what it carries goes with it.
+- **A gameplay space can sit in the frame.** A container's `space` may carry `frame_origin` and `cell` (metres per unit, and an optional `heading`), so a grid inside a room maps to world positions.
+- **Ops.** `layout(placements, paths, frame)` writes many at once, checks every shape, and answers with warnings, never a refusal for a choice: a thing outside the place it is in, a route shorter than the straight line. `map(under, depth)` reads a subtree back with every position (own or inherited), the paths, the warnings and a top-down text sketch. `measure(a, b)` is the ruler: distances on the ground and in 3D, compass bearing, height difference, area, containment, overlap. `perceive(layout=true)` adds where you stand, and distance and bearing to what is here and to each exit.
+- **Who sees it.** Authors, narrators and observers read the whole layout. A player or a mind gets it through perceive: what it can see, nothing hidden.
+
 ## 9. Storylines
 
 A storyline is an entity outside the containment tree (under the world's `storylines` branch), hidden from embodied principals, visible to author and observer. It holds stages; each stage is a listener with a condition over events and state and effects applied as the storyline's own principal: spawn the ghost, unlock the gate, emit a `rumor` event in the tavern so the barkeep hears it. Open world is everything the rails do not touch. The GM agent can author or bend storylines live with the same ops.

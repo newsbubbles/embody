@@ -12,6 +12,7 @@ import contextlib
 import functools
 import inspect
 import json
+import math
 import secrets
 import threading
 import time
@@ -20,6 +21,7 @@ from typing import Any, Callable
 
 from .grants import (HOST_MARK, LINK_HOURS, link_for, request_origin, new_code, page, AUTHOR_ROLE, BUILDER, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, OWNER, PLAYER, ROLES, ROLE_DOC,
                      active, allowed, caps_for, new_token, paste, principal_id_for, role_for, token_hash)
+from . import layout as geo
 from .script import Script, ScriptError
 from .store import Store
 from .world import LIMITS_HEAD, Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
@@ -352,6 +354,15 @@ class Session:
             need(args["source"], args["target"], any_=True)
         elif op == "connect":
             need(args["a"], args["b"], any_=True)
+        elif op == "layout":
+            if args.get("frame") is not None:
+                raise Rejected("the frame is the whole world's; your grant is limited", hint="lay out inside your part")
+            for p in args.get("placements") or []:
+                if isinstance(p, dict) and p.get("entity"):
+                    need(p["entity"])
+            for p in args.get("paths") or []:
+                if isinstance(p, dict) and p.get("a") and p.get("b"):
+                    need(p["a"], p["b"], any_=True)
         elif op == "relate":
             need(*args["participants"])
         elif op == "unrelate":
@@ -815,7 +826,8 @@ class Session:
 
     # ---- perception --------------------------------------------------------------
 
-    def perceive(self, cursor: int | None = None, from_entity: str | None = None, events: int = 30) -> dict[str, Any]:
+    def perceive(self, cursor: int | None = None, from_entity: str | None = None, events: int = 30,
+                 layout: bool = False) -> dict[str, Any]:
         self._tick()
         w = self.world
         if from_entity is not None:
@@ -855,11 +867,285 @@ class Session:
             "events": self._events_for(me, w.events(since=cursor, touching=me, limit=events)),
             "cursor": w.store.next_seq(w.id) - 1,
         }
+        if layout:
+            bundle["layout"] = self._layout_view(me, bundle)
         if p is not None:
             w.set_cursor(self.pid, bundle["cursor"])
         else:
             w.set_entity_cursor(me, bundle["cursor"])
         return bundle
+
+    # ---- layout: one frame over the tree (DESIGN.md section 8, Layout; geometry in layout.py) --------------------------
+
+    def _frame(self) -> dict[str, Any] | None:
+        root = self.world.get(self.world.root_id)
+        return (root["state"].get("frame") if root else None) or None
+
+    def _own_layout(self, eid: str) -> dict[str, Any]:
+        e = self.world.get(eid)
+        return dict((e["state"].get("layout") if e else None) or {})
+
+    def _world_at(self, eid: str, depth: int = 0) -> list[float] | None:
+        """Where an entity is in the world frame: its own `at`; else its grid position mapped through its container's
+        space (`frame_origin`, `cell`, `heading`); else wherever its container is."""
+        w = self.world
+        e = w.get(eid)
+        if e is None or depth > 64:
+            return None
+        own = (e["state"].get("layout") or {}).get("at")
+        if own:
+            return list(own)
+        parent = e["parent_id"]
+        if not parent:
+            return None
+        sp = w.space_of(parent) or {}
+        if e["pos"] is not None and sp.get("frame_origin") is not None:
+            o = list(sp["frame_origin"]) + [0.0] * (3 - len(sp["frame_origin"]))
+            cell = float(sp.get("cell") or 1.0)
+            h = math.radians(float(sp.get("heading") or 0.0))
+            p = [float(x) * cell for x in e["pos"]] + [0.0] * (3 - len(e["pos"]))
+            return [o[0] + p[0] * math.cos(h) + p[1] * math.sin(h),
+                    o[1] - p[0] * math.sin(h) + p[1] * math.cos(h), o[2] + p[2]]
+        return self._world_at(parent, depth + 1)
+
+    def _path_rows(self, ids: set[str]) -> list[dict[str, Any]]:
+        """The connects_to paths between the given places, one row a pair: the drawn route (or the straight line when
+        none is laid), its length, and the bearing from one end to the other."""
+        w = self.world
+        out, seen = [], set()
+        for a in ids:
+            for e in w.edges(a, "connects_to", "out"):
+                b = e["target"]
+                if b not in ids or (b, a) in seen:
+                    continue
+                seen.add((a, b))
+                pa, pb = self._world_at(a), self._world_at(b)
+                route = e["data"].get("route")
+                if not route and pa and pb:
+                    route = [pa, pb]
+                row: dict[str, Any] = {"a": a, "b": b, "a_name": w.get(a)["name"], "b_name": w.get(b)["name"],
+                                       "drawn": bool(e["data"].get("route"))}
+                if route:
+                    row["route"] = [list(p) for p in route]
+                    row["length"] = round(float(e["data"].get("length") or geo.route_length([list(p) for p in route])), 1)
+                if pa and pb:
+                    row["bearing"] = geo.bearing(pa, pb)
+                out.append(row)
+        return out
+
+    def _layout_warnings(self, ids: list[str]) -> list[str]:
+        """What looks wrong, never a refusal: a thing outside the place it is in, a path whose drawn ends sit far from
+        the places it joins or whose stated length is shorter than the straight line, an extent outside the frame."""
+        w = self.world
+        out = []
+        frame = self._frame() or {}
+        bounds = frame.get("bounds")
+        for eid in ids:
+            e = w.get(eid)
+            if e is None:
+                continue
+            lay = self._own_layout(eid)
+            at = lay.get("at")
+            parent = e["parent_id"]
+            if at and parent and not w.is_a(e["type"], "place"):
+                pl = self._own_layout(parent)
+                if pl.get("at") and geo.contains(pl, at) is False:
+                    out.append(f"{e['name']} stands outside {w.get(parent)['name']}, the place it is in "
+                               f"({geo.edge_distance(pl, at):.0f} {frame.get('units', 'm')} beyond its edge)")
+            if at and bounds and not all(bounds[0][i] <= at[i] <= bounds[1][i] for i in range(2)):
+                out.append(f"{e['name']} is outside the frame's bounds")
+            if w.is_a(e["type"], "place"):
+                for ed in w.edges(eid, "connects_to", "out"):
+                    other, route = ed["target"], ed["data"].get("route")
+                    ol = self._own_layout(other)
+                    if route and lay.get("at") and ol.get("at"):
+                        gap_a = geo.edge_distance(lay, route[0]) if lay.get("radius") or lay.get("size") or lay.get("footprint") else geo.ground(lay["at"], route[0])
+                        gap_b = geo.edge_distance(ol, route[-1]) if ol.get("radius") or ol.get("size") or ol.get("footprint") else geo.ground(ol["at"], route[-1])
+                        if (gap_a or 0) > 50 or (gap_b or 0) > 50:
+                            out.append(f"the path from {e['name']} to {w.get(other)['name']} is drawn starting or ending away from them")
+                    length = ed["data"].get("length")
+                    if length and lay.get("at") and ol.get("at") and float(length) + 1 < geo.ground(lay["at"], ol["at"]) - \
+                            (lay.get("radius") or 0) - (ol.get("radius") or 0):
+                        out.append(f"the path from {e['name']} to {w.get(other)['name']} is said to be {length} long, "
+                                   f"shorter than the straight line between them")
+        return sorted(set(out))
+
+    def _layout_view(self, me: str, bundle: dict[str, Any]) -> dict[str, Any]:
+        """perceive(layout=true): where you stand, and the distance and bearing to what you see here and to each exit."""
+        w = self.world
+        mine = self._world_at(me)
+        here = w.need(me)["parent_id"]
+        hl = self._own_layout(here) if here else {}
+        out: dict[str, Any] = {"frame": self._frame() or dict(geo.DEFAULT_FRAME), "you": mine,
+                               "here": {k: v for k, v in hl.items() if k != "note"} or None}
+        if mine is None:
+            out["note"] = "nothing here is laid out yet"
+            return out
+
+        def rel(eid: str) -> dict[str, Any] | None:
+            at = self._world_at(eid)
+            if at is None:
+                return None
+            b = geo.bearing(mine, at)
+            return {"at": [round(x, 1) for x in at], "distance": round(geo.ground(mine, at), 1), "bearing": b[1],
+                    "degrees": b[0], "dz": round(at[2] - mine[2], 1)}
+
+        out["present"] = [{"id": c["id"], "name": c["name"], **r} for c in bundle["present"]
+                          if (r := rel(c["id"])) and self._own_layout(c["id"]).get("at")]
+        exits = []
+        for x in bundle["exits"]:
+            r = rel(x["to"])
+            if r is None:
+                continue
+            row = {"to": x["to"], "name": x["name"], "bearing": r["bearing"], "degrees": r["degrees"],
+                   "straight": r["distance"]}
+            ed = next((e for e in w.edges(here, "connects_to", "out") if e["target"] == x["to"]), None) if here else None
+            if ed and (ed["data"].get("length") or ed["data"].get("route")):
+                row["length"] = round(float(ed["data"].get("length") or geo.route_length(ed["data"]["route"])), 1)
+            exits.append(row)
+        out["exits"] = exits
+        return out
+
+    def layout(self, placements: list[dict[str, Any]] | None = None, paths: list[dict[str, Any]] | None = None,
+               frame: dict[str, Any] | None = None, replace: bool = False) -> dict[str, Any]:
+        """Lay out many entities at once in the world's one frame: placements [{entity, at, heading, radius | size |
+        footprint, floor, ceiling, mesh, note}], paths [{a, b, route, length}] on the connects_to edges between places,
+        and the root's frame. Keys merge over what is there (None deletes one; replace=true sets each layout whole).
+        Every shape is checked; what only looks wrong comes back as warnings."""
+        self._need(AUTHOR)
+        w = self.world
+        self._record("layout", placements=placements, paths=paths, frame=frame, replace=replace or None)
+        touched: list[str] = []
+        if frame is not None:
+            w.patch(w.root_id, {"frame": geo.check_frame(frame)}, actor=self._actor_or_none(), replace=True)
+        if not self._frame() and (placements or paths):
+            w.patch(w.root_id, {"frame": dict(geo.DEFAULT_FRAME)}, actor=self._actor_or_none(), replace=True)
+        checked = []
+        for p in placements or []:
+            if not isinstance(p, dict) or not p.get("entity"):
+                raise Rejected("each placement names its entity", hint='{"entity": "The Hold", "at": [0, 0, 0], "radius": 40}')
+            eid = self._resolve(p["entity"])
+            new = {k: v for k, v in p.items() if k != "entity"}
+            checked.append((eid, geo.merge(self._own_layout(eid), new, replace=replace)))
+        for eid, lay in checked:
+            w.patch(eid, {"layout": lay}, actor=self._actor_or_none(), replace=True)
+            touched.append(eid)
+        for pth in paths or []:
+            if not isinstance(pth, dict) or not pth.get("a") or not pth.get("b"):
+                raise Rejected("each path names its two places", hint='{"a": "The Hold", "b": "The Gate Yard", "route": [[0, 0], [0, 60]]}')
+            a, b = self._resolve(pth["a"]), self._resolve(pth["b"])
+            if not any(e["target"] == b for e in w.edges(a, "connects_to", "out")):
+                raise Rejected(f"{w.need(a)['name']} and {w.need(b)['name']} are not connected",
+                               hint="a path is drawn on a connects_to edge: connect(a, b) first")
+            data: dict[str, Any] = {}
+            if pth.get("route") is not None:
+                route = [geo._vec(q, "route point", 2, 3) for q in pth["route"]]
+                if len(route) < 2:
+                    raise Rejected("a route is two or more points")
+                data["route"] = [q if len(q) == 3 else q + [0.0] for q in route]
+            if pth.get("length") is not None:
+                length = geo._num(pth["length"], "length")
+                if length <= 0:
+                    raise Rejected("length must be above zero")
+                data["length"] = length
+            fwd = dict(data)
+            back = dict(data)
+            if "route" in back:
+                back["route"] = list(reversed(back["route"]))
+            w.link(a, b, "connects_to", fwd)
+            w.link(b, a, "connects_to", back)
+            touched.extend([a, b])
+        if touched:
+            w.emit("laid_out", actor=self._actor_or_none(), target=w.root_id, reach=0,
+                   payload={"entities": sorted(set(touched))})
+        return {"ok": True, "laid_out": len(checked), "paths": len(paths or []), "frame": self._frame(),
+                "warnings": self._layout_warnings(sorted(set(touched)))}
+
+    def map(self, under: str | None = None, depth: int = 1, sketch: bool = True, width: int = 64) -> dict[str, Any]:
+        """The layout of a subtree: the frame, every entity under `under` (default the root) to `depth` levels with its
+        position (its own, or inherited from its container) and extent, the paths between the places, what is not
+        laid out yet, warnings, and a top-down text sketch (north up). Read it level by level as you lay a world out."""
+        self._tick()
+        w = self.world
+        top = self._resolve(under) if under else w.root_id
+        depth = max(1, min(int(depth), 6))
+        rows, frontier = [], [(top, 0)]
+        while frontier and len(rows) < 300:
+            eid, d = frontier.pop(0)
+            for c in w.children(eid):
+                rows.append((c, d + 1))
+                if d + 1 < depth:
+                    frontier.append((c["id"], d + 1))
+        items, unplaced = [], []
+        for c, d in rows:
+            lay = self._own_layout(c["id"])
+            at = self._world_at(c["id"])
+            row = {"id": c["id"], "name": c["name"], "type": c["type"], "parent": c["parent_id"], "level": d,
+                   "own": bool(lay.get("at")), "at": [round(x, 1) for x in at] if at else None}
+            if lay:
+                row["layout"] = lay
+                if geo.area(lay):
+                    row["area"] = round(geo.area(lay), 1)
+            if c["state"].get("hidden"):
+                row["hidden"] = True
+            items.append(row)
+            if not lay.get("at") and w.is_a(c["type"], "place"):
+                unplaced.append(c["name"])
+        places = {r["id"] for r in items if w.is_a(r["type"], "place")}
+        tl = self._own_layout(top)
+        out: dict[str, Any] = {"frame": self._frame(), "under": {"id": top, "name": w.need(top)["name"],
+                               "layout": tl or None}, "entities": items, "paths": self._path_rows(places),
+                               "not_laid_out": unplaced, "warnings": self._layout_warnings([r["id"] for r in items])}
+        if sketch:
+            drawn = [{"name": r["name"], "at": r["at"], "layout": r.get("layout")} for r in items if r["own"]]
+            if tl.get("at"):
+                drawn.insert(0, {"name": w.need(top)["name"], "at": tl["at"], "layout": tl})
+            out["sketch"] = geo.sketch(drawn, [p for p in out["paths"] if p.get("route")], width=max(24, min(int(width), 120)))
+        return out
+
+    def measure(self, a: str, b: str | None = None, point: list[float] | None = None) -> dict[str, Any]:
+        """The ruler. One entity: where it is, its extent, area, floor and ceiling. With b (another entity) or point
+        (x, y, z): distance on the ground and in 3D, compass bearing, height difference, the gap from a's edge, and
+        whether either contains the other or their extents overlap."""
+        self._tick()
+        w = self.world
+        ea = self._resolve(a)
+        la = self._own_layout(ea)
+        pa = self._world_at(ea)
+        if pa is None:
+            raise Rejected(f"{w.need(ea)['name']} is not laid out, nor is anything it is in", hint="layout(placements=[...]) first")
+        out: dict[str, Any] = {"a": {"id": ea, "name": w.need(ea)["name"], "at": pa, "own": bool(la.get("at"))}}
+        if la.get("at"):
+            out["a"].update({k: v for k, v in la.items() if k in ("radius", "size", "footprint", "heading", "floor", "ceiling")})
+            if geo.area(la):
+                out["a"]["area"] = round(geo.area(la), 1)
+            if geo.z_range(la):
+                out["a"]["z_range"] = list(geo.z_range(la))
+        if b is None and point is None:
+            return out
+        if b is not None:
+            eb = self._resolve(b)
+            lb = self._own_layout(eb)
+            pb = self._world_at(eb)
+            if pb is None:
+                raise Rejected(f"{w.need(eb)['name']} is not laid out, nor is anything it is in")
+            out["b"] = {"id": eb, "name": w.need(eb)["name"], "at": pb, "own": bool(lb.get("at"))}
+        else:
+            pb = geo._vec(point, "point", 2, 3)
+            pb = pb if len(pb) == 3 else pb + [0.0]
+            lb = {}
+            out["point"] = pb
+        brg = geo.bearing(pa, pb)
+        out.update({"ground": round(geo.ground(pa, pb), 2), "distance": round(geo.dist3(pa, pb), 2), "bearing": brg[1],
+                    "degrees": brg[0], "dz": round(pb[2] - pa[2], 2)})
+        if la.get("at") and geo.contains(la, pb) is not None:
+            out["a_contains"] = geo.contains(la, pb)
+            out["gap_from_a_edge"] = round(geo.edge_distance(la, pb) or 0.0, 2)
+        if lb.get("at") and geo.contains(lb, pa) is not None:
+            out["b_contains_a"] = geo.contains(lb, pa)
+        if la.get("at") and lb.get("at") and geo.overlap(la, lb) is not None:
+            out["overlap"] = geo.overlap(la, lb)
+        return out
 
     def _ambient(self, here: dict[str, Any] | None) -> dict[str, Any]:
         """Facts every perceive carries: the root's `ambient` dict (time of day, weather, light) with the
@@ -932,7 +1218,7 @@ class Session:
         secret = set(e["state"].get("secret", [])) | _ALWAYS_SECRET
         out = {}
         for k, v in e["state"].items():
-            if k in ("rules", "secret", "space"):
+            if k in ("rules", "secret", "space") or (k == "layout" and not full):
                 continue
             if not full and k in secret:
                 continue
@@ -1693,7 +1979,7 @@ OPS = [
     "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
     "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
-    "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate",
+    "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map", "measure",
     "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
 ]
 
@@ -1708,7 +1994,7 @@ def allowed_ops(role: str) -> frozenset[str]:
 
 
 # Ops that write where canon and a grant's limits are checked before they run (Session._hold).
-_HELD = frozenset({"spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "schedule",
+_HELD = frozenset({"spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "schedule", "layout",
                    "unschedule", "act_as", "say_as", "remember", "intend", "set_rule", "clear_rule", "define_script",
                    "define_schema", "clock", "create_world", "fork_world", "save", "restore", "mirror"})
 
