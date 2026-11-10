@@ -531,22 +531,23 @@ def test_a_thirsty_body_walks_to_water_one_known_step_away_and_back_to_its_post(
 
 def test_rest_mends_a_point_a_beat_and_a_wound_put_down_gets_up_at_two():
     eng, gm, you = reach()
+    yard = gm.inspect("Captain Ruhl")["parent"]
+    gm.spawn("thing", yard, "Test well", state={"water_source": True, "portable": False})  # no thirst beside it
     gm.patch("Captain Ruhl", {"vigor": 0, "down": True, "wounded": True, "water": 9})
     gm.clock(step=600)
     ruhl = state(gm, "Captain Ruhl")
-    assert ruhl["vigor"] == 1 and ruhl["down"]
+    assert ruhl["vigor"] == 1 and ruhl["down"] and ruhl["water"] == 9
     gm.clock(step=600)
     ruhl = state(gm, "Captain Ruhl")
-    assert ruhl["vigor"] == 2 and not ruhl["down"] and ruhl["wounded"]
+    assert ruhl["vigor"] == 2 and not ruhl["down"] and ruhl["wounded"] and ruhl["water"] == 8  # every second point costs water
     ruhl_id = gm.inspect("Captain Ruhl")["id"]
     assert any(e["target_id"] == ruhl_id and e["payload"].get("by") == "rest" for e in gm.world.events(0, kinds=["rose"], limit=5000))
     for _ in range(3):
         gm.clock(step=600)
     ruhl = state(gm, "Captain Ruhl")
-    assert ruhl["vigor"] == 5 and not ruhl["wounded"]  # above half the wound closes
+    assert ruhl["vigor"] == 5 and not ruhl["wounded"] and ruhl["water"] == 7  # above half the wound closes
     # a dry body does not mend; thirst's down is water's
     gm.patch("Nico", {"water": 2, "vigor": 2, "thirsty": True})
-    gm.patch("Nico", {"water": 2})
     gm.clock(step=600)
     assert state(gm, "Nico")["vigor"] <= 2
 
@@ -560,9 +561,24 @@ def test_tend_gets_the_down_up_and_medicine_heals_anyone_hurt():
     with pytest.raises(Rejected) as ex:
         gm.act_as("Captain Ruhl", "tend", "Reeve Ansel Varrick")
     assert "down" in str(ex.value).lower()  # the down cannot tend
+    road = gm.inspect("The Salt Road")["id"]  # dry: no cask, no source
+    gm.move("Captain Ruhl", road)
+    gm.move("Reeve Ansel Varrick", road)
+    for e in gm.find(parent=gm.inspect("Reeve Ansel Varrick")["id"], limit=50):
+        if e["type"] == "waterskin":
+            gm.patch(e["id"], {"left": 0})
+    with pytest.raises(Rejected) as ex:
+        you.act("tend", "Captain Ruhl")
+    assert "water" in str(ex.value)  # a wound bound dry festers: the error says where water would come from
+    gm.spawn("waterskin", "Reeve Ansel Varrick", "Wash skin", state={"left": 2})
+    gm.patch("Reeve Ansel Varrick", {"wits": -25})
+    r = you.act("tend", "Captain Ruhl")
+    assert state(gm, "Wash skin")["left"] == 1 and state(gm, "Captain Ruhl")["down"]  # slipped, and the water is spent
+    gm.patch("Reeve Ansel Varrick", {"wits": 25})
     r = you.act("tend", "Captain Ruhl")
     ruhl = state(gm, "Captain Ruhl")
     assert "tended" in kinds(r) and "rose" in kinds(r) and not ruhl["down"] and ruhl["vigor"] == 1
+    assert state(gm, "Wash skin")["left"] == 0
     with pytest.raises(Rejected) as ex:
         you.act("tend", "Captain Ruhl")
     assert "medicine" in str(ex.value)  # bare hands do nothing for someone on their feet; the error says what would

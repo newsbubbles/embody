@@ -42,8 +42,10 @@ The numbers, so a narrator can explain a roll:
 - Mending: rest heals. A body with water in it (more than 3) mends a point of `vigor` a beat (`mended`): the
   `mend` behavior, a beat of ten minutes in a turn-based story, the world's own with `set_pace` (the Reach: one point
   every six world hours). Above half vigor the wound closes (`wounded` off). A body a wound put down gets up on its
-  own at 2 (`rose`, by rest); thirst's down is water's to undo, and a dry body does not mend. `tend` someone down
-  here: survival against 12 binds them so they stand at 1. With `medicine` in hand (a thing with `doses` left) a
+  own at 2 (`rose`, by rest); thirst's down is water's to undo, and a dry body does not mend. Mending is thirsty
+  work: every second point mended costs a point of water. `tend` someone down here: a draw of water washes the
+  wound (from a skin in hand, else a cask or source here; spent whether the binding holds or not) and survival
+  against 12 binds them so they stand at 1. With `medicine` in hand (a thing with `doses` left) a
   dose heals its `heals` (default 3) at once, no roll, on anyone hurt, the down included; that is what a medic
   carries. Bare hands do nothing for someone already on their feet.
 - A gift (`given`) is worth 1 with the receiver's faction only if they keep it: something they trade away on
