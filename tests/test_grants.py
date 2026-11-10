@@ -486,39 +486,21 @@ def test_an_invite_is_a_link_whose_page_hands_the_agent_its_token_once():
         t.join(timeout=5)
 
 
-def test_the_world_rests_when_its_players_do():
-    """Glass Reach night one: watchers kept every seat, so the clock ran all night and the bodies dried with
-    nobody playing. A seat is kept by any sign of life; the clock only by a player's deeds."""
+def test_any_deed_marks_the_seat_in_use_and_waiting_does_not():
+    """Any embodiment counts, a mind's as much as a player's: an act or a line said marks the seat in use. Waiting and
+    watching keep the seat (claim_lapse) but are not deeds, so a mind on a watcher is an idle seat whose body sees to
+    its own water. The clock is not the seat's business."""
     eng, w, i = engine_with_two_rooms()
     gm = owner(eng)
-    w.set_meta({"claim_lapse": 3600, "rest_after": 600, "run_when_occupied": True})
-    gm.patch("Prisoner", {"playable": True})
     gm.patch("Guard", {"playable": True})
-    wall = [1000.0]
-    eng.wall = lambda: wall[0]
-    eng.now = lambda: wall[0]
-    p = eng.session_for_token(gm.invite("player", entity="Prisoner", label="p")["token"])
     m = eng.session_for_token(gm.invite("mind", entity="Guard", label="m")["token"])
     m.join()
-    eng.tick_all()
-    assert w.clock()["running"] is False  # a mind alone does not make time
-    p.join()
-    eng.tick_all()
-    assert w.clock()["running"] is True
-    wall[0] = 1500.0
-    p.say("anyone?")
-    wall[0] = 2000.0
-    p.wait(timeout=0, clock=lambda: 0.0, sleep=lambda s: None)  # waiting keeps the seat...
-    m.say("Quiet in there.")  # ...and a mind's deed is not a player's
-    eng.tick_all()
-    assert w.clock()["running"] is True
-    wall[0] = 2200.0  # 700 s after the player's last deed
-    eng.tick_all()
-    assert w.clock()["running"] is False and w.principal(p.pid)["entity_id"] == i["Prisoner"]
-    t0 = w.t
-    wall[0] = 3000.0
-    p.perceive()
-    eng.tick_all()
-    assert w.t == t0 and w.clock()["running"] is False  # a night of reading costs nothing
-    p.act("wait") if "wait" in [a.get("verb") for a in p.perceive()["affordances"]] else p.say("morning")
-    assert w.clock()["running"] is True  # the first deed wakes it before it lands
+    mw = m.world
+    mw.set_meta({"idle_after": 50})
+    mw.step(60)
+    assert mw.idle(i["Guard"])
+    m.say("Quiet in there.")
+    assert not mw.idle(i["Guard"])
+    m.wait(timeout=0, clock=lambda: 0.0, sleep=lambda s: None)
+    mw.step(60)
+    assert mw.idle(i["Guard"]) and mw.principal(m.pid)["entity_id"] == i["Guard"]

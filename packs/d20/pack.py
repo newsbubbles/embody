@@ -35,7 +35,10 @@ The numbers, so a narrator can explain a roll:
   from a skin in hand, else from a source here, filling its skin while it is there; with nothing here it walks
   one step to a connected place with water that it knows the way to (hidden places only for their own
   faction), drinks, and walks back to its `post`. The walks arrive `quiet`. A body that is down drinks what is
-  put in its hand. An embodied seat decides for itself.
+  put in its hand. An embodied seat decides for itself while it is in use; quench is an `idle` behavior, so a
+  seat that has done nothing for the world's `idle_after` (a mind on a watcher, a player asleep) drinks the same
+  way. `python packs/d20/soak.py <world> --days N` runs a world that long with nobody playing and says who
+  went dry and which sources ran out.
 - A gift (`given`) is worth 1 with the receiver's faction only if they keep it: something they trade away on
   the spot, or something that was theirs to begin with (`given_by` on the thing names who handed it over),
   moves nothing.
@@ -76,7 +79,7 @@ def define(s):
                     doc="Someone the d20 rules apply to: three stats, skills, vigor, water, and the verbs of a fight.",
                     state=COMBATANT_STATE, actions=COMBATANT_ACTIONS,
                     behaviors=[{"script": "thirst", "every": 60, "always": True},
-                               {"script": "quench", "every": 60}])
+                               {"script": "quench", "every": 60, "idle": True}])
     s.define_schema("faction", extends="entity", doc="A side. Hidden; people name it in state.faction, standing edges point at it.",
                     state={"hidden": True, "hostile": {}})
     s.define_schema("waterskin", extends="thing", doc="Holds water. left out of capacity.",

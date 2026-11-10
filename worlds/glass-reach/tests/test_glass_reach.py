@@ -201,7 +201,7 @@ def test_heat_dusk_and_the_cistern_on_timers():
         you.act("fill", "Waterskin")
 
 
-def test_hosted_reach_has_seats_templates_and_a_day_that_turns_with_its_guests():
+def test_hosted_reach_has_seats_templates_and_a_day_that_keeps_real_time():
     eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
     r = load_world(gm, "glass-reach", hosted=True)
@@ -212,17 +212,18 @@ def test_hosted_reach_has_seats_templates_and_a_day_that_turns_with_its_guests()
     assert "Elder Taan" not in names
     assert {t["template"] for t in seats["templates"]} == {"carrier", "guard", "keth", "dreyer"}
     ck = gm.clock()
-    assert not ck["running"] and ck["rate"] == 4 and ck["turn"] is None
+    assert ck["running"] and ck["rate"] == 4 and ck["turn"] is None  # real time, whoever is in
     timers = {t["kind"]: t for t in gm.timers()}
-    assert timers["dram_moves"]["in"] == 28800 and timers["dawn"]["in"] == 86400 and timers["heat"]["in"] == 21600
-    # a guest sits down: the clock runs and the briefing says so; the day turns; the guest leaves and the world waits
+    near = lambda x: pytest.approx(x, abs=5)  # the clock is already running
+    assert timers["dram_moves"]["in"] == near(28800) and timers["dawn"]["in"] == near(86400) and timers["heat"]["in"] == near(21600)
+    # a guest sits down and the briefing says the clock keeps time; the day turns
     eng.public_url = "https://reach.example/mcp"
     inv = gm.invite("player", entity="Reeve Ansel Varrick", label="Sam")
-    assert "4x real time while anyone is in it" in inv["page"] and "Glass Reach" in inv["paste"]
+    assert "runs at 4x real time:" in inv["page"] and "Glass Reach" in inv["paste"]
     sam = eng.session_for_token(inv["token"])
     b = sam.join()
-    assert b["briefing"]["text"].startswith("The Glass Reach") and "while anyone is in the world" in b["briefing"]["pace"]
-    assert gm.clock()["running"]
+    assert b["briefing"]["text"].startswith("The Glass Reach") and "4x real time" in b["briefing"]["pace"]
+    assert "while anyone" not in b["briefing"]["pace"]
     gm.clock(step=21600)
     assert sam.perceive()["ambient"]["time_of_day"] == "noon"
     gm.clock(step=54000 - 21600)
@@ -235,16 +236,93 @@ def test_hosted_reach_has_seats_templates_and_a_day_that_turns_with_its_guests()
     assert any("walls start to tick" in t for t in scenes(sam.perceive(cursor=0, events=800)["events"]))  # dusk, at the Hold
     sam.leave()
     eng.tick_all()
-    assert not gm.clock()["running"]
+    assert gm.clock()["running"]  # the last guest leaving pauses nothing
     # a newcomer from a template stands where the template says
     kit = eng.session_for_token(gm.invite("player", label="Kit")["token"])
     b = kit.join(template="keth", name="Kit")
     assert b["here"]["name"] == "Red Ridge" and gm.inspect("Kit")["state"]["faction"] == "the Keth"
-    assert gm.clock()["running"]
     # hosting again renews the settings and leaves the timers alone
     n = len(gm.timers())
     load_world(gm, "glass-reach", upgrade=True, hosted=True)
     assert len(gm.timers()) == n and gm.clock()["rate"] == 4
+
+
+def hosted(truce=False):
+    eng = Engine(workspace=REPO)
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    load_world(gm, "glass-reach", hosted=True)
+    if truce:
+        gm.patch(gm.inspect("Story")["id"], {"truce": True})
+    return eng, gm
+
+
+def where(gm, name):
+    return gm.world.get(gm.world.get(gm.inspect(name)["id"])["parent_id"])["name"]
+
+
+def test_the_keth_run_carries_water_to_the_hold_at_dusk_while_the_truce_holds():
+    eng, gm = hosted(truce=True)
+    timers = {t["kind"]: t for t in gm.timers()}
+    assert timers["keth_run"]["at"] == pytest.approx(timers["dusk"]["at"], abs=1) and timers["keth_run"]["every"] == 86400
+    assert timers["crawler"]["at"] == pytest.approx(timers["dawn"]["at"], abs=1)
+    gm.clock(step=timers["dusk"]["in"] + 1)
+    assert gm.inspect("Iska of the Keth")["state"]["run"] == "out" and where(gm, "Iska of the Keth") == "The Deepwell"
+    path = []
+    for _ in range(5):
+        gm.clock(step=1800)
+        path.append(where(gm, "Iska of the Keth"))
+    assert path == ["Red Ridge", "The Glass Flats", "The Salt Road", "The Gate Yard", "Scar Gate, the Hold"]
+    assert gm.inspect("The Keth jars")["state"]["left"] == 8
+    assert gm.inspect("The Glass Flats")["state"]["tremor"] == 0  # the broken step: the sand did not hear her
+    for _ in range(5):
+        gm.clock(step=1800)
+    assert where(gm, "Iska of the Keth") == "The Deepwell" and gm.inspect("Iska of the Keth")["state"].get("run") is None
+    # hosting again adds no second run
+    n = len(gm.timers())
+    load_world(gm, "glass-reach", upgrade=True, hosted=True)
+    assert len(gm.timers()) == n
+
+
+def test_a_bearer_put_down_on_the_road_sets_the_water_down_there():
+    eng, gm = hosted(truce=True)
+    dusk = {t["kind"]: t for t in gm.timers()}["dusk"]["in"]
+    gm.clock(step=dusk + 1)
+    gm.clock(step=1800 * 3)
+    assert where(gm, "Iska of the Keth") == "The Salt Road"
+    iska = gm.inspect("Iska of the Keth")["id"]
+    gm.patch(iska, {"down": True})
+    gm.clock(step=1800)
+    jars = gm.inspect("Keth jars, set down")
+    assert where(gm, "Keth jars, set down") == "The Salt Road" and jars["state"]["left"] == 8 and jars["state"]["water_source"]
+    assert where(gm, "Iska of the Keth") == "The Salt Road" and gm.inspect(iska)["state"]["carrying"] == 0
+    assert gm.inspect("The Keth jars")["state"]["left"] == 0
+    gm.clock(step=86400)  # next dusk: a bearer still down carries nothing
+    assert gm.inspect(iska)["state"].get("run") is None and gm.inspect("The Keth jars")["state"]["left"] == 0
+
+
+def test_no_truce_no_run_and_no_ossa_at_the_tally_no_crawler():
+    eng, gm = hosted()
+    timers = {t["kind"]: t for t in gm.timers()}
+    gm.clock(step=timers["dusk"]["in"] + 1)
+    assert gm.inspect("Iska of the Keth")["state"].get("run") is None
+    ossa = gm.inspect("Ossa the Carrier")["id"]
+    gm.patch(ossa, {"down": True})
+    gm.clock(step=timers["dawn"]["in"] - timers["dusk"]["in"])
+    assert gm.inspect("The Hold's ration cask")["state"]["left"] == 0
+    gm.patch(ossa, {"down": False})
+    gm.clock(step=86400)
+    assert gm.inspect("The Hold's ration cask")["state"]["left"] == 8
+
+
+@pytest.mark.parametrize("truce", [True, False])
+def test_the_reach_lives_a_week_with_every_seat_held_and_nobody_playing(truce):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("d20_soak", REPO / "packs" / "d20" / "soak.py")
+    soak = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(soak)
+    r = soak.soak("glass-reach", days=7, sets=("Story.truce=true",) if truce else (), step=1800)
+    assert r["ok"] and len(r["held"]) == 6, soak.render(r)
+    assert all(b["low"] >= 3 for b in r["bodies"]), soak.render(r)
 
 
 def test_upgrade_is_idempotent():

@@ -1242,9 +1242,11 @@ class World:
         if eid and self.get(eid) is None:
             return
         if kind == "tick":
-            if eid is None or (self.embodied(eid) and not p.get("always")):
+            if eid is None or (self.embodied(eid) and not p.get("always")
+                               and not (self._runs_idle(eid, p["script"]) and self.idle(eid))):
                 return  # controller swap: an embodied entity is driven by its principal; `always` behaviors are
-                        # the body, not the mind (thirst, bleeding), and run on an embodied seat too
+                        # the body, not the mind (thirst, bleeding), and run on an embodied seat too; `idle` ones
+                        # (a body seeing to its own water) run on a seat that has done nothing for a while
             s = self.script(p["script"])
             if not s.has("tick"):
                 return
@@ -1335,7 +1337,7 @@ class World:
                "entity_id": entity_id,
                "cursor_seq": ecur if ecur is not None else (old["cursor_seq"] if old else self.store.next_seq(self.id) - 1),
                "role": role or (old.get("role") if old else None), "grant_id": grant_id or (old.get("grant_id") if old else None),
-               "last_seen": now, "last_act": now}
+               "last_seen": now, "acted_t": self.t}
         self.store.put("principal", row)
         self.emit("embodied", actor=entity_id, target=entity_id, reach=1,
                   payload={"principal": principal_id, "as": kind})
@@ -1364,19 +1366,34 @@ class World:
         return now - float(p["last_seen"]) > self.claim_lapse()
 
     def touch(self, principal_id: str, now: float, acted: bool = False) -> None:
-        """A sign of life keeps the seat (`last_seen`); a deed (`acted`: an act, a line said) also keeps the world's
-        clock awake (`last_act`, see Engine.settle_clock)."""
+        """A sign of life keeps the seat (`last_seen`, real time); a deed (`acted`: an act, a line said) also marks
+        the seat in use (`acted_t`, world time, see idle())."""
         p = self.store.get("principal", self.id, principal_id)
         if p and (acted or p.get("last_seen") is None or now - float(p["last_seen"]) >= 5.0):
             p["last_seen"] = now
             if acted:
-                p["last_act"] = now
+                p["acted_t"] = self.t
             self.store.put("principal", p)
 
-    def rest_after(self) -> float:
-        """Real seconds after a player's last deed when a world that runs while occupied rests (world meta
-        `rest_after`, default 900). A seat held by a reader or a mind keeps its seat, not the clock."""
-        return float(self._row["meta"].get("rest_after", 900.0))
+    def idle_after(self) -> float:
+        """World seconds after a seat's last deed when its body counts as idle (world meta `idle_after`, default 900)."""
+        return float(self._row["meta"].get("idle_after", 900.0))
+
+    def idle(self, entity_id: str) -> bool:
+        """A body nobody embodies, or whose seat has done nothing (no act, no line) for idle_after world seconds: a
+        mind on a watcher, a player gone to bed. The world goes on; the body's `idle` behaviors (drinking when
+        thirsty, see packs/d20 quench) run on it as on a body nobody holds, so a seat kept overnight is not a body
+        left to dry. Reading, waiting and watching keep the seat; they are not deeds."""
+        p = self.embodied(entity_id)
+        if p is None:
+            return True
+        at = p.get("acted_t")
+        return at is None or self.t - float(at) > self.idle_after()
+
+    def _runs_idle(self, entity_id: str, script: str) -> bool:
+        e = self.get(entity_id)
+        return bool(e) and any(b.get("script") == script and b.get("idle")
+                               for b in self.schema_components(e["type"], "behaviors"))
 
     def release_lapsed(self, now: float) -> list[str]:
         """Seats whose invitee went quiet past the lapse: released, so their bodies run on behaviors again."""

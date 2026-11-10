@@ -113,7 +113,7 @@ def test_the_samples_load_by_id_and_the_legacy_single_file_world_still_loads():
     eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
     r = load_world(gm, "glass-reach")
-    assert r["packs"] == ["d20", "village"] and set(r["scripts"]) == {"go", "creep", "ward_toggle", "ossa_on", "reach_story"}
+    assert r["packs"] == ["d20", "village"] and set(r["scripts"]) == {"go", "creep", "ward_toggle", "ossa_on", "reach_story", "reach_routines"}
     assert r["git"].startswith("inside")
     ids = {s["id"] for s in gm.scripts()}
     assert {"attack", "check", "talk", "take", "go", "reach_story"} <= ids and "_common" not in ids

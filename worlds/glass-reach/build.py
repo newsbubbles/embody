@@ -35,10 +35,12 @@ Hosted (`embody load glass-reach --hosted`, docs/HOSTING.md): six seats are play
 Nico; Taan stays the Keth's own), four templates make a newcomer per side (a carrier at the Landing, a guard in the
 yard, a Keth on the ridge, a Dreyer agent on the road), the root carries the briefing every newcomer gets, and
 host(s) rescales the spine to real time at 4x: a game day every six real hours, heat and dusk and night and dawn
-every day, Dram two real hours after the first guest sits down, the cistern at four and a half. The clock runs
-while a guest is in the world and waits when none is, so the spine starts with the first player, not the deploy.
+every day, Dram two hours in, the cistern at four and a half. The clock keeps real time whether anyone plays or
+not. What keeps the Reach alive with nobody at the keyboard is its routines (scripts/reach_routines.py): the Keth
+water run at dusk while the truce holds, the Guild crawler at dawn while Ossa keeps the tally, and every body whose
+seat has done nothing for a quarter hour of real time seeing to its own water. Players can get in their way.
 
-Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on and reach_story; take, drop, give, talk,
+Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on, reach_story and reach_routines; take, drop, give, talk,
 read and person_on come from packs/village, the rules from packs/d20), define(s), populate(s), upgrade(s).
 """
 
@@ -192,11 +194,23 @@ STORY_KINDS = ["arrived", "checked", "talked", "agreed", "dram_moves", "downed",
 
 # the spine at 4x real time, in world seconds: a day is 86400 (six real hours); every=86400 repeats daily
 HOSTED = {"rate": 4, "claim_lapse": 3600,
+          # a seat that has not acted or spoken for an hour of the world (a quarter hour real) is idle: its body drinks
+          "idle_after": 3600,
           # a body's water in the hosted day: one point every 2.4 world hours (36 real minutes of play at 4x), a look for
           # water every ten world minutes; the turn-based story keeps the pack's 60 s
           "pace": {"thirst": 8640, "quench": 600},
           "spine": [("heat", 21600, 86400), ("dram_moves", 28800, None), ("dusk", 43200, 86400),
-                    ("night", 54000, 86400), ("cistern_cracks", 64800, None), ("dawn", 86400, 86400)]}
+                    ("night", 54000, 86400), ("cistern_cracks", 64800, None), ("dawn", 86400, 86400)],
+          # the routines ride the spine: (routine, the spine event it starts with)
+          "routines": [("keth_run", "dusk"), ("crawler", "dawn")]}
+
+ROUTINE_KINDS = ["keth_run", "crawler"]
+
+BEARER = {"faction": "the Keth", "body": 3, "wits": 2, "will": 3, "skills": {"survival": 3, "climb": 1}, "post": None,
+          "description": "Iska of the Keth, the water-bearer: a yoke across the shoulders worn pale where the jars hang.",
+          "default_line": "Iska does not set the yoke down. 'Water for the Hold, by the terms. Talk to Taan.'",
+          "dialog": {"water|jars|terms|truce|run": "'Every dusk, while the terms hold. I carry, I pour, I walk home. That is all of it.'",
+                     "flats|sand|thresher": "'You walk the broken step on the glass, or you do not walk home.'"}}
 
 GOALS = {
     "Reeve Ansel Varrick": [
@@ -445,15 +459,44 @@ def upgrade(s):
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
 
 
+def keep_routines(s, root):
+    """What the routines need (Iska at the Deepwell, the Keth jars and the Guild's ration cask in the Hold), the rule
+    that runs them, and one daily timer each, on the hour of the spine event it starts with. Checks before every write."""
+    names = {e["name"]: e["id"] for e in s.find(limit=500)}
+    story = s.find(type="story", limit=1)[0]["id"]
+    st = s.world.get(story)["state"]
+    if "Iska of the Keth" not in names:
+        names["Iska of the Keth"] = s.spawn("person", st["deepwell"], "Iska of the Keth", state=BEARER)["id"]
+    if "The Keth jars" not in names:
+        names["The Keth jars"] = s.spawn("thing", st["hold"], "The Keth jars", state={"portable": False, "water_source": True, "left": 0,
+            "description": "Two tall Keth jars by the dry cistern, sealed with wax. What the bearer pours at dusk, while the terms hold."})["id"]
+    if "The Hold's ration cask" not in names:
+        names["The Hold's ration cask"] = s.spawn("thing", st["hold"], "The Hold's ration cask", state={"portable": False, "water_source": True, "left": 0,
+            "description": "A Guild cask stencilled with the Varrick mark. The crawler rolls a full one off at dawn; the writ pays."})["id"]
+    want = {"bearer": names["Iska of the Keth"], "keth_jars": names["The Keth jars"], "hold_ration": names["The Hold's ration cask"]}
+    if any(st.get(k) != v for k, v in want.items()):
+        s.patch(story, want)
+    s.set_rule(root, "reach_routines", kinds=ROUTINE_KINDS)
+    timers = s.timers()
+    for kind, rides in HOSTED["routines"]:
+        if any(t["kind"] == kind and t["every"] for t in timers):
+            continue
+        spine = next((t for t in timers if t["kind"] == rides and t["every"]), None)
+        if spine is not None:
+            s.schedule(max(0.0, spine["in"]), kind, entity=root, every=spine["every"])
+
+
 def host(s):
-    """The Reach as a hosted place (`embody load glass-reach --hosted`). Seats lapse after fifteen quiet minutes; the clock
-    runs at 4x while a guest is in the world and waits when none is; the spine is rescaled to real time and repeats
-    daily. Runs once: a second call renews the settings and leaves the timers where the first put them."""
+    """The Reach as a hosted place (`embody load glass-reach --hosted`). Seats lapse after an hour of quiet; the clock
+    keeps real time at 4x whether anyone plays or not; the spine is rescaled to real time and repeats daily, and the
+    routines ride it. Runs once: a second call renews the settings and the routines and leaves the spine where the
+    first put it."""
     root = s.summary()["root"]
-    s.world.set_meta({"claim_lapse": HOSTED["claim_lapse"], "run_when_occupied": True})
+    s.world.set_meta({"claim_lapse": HOSTED["claim_lapse"], "run_when_occupied": False, "idle_after": HOSTED["idle_after"]})
     s.world.set_pace(HOSTED["pace"])
-    s.clock(run=False, rate=HOSTED["rate"], turn=0)
+    s.clock(run=True, rate=HOSTED["rate"], turn=0)
     if s.world.meta().get("hosted"):
+        keep_routines(s, root)
         return
     spine = {kind for kind, _, _ in HOSTED["spine"]}
     for t in s.timers():
@@ -462,4 +505,5 @@ def host(s):
     for kind, at, every in HOSTED["spine"]:
         s.schedule(at, kind, entity=root, every=every)
     s.world.set_meta({"hosted": True})
+    keep_routines(s, root)
 

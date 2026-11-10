@@ -207,6 +207,27 @@ def test_behaviors_tick_on_the_clock_and_stop_when_embodied():
     assert w.get(rat)["parent_id"] == i["Hall"]
 
 
+def test_an_idle_seat_runs_the_bodys_idle_behaviors():
+    """Glass Reach night one: minds on watchers held every seat, so no body drank and the bodies dried. A behavior
+    marked `idle` runs on a seat that has done nothing for the world's idle_after, as on a body nobody holds."""
+    w = build(Store())
+    i = ids(w)
+    w.define_schema("pet", extends="creature", behaviors=[{"script": "wander", "every": 5, "idle": True}])
+    w.set_meta({"idle_after": 20})
+    pet = w.spawn("pet", i["Cell"], "Pet")
+    w.join("nate", pet)
+
+    def says(n):
+        return sum(1 for _ in range(n) for e in w.step(5) if e["kind"] == "say" and e["actor"] == pet)
+
+    assert says(4) == 0  # the seat is fresh
+    assert says(4) == 4  # past idle_after: the body sees to itself
+    w.touch("nate", 0.0, acted=True)
+    assert says(4) == 0  # a deed: the seat is in use again
+    w.leave("nate")
+    assert says(1) == 1
+
+
 def test_events_touching_an_entity():
     w = build(Store())
     i = ids(w)
