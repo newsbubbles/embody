@@ -44,7 +44,7 @@ Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on, re
 read and person_on come from packs/village, the rules from packs/d20), define(s), populate(s), upgrade(s).
 """
 
-from packs.d20.pack import install_rules
+from packs.d20.pack import install_rules, keep_behaviors
 
 WORLD = {
     "id": "glass-reach",
@@ -199,8 +199,9 @@ HOSTED = {"rate": 4, "claim_lapse": 3600,
           # what everyone in the Reach knows is coming: timers() tells a player or a mind the next of each
           "public_timers": ["heat", "dusk", "night", "dawn"],
           # a body's water in the hosted day: one point every 2.4 world hours (36 real minutes of play at 4x), a look for
-          # water every ten world minutes; the turn-based story keeps the pack's 60 s
-          "pace": {"thirst": 8640, "quench": 600},
+          # water every ten world minutes; a point of vigor mended every six world hours (a wound closes in a day or
+          # two, a body a wound put down gets up in half a day); the turn-based story keeps the pack's beats
+          "pace": {"thirst": 8640, "quench": 600, "mend": 21600},
           "spine": [("heat", 21600, 86400), ("dram_moves", 28800, None), ("dusk", 43200, 86400),
                     ("night", 54000, 86400), ("cistern_cracks", 64800, None), ("dawn", 86400, 86400)],
           # the routines ride the spine: (routine, the spine event it starts with)
@@ -460,6 +461,21 @@ def upgrade(s):
     install_rules(s, root)
     s.set_rule(root, "reach_story", kinds=STORY_KINDS)
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
+    keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
+
+
+SALVE = {"doses": 4, "heals": 3, "description": "A Keth pouch of glassroot salve: chewed root and fat, bitter, bound in a strip of hide.",
+         "description_empty": "An empty Keth pouch. It still smells of glassroot."}
+
+
+def keep_medic(s, iska):
+    """Iska carries the Keth's glassroot salve: the Reach's one medicine, four doses. Given once (her `medic` mark), so
+    a pouch she used up or handed over is not refilled on a reboot."""
+    st = s.world.get(iska)["state"]
+    if st.get("medic"):
+        return
+    s.spawn("medicine", iska, "Glassroot salve", state=SALVE)
+    s.patch(iska, {"medic": True})
 
 
 def keep_routines(s, root):
@@ -476,6 +492,7 @@ def keep_routines(s, root):
     if "The Hold's ration cask" not in names:
         names["The Hold's ration cask"] = s.spawn("thing", st["hold"], "The Hold's ration cask", state={"portable": False, "water_source": True, "left": 0,
             "description": "A Guild cask stencilled with the Varrick mark. The crawler rolls a full one off at dawn; the writ pays."})["id"]
+    keep_medic(s, names["Iska of the Keth"])
     want = {"bearer": names["Iska of the Keth"], "keth_jars": names["The Keth jars"], "hold_ration": names["The Hold's ration cask"]}
     if any(st.get(k) != v for k, v in want.items()):
         s.patch(story, want)

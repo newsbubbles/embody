@@ -39,6 +39,13 @@ The numbers, so a narrator can explain a roll:
   seat that has done nothing for the world's `idle_after` (a mind on a watcher, a player asleep) drinks the same
   way. `python packs/d20/soak.py <world> --days N` runs a world that long with nobody playing and says who
   went dry and which sources ran out.
+- Mending: rest heals. A body with water in it (more than 3) mends a point of `vigor` a beat (`mended`): the
+  `mend` behavior, a beat of ten minutes in a turn-based story, the world's own with `set_pace` (the Reach: one point
+  every six world hours). Above half vigor the wound closes (`wounded` off). A body a wound put down gets up on its
+  own at 2 (`rose`, by rest); thirst's down is water's to undo, and a dry body does not mend. `tend` someone down
+  here: survival against 12 binds them so they stand at 1. With `medicine` in hand (a thing with `doses` left) a
+  dose heals its `heals` (default 3) at once, no roll, on anyone hurt, the down included; that is what a medic
+  carries. Bare hands do nothing for someone already on their feet.
 - A gift (`given`) is worth 1 with the receiver's faction only if they keep it: something they trade away on
   the spot, or something that was theirs to begin with (`given_by` on the thing names who handed it over),
   moves nothing.
@@ -71,6 +78,8 @@ COMBATANT_ACTIONS = {
     "drink": {"script": "drink", "doc": "Drink from a skin or a vessel within reach (+4 water)", "targets": "thing", "scope": "any", "duration": 2},
     "fill": {"script": "fill", "doc": "Fill a skin you hold at a source here", "targets": "thing", "scope": "held", "duration": 5},
     "search": {"script": "search", "doc": "Take everything off someone who is down or dead", "targets": "creature", "scope": "here", "duration": 5},
+    "tend": {"script": "tend", "doc": "See to someone hurt here (or yourself): medicine in hand heals a dose's worth, bare hands "
+                                      "(survival vs 12) get a downed body up at 1", "targets": "creature", "scope": "here", "duration": 10},
 }
 
 def define(s):
@@ -79,12 +88,16 @@ def define(s):
                     doc="Someone the d20 rules apply to: three stats, skills, vigor, water, and the verbs of a fight.",
                     state=COMBATANT_STATE, actions=COMBATANT_ACTIONS,
                     behaviors=[{"script": "thirst", "every": 60, "always": True},
-                               {"script": "quench", "every": 60, "idle": True}])
+                               {"script": "quench", "every": 60, "idle": True},
+                               {"script": "mend", "every": 600, "always": True}])
     s.define_schema("faction", extends="entity", doc="A side. Hidden; people name it in state.faction, standing edges point at it.",
                     state={"hidden": True, "hostile": {}})
     s.define_schema("waterskin", extends="thing", doc="Holds water. left out of capacity.",
                     state={"portable": True, "capacity": 3, "left": 3, "description": "A goatskin, heavy and cool.",
                            "description_full": "A goatskin, heavy and cool.", "description_empty": "A goatskin, slack and dry."})
+    s.define_schema("medicine", extends="thing", doc="Doses that heal: tend someone with it in hand.",
+                    state={"portable": True, "medicine": True, "doses": 3, "heals": 3,
+                           "description": "A pouch of salve, bitter-smelling.", "description_empty": "An empty pouch, still bitter."})
     s.define_schema("vein", extends="thing", doc="Emberglass in the sand. Harvesting takes time and makes noise.",
                     state={"portable": False, "ember": 3},
                     actions={"harvest": {"script": "harvest", "doc": "Dig a shard out (20 s, and the sand hears it)", "duration": 20}})
@@ -94,6 +107,24 @@ def define(s):
 
 
 define_rules = define  # the old name
+
+
+def keep_behaviors(w, scripts=("mend",)):
+    """Bodies spawned before a behavior joined their schema get its tick now, at the world's pace (a saved or hosted
+    world made before `mend` existed). Only the named scripts, so a tick someone stopped on purpose stays stopped.
+    Returns how many ticks it added. Idempotent."""
+    pace = w.meta().get("pace") or {}
+    have = {(i["entity_id"], (i["payload"] or {}).get("script")) for i in w.pending() if i["kind"] == "tick"}
+    n = 0
+    for e in w.find(limit=100000):
+        for b in w.schema_components(e["type"], "behaviors"):
+            if b["script"] not in scripts or (e["id"], b["script"]) in have:
+                continue
+            every = float(pace.get(b["script"], b.get("every", 10)))
+            w.schedule(every, "tick", entity=e["id"], payload={"script": b["script"], "always": bool(b.get("always"))},
+                       every=every, log=False)
+            n += 1
+    return n
 
 
 def install_rules(s, root):

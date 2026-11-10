@@ -527,3 +527,52 @@ def test_a_thirsty_body_walks_to_water_one_known_step_away_and_back_to_its_post(
     gm.clock(step=60)
     assert gm.inspect("Sefa of the Keth")["parent"] == ridge
     assert not gm.find(type="story")[0]["state"].get("seen_ridge")  # her quiet return is no first sight of the ridge
+
+
+def test_rest_mends_a_point_a_beat_and_a_wound_put_down_gets_up_at_two():
+    eng, gm, you = reach()
+    gm.patch("Captain Ruhl", {"vigor": 0, "down": True, "wounded": True, "water": 9})
+    gm.clock(step=600)
+    ruhl = state(gm, "Captain Ruhl")
+    assert ruhl["vigor"] == 1 and ruhl["down"]
+    gm.clock(step=600)
+    ruhl = state(gm, "Captain Ruhl")
+    assert ruhl["vigor"] == 2 and not ruhl["down"] and ruhl["wounded"]
+    ruhl_id = gm.inspect("Captain Ruhl")["id"]
+    assert any(e["target_id"] == ruhl_id and e["payload"].get("by") == "rest" for e in gm.world.events(0, kinds=["rose"], limit=5000))
+    for _ in range(3):
+        gm.clock(step=600)
+    ruhl = state(gm, "Captain Ruhl")
+    assert ruhl["vigor"] == 5 and not ruhl["wounded"]  # above half the wound closes
+    # a dry body does not mend; thirst's down is water's
+    gm.patch("Nico", {"water": 2, "vigor": 2, "thirsty": True})
+    gm.patch("Nico", {"water": 2})
+    gm.clock(step=600)
+    assert state(gm, "Nico")["vigor"] <= 2
+
+
+def test_tend_gets_the_down_up_and_medicine_heals_anyone_hurt():
+    eng, gm, you = reach()
+    here = gm.inspect("Reeve Ansel Varrick")["parent"]
+    gm.move("Captain Ruhl", here)
+    gm.patch("Captain Ruhl", {"vigor": 0, "down": True, "wounded": True, "water": 2})
+    gm.patch("Reeve Ansel Varrick", {"wits": 25, "skills": {"survival": 0}})
+    with pytest.raises(Rejected) as ex:
+        gm.act_as("Captain Ruhl", "tend", "Reeve Ansel Varrick")
+    assert "down" in str(ex.value).lower()  # the down cannot tend
+    r = you.act("tend", "Captain Ruhl")
+    ruhl = state(gm, "Captain Ruhl")
+    assert "tended" in kinds(r) and "rose" in kinds(r) and not ruhl["down"] and ruhl["vigor"] == 1
+    with pytest.raises(Rejected) as ex:
+        you.act("tend", "Captain Ruhl")
+    assert "medicine" in str(ex.value)  # bare hands do nothing for someone on their feet; the error says what would
+    gm.spawn("medicine", "Reeve Ansel Varrick", "Glassroot salve", state={"doses": 1, "heals": 3})
+    r = you.act("tend", "Captain Ruhl")
+    ruhl = state(gm, "Captain Ruhl")
+    assert ruhl["vigor"] == 4 and ruhl["wounded"] and state(gm, "Glassroot salve")["doses"] == 0  # half of 8: still wounded
+    with pytest.raises(Rejected):
+        you.act("tend", "Captain Ruhl")  # the pouch is empty and he is standing
+    gm.patch("Reeve Ansel Varrick", {"vigor": 2, "wounded": True})
+    gm.spawn("medicine", "Reeve Ansel Varrick", "More salve", state={"doses": 2})
+    you.act("tend", "Reeve Ansel Varrick")  # yourself, with medicine
+    assert state(gm, "Reeve Ansel Varrick")["vigor"] == 5

@@ -143,7 +143,7 @@ Gaps
 - [ ] `by_player` names whoever holds the seat now, not who held it when the event happened.
 - [ ] Some of Taan's `say` rows are written twice.
 - [ ] A person with no dialog answers a stock "Hm.", which reads as the engine, not the character.
-- [ ] The Glass Reach has no rest verb: vigor lost to thirst or a blade comes back only by water or a hand (the reeve sat at vigor 2 for a day).
+- [x] The Glass Reach has no rest verb: vigor lost to thirst or a blade comes back only by water or a hand (the reeve sat at vigor 2 for a day). Now `mend` (rest), `tend` and `medicine` in packs/d20.
 - [ ] Live authoring on the server is recorded inside the container and lost on the next deploy; the database keeps it, git does not. A pull-back script (scripts, rules, timers out of the live world, into the world's folder) is open.
 
 ## Directions from the design talks

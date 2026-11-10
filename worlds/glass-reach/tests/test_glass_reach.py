@@ -452,10 +452,10 @@ def test_hosted_bodies_thirst_at_the_pace_of_the_day():
                 out.setdefault(p["payload"]["script"], set()).add(p["every"])
         return out
 
-    assert beats() == {"thirst": {8640}, "quench": {600}, "fighter_tick": {6}}
+    assert beats() == {"thirst": {8640}, "quench": {600}, "mend": {21600}, "fighter_tick": {6}}
     kit = eng.session_for_token(gm.invite("player", label="Kit")["token"])
     kit.join(template="guard", name="Kit")
-    assert beats("Kit") == {"thirst": {8640}, "quench": {600}}
+    assert beats("Kit") == {"thirst": {8640}, "quench": {600}, "mend": {21600}}
     # a Reach hosted before the pace was set takes it on with the next upgrade
     gm.world.set_pace({"thirst": 60})
     load_world(gm, "glass-reach", upgrade=True, hosted=True)
@@ -484,3 +484,26 @@ def test_the_upgrade_nails_the_notice_by_the_cistern_once():
     r = you.act("read", "Notice by the cistern")
     assert any("water falls by a point every 2.4 hours" in str(e["payload"]) for e in r["events"])
 
+
+
+def test_a_reach_from_before_rest_mends_and_iska_carries_the_salve_once():
+    eng = Engine(workspace=REPO)
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    load_world(gm, "glass-reach", hosted=True)
+    salve = gm.find(name="Glassroot salve")
+    assert len(salve) == 1 and gm.inspect("Glassroot salve")["parent"] == gm.inspect("Iska of the Keth")["id"]
+    # a world hosted before mend existed: its bodies have no mend tick until the next upgrade
+    gm.world.store.conn.execute("DELETE FROM scheduled WHERE world_id=? AND json_extract(payload, '$.script')='mend'", (gm.world.id,))
+    assert not [p for p in gm.world.pending() if p["kind"] == "tick" and p["payload"].get("script") == "mend"]
+    gm.patch("Glassroot salve", {"doses": 0})
+    load_world(gm, "glass-reach", upgrade=True, hosted=True)
+    mends = [p for p in gm.world.pending() if p["kind"] == "tick" and p["payload"].get("script") == "mend"]
+    assert mends and {p["every"] for p in mends} == {21600}
+    assert len({p["entity_id"] for p in mends}) == len(mends)  # one each, never two
+    assert len(gm.find(name="Glassroot salve")) == 1 and gm.inspect("Glassroot salve")["state"]["doses"] == 0  # not refilled
+    # Corin's case: a thresher put him down; half a day of rest with water in him and he is up
+    gm.patch("Captain Ruhl", {"vigor": 0, "down": True, "wounded": True, "water": 10})
+    gm.clock(step=21601)
+    gm.clock(step=21601)
+    ruhl = gm.inspect("Captain Ruhl")["state"]
+    assert not ruhl["down"] and ruhl["vigor"] >= 2
