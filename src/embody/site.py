@@ -190,7 +190,8 @@ class Site:
         return (before[-1] if before else phases[-1])["name"]
 
     def chronicle(self) -> dict[str, Any] | None:
-        """The world's own prose, oldest first: the kinds its meta lists as `public_chronicle` (default: scene)."""
+        """The world's own prose, oldest first: the kinds its meta lists as `public_chronicle` (default: scene), each
+        text once."""
         w = self._world()
         if w is None:
             return None
@@ -199,10 +200,11 @@ class Site:
         kinds = [str(k) for k in (meta.get("public_chronicle") or ["scene"])]
         marks = ",".join("?" * len(kinds))
         rows = w.store.query("event", f"world_id=? AND kind IN ({marks})", [w.id, *kinds], order="seq DESC", limit=400)
-        entries = []
+        entries, told = [], set()
         for r in reversed(rows):
             text = str((r.get("payload") or {}).get("text") or "").strip()
-            if text:
+            if text and text not in told:  # a line the world says every day is told once
+                told.add(text)
                 entries.append({"day": int(float(r["t"]) // day) + 1, "kind": r["kind"], "text": text, "t": round(float(r["t"]))})
         phases = self._phases(w, day)
         days: dict[int, dict[str, Any]] = {}

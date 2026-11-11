@@ -1434,11 +1434,15 @@ class Session:
         return out
 
     def chronicle(self, day: int | None = None, limit: int = 200) -> dict[str, Any]:
-        """(owner, author) One world day of the log, sorted for whoever writes it up: the world's own prose
-        (`scenes`), what was said (`said`), what happened (`beats`), who went where (`travel`), counts by kind,
-        and what is already published for that day. Built from the log, nothing invented. The day defaults to the
-        current one; `day_seconds` in the world's meta sets its length (86400). Notes and intents stay their
-        owners'."""
+        """(owner, author) One world day of the log, sorted for whoever writes it up: what changed (`news`: people
+        and places new to the world, fights, finds, downs and deaths, gifts and trades across sides, standing,
+        the story's own state), the world's own prose (`scenes`), what was said (`said`), what happened (`beats`),
+        who went where (`travel`), what repeats every day (`routine`, counted), counts by kind, and what is
+        already published for that day. Built from the log, nothing invented. The day defaults to the current one;
+        `day_seconds` in the world's meta sets its length (86400). Routine is a scene text the day before also
+        had (or one already told today), an actorless beat of a kind the day before also had, the bodies' upkeep
+        and the deeds themselves (`act`, whose results are the beats), and the kinds the meta lists as
+        `chronicle_routine`. Notes and intents stay their owners'."""
         self._need(AUTHOR)
         self._tick()
         w = self.world
@@ -1451,6 +1455,20 @@ class Session:
         limit = max(1, min(int(limit), 1000))
         rows = w.store.query("event", "world_id=? AND t>=? AND t<?", (w.id, lo, hi), order="seq")
         skip = _INTERNAL_KINDS | _PRIVATE_KINDS | _CHRONICLE_QUIET
+        meta = w.meta()
+        routine_kinds = _CHRONICLE_ROUTINE | {str(k) for k in (meta.get("chronicle_routine") or [])}
+        # what the day before had: the same scene again, or the same world-driven beat, is routine, not news
+        told_before: set[str] = set()
+        actorless_before: set[str] = set()
+        for r in w.store.query("event", "world_id=? AND t>=? AND t<?", (w.id, lo - D, lo), order="seq"):
+            if r["kind"] == "scene" and (r["payload"] or {}).get("text"):
+                told_before.add(str(r["payload"]["text"]))
+            elif not r["actor_id"]:
+                actorless_before.add(r["kind"])
+        routine: dict[str, int] = {}
+
+        def routinely(k: str) -> None:
+            routine[k] = routine.get(k, 0) + 1
         names: dict[str, str] = {}
 
         def name(eid: str | None) -> str | None:
@@ -1495,6 +1513,7 @@ class Session:
         scenes, said, beats = [], [], []
         travel: dict[str, list[str]] = {}
         people: set[str] = set()
+        told_today: set[str] = set()
         for r in rows:
             k = r["kind"]
             if k in _INTERNAL_KINDS or k in _PRIVATE_KINDS:
@@ -1503,6 +1522,10 @@ class Session:
             t = round(float(r["t"]) - lo)
             p = r["payload"] or {}
             if k == "scene" and p.get("text"):
+                if p["text"] in told_before or p["text"] in told_today:
+                    routinely("scene")
+                    continue
+                told_today.add(p["text"])
                 scenes.append({"t": t, "place": place(r), "text": p["text"]})
             elif k == "say" and p.get("text"):
                 who = r["actor_id"]
@@ -1517,6 +1540,10 @@ class Session:
                 route = travel.setdefault(name(r["target_id"]), [name(p.get("from"))] if p.get("from") else [])
                 route.append(name(p["to"]))
                 people.add(r["target_id"])
+            elif k == "act":
+                routinely("act:" + str(p.get("verb") or "?"))
+            elif k in routine_kinds or (not r["actor_id"] and k in actorless_before):
+                routinely(k)
             elif k not in skip:
                 row = {"t": t, "kind": k, "who": name(r["actor_id"]), "place": place(r)}
                 if r["target_id"] and r["target_id"] != r["actor_id"]:
@@ -1537,13 +1564,135 @@ class Session:
             out[key], more = cap(xs)
             if more:
                 out[f"{key}_more"] = more
+        out["news"], more = cap(self._news(rows, lo, D, name, place, seat, detail))
+        if more:
+            out["news_more"] = more
+        out["routine"] = {"count": sum(routine.values()), "kinds": dict(sorted(routine.items(), key=lambda kv: -kv[1]))}
         out["travel"] = travel
         out["people"] = sorted(({"name": name(e), "seat": seat(e)} for e in people if w.get(e)), key=lambda x: x["name"])
         out["published"] = self._published(day).get(day)
-        out["hint"] = ("t is seconds into the day. Write the day in the world's voice from scenes, beats and travel. "
+        out["hint"] = ("t is seconds into the day. Write it as news for the players: lead with what changed (news, then "
+                       "scenes and beats), give routine a clause at most, and leave out what a reader saw yesterday. "
                        "Words marked player are a guest's: retell them, never quote one without asking. "
                        "Then publish_chronicle(day, text, title).")
         return out
+
+    def _news(self, rows: list[dict[str, Any]], lo: float, D: float, name: Any, place: Any, seat: Any,
+              detail: Any) -> list[dict[str, Any]]:
+        """What changed on a day, from its events: people and places new to the world, fights (one line a pair and
+        place), the notable kinds (`_NEWS_KINDS` and the meta's `chronicle_news`), gifts and trades across sides,
+        standing, and the story's state (the root, an entity named Story, and the meta's `chronicle_story`): each
+        key's first value that day against its last."""
+        w = self.world
+        meta = w.meta()
+        notable = _NEWS_KINDS | {str(k) for k in (meta.get("chronicle_news") or [])}
+        story_ids = {w.root_id} | {e["id"] for e in w.find(name="Story", limit=5)}
+        for ref in meta.get("chronicle_story") or []:
+            e = w.get(str(ref)) or next(iter(w.find(name=str(ref), limit=1)), None)
+            if e:
+                story_ids.add(e["id"])
+        visited = {(r["payload"] or {}).get("to") for r in
+                   w.store.query("event", "world_id=? AND kind='moved' AND t<?", (w.id, lo))}
+        news: list[dict[str, Any]] = []
+        fights: dict[tuple[Any, ...], dict[str, Any]] = {}
+        story: dict[str, list[Any]] = {}
+        new_people: set[str] = set()
+
+        def side(eid: str | None) -> str | None:
+            e = w.get(eid) if eid else None
+            f = (e or {}).get("state", {}).get("faction") if e else None
+            return name(f) if isinstance(f, str) and w.get(f) else f
+
+        def where(r: dict[str, Any]) -> str | None:
+            # the event's own place, else where the one it is about was last seen that day, else stands now
+            at = place(r) or last_at.get(r["target_id"])
+            if at is None and r["target_id"]:
+                e = w.get(r["target_id"])
+                while e is not None and not w.is_a(e["type"], "place"):
+                    e = w.get(e["parent_id"]) if e["parent_id"] else None
+                at = name(e["id"]) if e is not None else None
+            return at
+
+        def item(r: dict[str, Any], what: str, **kw: Any) -> dict[str, Any]:
+            row = {"t": round(float(r["t"]) - lo), "what": what, "place": where(r)}
+            row.update({k: v for k, v in kw.items() if v not in (None, "", [], {})})
+            return row
+
+        last_at: dict[str, str] = {}
+        for r in rows:
+            k, p, tid, aid = r["kind"], r["payload"] or {}, r["target_id"], r["actor_id"]
+            e = w.get(tid) if tid else None
+            if r.get("path"):
+                at = place(r)
+                for x in (aid, tid):
+                    if x and at:
+                        last_at[x] = at
+            if k == "spawned" and e is not None:
+                if w.is_a(e["type"], "creature") and not e["state"].get("dead"):
+                    new_people.add(tid)
+                    news.append(item(r, "new_person", who=name(tid), type=e["type"], faction=side(tid)))
+                elif w.is_a(e["type"], "place"):
+                    visited.add(tid)
+                    news.append(item(r, "new_place", name=name(tid), parent=name(e.get("parent_id")),
+                                     hidden=bool(e["state"].get("hidden")) or None))
+            elif k == "embodied" and tid and tid not in new_people:
+                if not w.store.query("event", "world_id=? AND kind='embodied' AND target_id=? AND seq<?",
+                                     (w.id, tid, r["seq"]), limit=1):
+                    new_people.add(tid)
+                    g = w.store.query("grants", "world_id=? AND principal_id=?", (w.id, p.get("principal")), limit=1)
+                    news.append(item(r, "new_person", who=name(tid), seat=seat(tid), faction=side(tid),
+                                     template=g[0].get("template") if g else None))
+            elif k == "moved" and p.get("to") and p["to"] not in visited and aid == tid:
+                visited.add(p["to"])
+                news.append(item(r, "first_visit", who=name(tid), name=name(p["to"])))
+            elif k in ("hit", "missed"):
+                by = p.get("by") or aid
+                key = (by, tid, place(r))
+                f = fights.get(key)
+                if f is None:
+                    f = fights[key] = item(r, "fight", who=name(by), target=name(tid))
+                    f.update({"blows": 0, "hits": 0, "damage": 0})
+                    news.append(f)
+                f["blows"] += 1
+                if k == "hit":
+                    f["hits"] += 1
+                    f["damage"] += int(p.get("dmg") or 0)
+            elif k in ("given", "traded"):
+                by = p.get("by") or aid
+                a, b = side(by), side(tid)
+                if a != b:
+                    what = name(p["item"]) if p.get("item") and w.get(p["item"]) else None
+                    news.append(item(r, "gift" if k == "given" else "trade", who=name(by), target=name(tid), sides=[a, b],
+                                     thing=what, count=p.get("count"), got=p.get("got"), gave=p.get("gave")))
+            elif k == "standing":
+                news.append(item(r, "standing", who=name(tid), faction=p.get("faction"), value=p.get("value"),
+                                 delta=p.get("delta"), why=p.get("why")))
+            elif k == "patched" and tid in story_ids:
+                before, changes = p.get("before") or {}, p.get("changes") or {}
+                for key, v in changes.items():
+                    if key in ("ambient", "rules", "description"):
+                        continue
+                    if key not in story:
+                        story[key] = [before.get(key), v, round(float(r["t"]) - lo), name(tid)]
+                    else:
+                        story[key][1], story[key][2] = v, round(float(r["t"]) - lo)
+            elif k in notable:
+                news.append(item(r, k, who=name(p.get("by") or aid), target=name(tid) if tid != (p.get("by") or aid) else None,
+                                 detail={k: name(v) if isinstance(v, str) and w.get(v) else v for k, v in detail(p).items()
+                                         if k != "by"}))
+
+        def short(v: Any) -> Any:
+            if isinstance(v, str) and w.get(v):
+                return name(v)
+            if isinstance(v, (str, int, float, bool)) or v is None:
+                return v if not isinstance(v, str) or len(v) <= 160 else v[:157] + "..."
+            text = json.dumps(v, ensure_ascii=False, default=str)
+            return text if len(text) <= 160 else text[:157] + "..."
+
+        for key, (was, now, t, holder) in story.items():
+            if was != now:
+                news.append({"t": t, "what": "story", "on": holder, "key": key, "was": short(was), "now": short(now)})
+        return sorted(news, key=lambda x: x["t"])
 
     def publish_chronicle(self, day: int, text: str, title: str | None = None) -> dict[str, Any]:
         """(owner, author) Put one day's chronicle on the world's page (`days` in /chronicle.json, for a world whose
@@ -2295,6 +2444,13 @@ OPS = [
 
 
 # What a chronicle leaves out of its beats: the bookkeeping of building and moving. Travel is told on its own.
+# A day's upkeep: what bodies do every beat. Counted under routine, never news.
+_CHRONICLE_ROUTINE = frozenset({"mended", "sweated", "drank", "filled", "thirsty", "parched", "quenched", "merged",
+                                "opinion", "woke", "slept", "embodied", "released", "reclaimed", "finished"})
+# The kinds that are news wherever they happen (a world adds its own with `chronicle_news` in its meta).
+_NEWS_KINDS = frozenset({"found", "downed", "killed", "outlawed", "yielded", "truce_broken", "dishonor", "lock_broken",
+                         "lock_picked", "lifted", "caught", "renamed", "destroyed", "burned", "works_done", "stage_done",
+                         "challenged", "agreed", "spoiled", "wounded", "rose", "searched"})
 _CHRONICLE_QUIET = frozenset({"spawned", "patched", "linked", "unlinked", "related", "unrelated", "laid_out", "moved",
                               "left", "chronicled", "scene", "say", "unscheduled"})
 

@@ -330,8 +330,9 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def chronicle(day: int | None = None, limit: int = 200) -> dict[str, Any]:
-        """(owner, author) One world day of the log sorted for writing it up: scenes, what was said, beats, who went
-        where, counts, and what is already published. Nothing invented. Default: today so far."""
+        """(owner, author) One world day of the log sorted for writing it up as news: what changed (news), new
+        scenes, what was said, beats, who went where, the routine counted, and what is already published. Nothing
+        invented. Default: today so far."""
         return S(None).chronicle(day=day, limit=limit)
 
     @tool()

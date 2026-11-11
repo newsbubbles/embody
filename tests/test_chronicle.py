@@ -79,3 +79,39 @@ def test_the_chronicle_tools_answer_through_the_mcp_server():
         return json.loads("".join(getattr(b, "text", "") for b in r.content))
     assert anyio.run(call, "chronicle", {})["day"] == 1
     assert anyio.run(call, "publish_chronicle", {"day": 1, "text": "Day one."})["ok"]
+
+
+def test_the_digest_leads_with_what_changed_and_counts_the_routine():
+    eng, w, i, gm, s = played()
+    for rat in w.find(type="rat"):
+        w.destroy(rat["id"])  # its wandering is no one's news
+    w.set_meta({"day_seconds": 100})
+    w.emit("scene", target=i["Cell"], reach=1, payload={"text": "Dawn greys the bars."})
+    w.step(100)
+    w.emit("scene", target=i["Cell"], reach=1, payload={"text": "Dawn greys the bars."})  # every day: routine
+    w.emit("scene", target=i["Cell"], reach=1, payload={"text": "Dawn greys the bars."})  # told twice: once
+    w.emit("scene", target=i["Hall"], reach=1, payload={"text": "A bell rings in the yard."})
+    w.patch(i["Prisoner"], {"faction": "Inmates"})
+    w.patch(i["Guard"], {"faction": "Watch"})
+    stranger = w.spawn("person", i["Hall"], "Stranger", state={"faction": "Watch"})
+    w.spawn("room", w.root_id, "Yard")
+    w.emit("hit", actor=i["Guard"], target=i["Prisoner"], payload={"by": i["Guard"], "dmg": 2})
+    w.emit("missed", actor=i["Guard"], target=i["Prisoner"], payload={"by": i["Guard"]})
+    w.emit("given", actor=i["Guard"], target=i["Prisoner"], payload={"by": i["Guard"], "item": i["Rusty key"], "count": 1})
+    w.emit("given", actor=i["Guard"], target=stranger, payload={"by": i["Guard"], "item": i["Rusty key"]})  # same side
+    w.emit("downed", actor=i["Prisoner"], target=i["Prisoner"], payload={"by": i["Guard"]})
+    w.patch(w.root_id, {"alarm": "raised"})
+    w.patch(w.root_id, {"alarm": "sounding"})
+    d = gm.chronicle(day=2)
+    assert [x["text"] for x in d["scenes"]] == ["A bell rings in the yard."]
+    assert d["routine"]["kinds"]["scene"] == 2 and d["routine"]["count"] >= 2
+    news = {x["what"]: x for x in d["news"]}
+    assert news["new_person"]["who"] == "Stranger" and news["new_person"]["faction"] == "Watch"
+    assert news["new_place"]["name"] == "Yard"
+    assert news["fight"] == {**news["fight"], "who": "Guard", "target": "Prisoner", "blows": 2, "hits": 1, "damage": 2}
+    gifts = [x for x in d["news"] if x["what"] == "gift"]
+    assert len(gifts) == 1 and gifts[0]["sides"] == ["Watch", "Inmates"] and gifts[0]["thing"] == "Rusty key"
+    assert news["downed"]["who"] == "Guard" and news["downed"]["target"] == "Prisoner"
+    assert news["story"]["key"] == "alarm" and news["story"]["was"] is None and news["story"]["now"] == "sounding"
+    assert all("t" in x and "place" in x or x["what"] == "story" for x in d["news"])
+    assert "news" in d["hint"] and "routine" in d["hint"]
