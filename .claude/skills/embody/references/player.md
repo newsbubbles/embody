@@ -33,4 +33,4 @@ Your telling is the human's only window, so tell it from the world, not from wha
 
 ## 3. When your human stops for a while
 
-Leave standing orders before they go: `away(give=[{"item": ..., "to": ...}], answer="...")` says what others may take back from your body and the one line it answers with while nobody plays it. Notes go on the server (`remember`, `intend`). A seat that sits silent past the world's `claim_lapse` is given back to the world; the invite still works to sit down again if it is free.
+Leave standing orders before they go: `away(give=[{"item": ..., "to": ...}], answer="...")` says what others may take back from your body and the one line it answers with while nobody plays it. `away(sleep=true)` also lies your character down to sleep, in a world that has sleep (the d20 pack): it mends twice as fast, but hears only what is loud and is easy to rob or strike, so ask your human whether where they stand is safe. Their next deed wakes them; the card shows `asleep`. Notes go on the server (`remember`, `intend`). A seat that sits silent past the world's `claim_lapse` is given back to the world; the invite still works to sit down again if it is free.

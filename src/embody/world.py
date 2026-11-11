@@ -1168,7 +1168,34 @@ class World:
             self._dispatch(ev)
             if kind in self._OPINION and self._row["meta"].get("opinion_floor", True):
                 self._opinion_floor(ev)
+            if kind not in _NO_WAKE:
+                self._wake_on(ev)
         return ev
+
+    def _wake_on(self, ev: dict[str, Any]) -> None:
+        """Sleep (a body whose state says `asleep`, put there by a `slept` event and taken off by `woke`). A deed
+        someone else does to a sleeper wakes it (a blow, a gift, a word said to it); so does anything loud where it
+        lies: an event that carries `loud` or reaches two levels up (a lock broken, a thresher). A quiet hand that
+        does not touch it (a theft whose event names the thief) does not."""
+        tid = ev["target_id"]
+        if not tid:
+            return
+        t = self.get(tid)
+        if t is None:
+            return
+        woken: list[str] = []
+        if t["state"].get("asleep") and ev["actor_id"] and ev["actor_id"] != tid:
+            woken.append(tid)
+        if _loud(ev):
+            near = {tid, t["parent_id"]} - {None}
+            for pid in near:
+                for c in self.children(pid):
+                    if c["state"].get("asleep") and c["id"] not in woken and c["id"] != ev["actor_id"]:
+                        woken.append(c["id"])
+        for sid in woken:
+            self.patch(sid, {"asleep": False}, actor=ev["actor_id"], caused_by=ev["seq"])
+            self.emit("woke", actor=ev["actor_id"], target=sid, reach=1, caused_by=ev["seq"],
+                      payload={"by": ev["actor_id"], "why": ev["kind"]})
 
     def _listeners_for(self, entity_id: str, rules_only: bool = False) -> list[dict[str, Any]]:
         e = self.get(entity_id)
@@ -1246,17 +1273,25 @@ class World:
         """Keep the events `who` could have witnessed: its own, those on its path, and those in the place it
         stood in at that moment. The place is reconstructed per event from its own `moved` events (payload
         `from`/`to`), walking back from where it stands now, so walking into a square does not hand you what
-        was said there before you came."""
+        was said there before you came. Its sleep is reconstructed the same way (`slept`, `woke`): asleep, it
+        keeps only what was done to it and what was loud."""
         e = self.get(who)
         here = e["parent_id"] if e else None
         moves = self.store.query("event", "world_id=? AND kind='moved' AND actor_id=?", (self.id, who), order="seq")
         moves = [m for m in moves if m["payload"].get("from") != m["payload"].get("to")]
+        asleep = bool(e and e["state"].get("asleep"))
+        sleeps = self.store.query("event", "world_id=? AND kind IN ('slept', 'woke') AND target_id=?", (self.id, who),
+                                  order="seq")
         out = []
         for r in reversed(rows):
             while moves and moves[-1]["seq"] > r["seq"]:
                 here = moves.pop()["payload"].get("from")
+            while sleeps and sleeps[-1]["seq"] > r["seq"]:
+                asleep = sleeps.pop()["kind"] == "woke"  # before a waking it slept; before falling asleep it woke
             watch = {who, here} if here else {who}
             if r["actor_id"] == who or watch & set(r["path"]):
+                if asleep and r["actor_id"] != who and r["target_id"] != who and not _loud(r):
+                    continue  # a sleeper hears only what is loud, or what is done to it
                 out.append(r)
         out.reverse()
         return out
@@ -1955,6 +1990,15 @@ def _bulk(e: dict[str, Any]) -> float:
 def _num(x: float) -> float | int:
     x = round(float(x), 3)
     return int(x) if x == int(x) else x
+
+
+# Kinds that never wake a sleeper: the deed's own envelope (its verb's events decide) and sleep itself.
+_NO_WAKE = frozenset({"act", "slept", "woke"})
+
+
+def _loud(ev: dict[str, Any]) -> bool:
+    """Heard through sleep: an event that says it is `loud`, or one that carries two levels up or more."""
+    return bool((ev.get("payload") or {}).get("loud")) or int(ev.get("reach") or 0) >= 2
 
 
 # Events that exist for the log, not for listeners.

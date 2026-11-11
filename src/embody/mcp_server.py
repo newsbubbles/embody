@@ -373,11 +373,12 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def away(give: list[dict[str, Any]] | None = None, answer: str | None = None, entity: str | None = None,
-             principal: str | None = None) -> dict[str, Any]:
+             sleep: bool = False, principal: str | None = None) -> dict[str, Any]:
         """Standing orders for your body while your seat is idle (gone to bed, on a long watch). give=[{"item":
         <name>, "to": <name> or "anyone"}]: who may reclaim() what from you. answer: one line your body says to
-        whoever speaks to it. away() with nothing clears them."""
-        return S(principal).away(give=give, answer=answer, entity=entity)
+        whoever speaks to it. away() with nothing clears them. sleep=true: your body lies down to sleep now (the
+        world's `sleep` verb): it mends faster but is easy prey, so do it somewhere safe; your next deed wakes it."""
+        return S(principal).away(give=give, answer=answer, entity=entity, sleep=sleep)
 
     @tool()
     @_wrap

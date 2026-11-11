@@ -50,6 +50,13 @@ The numbers, so a narrator can explain a roll:
   against 12 binds them so they stand at 1. With `medicine` in hand (a thing with `doses` left) a
   dose heals its `heals` (default 3) at once, no roll, on anyone hurt, the down included; that is what a medic
   carries. Bare hands do nothing for someone already on their feet.
+- Sleep: `sleep` lies a body down (`asleep`, a `slept` event; a seat going away can do it with `away(sleep=true)`). Asleep it
+  mends two points a beat for the water of one, and hears only what is loud (an event that says `loud`, or that
+  carries two levels up: a lock broken, the thresher) or done to it. It is easy prey: a blow on a sleeper rolls twice
+  and keeps the better, against bare hands and no brace; `search` works on a sleeper as on someone down, by stealth
+  (d20 + wits + stealth against 10 + their wits): done, the `lifted` event names the thief and the sleeper sleeps on;
+  fumbled (`caught`), nothing is taken and they wake. A blow, a word said to them, `wake` by someone here, a noise,
+  thirst (water 3) or their own next deed wakes them (`woke`, with `by` and `why`). Sleep where nobody would rob you.
 - A gift (`given`) is worth 1 with the receiver's faction only if they keep it: something they trade away on
   the spot, or something that was theirs to begin with (`given_by` on the thing names who handed it over),
   moves nothing.
@@ -63,7 +70,7 @@ PACK = {"name": "d20", "description": "Table-top rules as verbs: d20 checks, opp
 
 COMBATANT_STATE = {"body": 1, "wits": 1, "will": 1, "skills": {}, "vigor": 6, "max_vigor": 6, "water": 10, "max_water": 10,
                    "wounded": False, "down": False, "dead": False, "braced": False, "yielded": None, "thirsty": False,
-                   "cowed_by": None, "attacked_by": None, "faction": None}
+                   "cowed_by": None, "attacked_by": None, "faction": None, "asleep": False}
 
 COMBATANT_ACTIONS = {
     "check": {"script": "check", "doc": "Try something against a difficulty: d20 + stat + skill vs dc (default 12)",
@@ -81,7 +88,12 @@ COMBATANT_ACTIONS = {
     "challenge": {"script": "challenge", "doc": "Call someone out: a duel nobody else may enter", "targets": "creature", "scope": "here"},
     "drink": {"script": "drink", "doc": "Drink from a skin or a vessel within reach (+4 water)", "targets": "thing", "scope": "any", "duration": 2},
     "fill": {"script": "fill", "doc": "Fill a skin you hold at a source here", "targets": "thing", "scope": "held", "duration": 5},
-    "search": {"script": "search", "doc": "Take what you can carry off someone who is down or dead; the rest stays on them", "targets": "creature", "scope": "here", "duration": 5},
+    "search": {"script": "search", "doc": "Take what you can carry off someone who is down, dead or asleep (a sleeper by stealth: "
+                                          "fumble and they wake); the rest stays on them", "targets": "creature", "scope": "here", "duration": 5},
+    "sleep": {"script": "sleep", "doc": "Lie down and sleep: you mend twice as fast, hear only what is loud or done to you, and are "
+                                        "easy prey. Your next deed wakes you; so do a blow, a word to you, a noise and thirst", "duration": 2},
+    "wake": {"script": "wake", "doc": "Wake someone asleep here with a shake and a word", "targets": "creature", "scope": "here",
+             "duration": 1},
     "tend": {"script": "tend", "doc": "See to someone hurt here (or yourself): medicine in hand heals a dose's worth, bare hands "
                                       "(survival vs 12) get a downed body up at 1", "targets": "creature", "scope": "here", "duration": 10},
 }

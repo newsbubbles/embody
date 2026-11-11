@@ -104,15 +104,21 @@ def strike(ctx, me, t, slow):
         ctx.emit("warded", target=t, reach=1, by=me.id, weapon=wname)
         ctx.log("the ward hardens against the fast blow")
         return {"hit": False, "warded": True}
+    # a sleeper is struck with advantage (the better of two rolls) and defends with bare hands, unbraced
+    asleep = bool(t.state.asleep)
     a_roll = ctx.rand.roll("1d20")
+    rolls = [a_roll]
+    if asleep:
+        rolls.append(ctx.rand.roll("1d20"))
+        a_roll = max(rolls)
     a_mod = bonus(me, "blade" if weapon else "brawl")
     if weapon:
         a_mod = a_mod + int(weapon.state.bonus or 0)
     if slow:
         a_mod = a_mod - 2
     d_roll = ctx.rand.roll("1d20")
-    d_mod = bonus(t, "blade" if held(t, "weapon") else "brawl")
-    if t.state.braced:
+    d_mod = bonus(t, "blade" if held(t, "weapon") and not asleep else "brawl")
+    if t.state.braced and not asleep:
         d_mod = d_mod + 3
     attack = a_roll + a_mod
     defence = d_roll + d_mod
@@ -122,10 +128,12 @@ def strike(ctx, me, t, slow):
         dmg = int(weapon.state.damage or 1) if weapon else 1
         vigor = int(t.state.vigor or 0) - dmg
         ctx.patch(t, {"vigor": vigor, "braced": False})
-        ctx.emit("hit", target=t, reach=1, by=me.id, dmg=dmg, weapon=wname, attack=attack, defence=defence, vigor=vigor)
+        ctx.emit("hit", target=t, reach=1, by=me.id, dmg=dmg, weapon=wname, attack=attack, defence=defence, vigor=vigor,
+                 rolls=rolls, asleep=asleep)
         settle(ctx, t, me.id)
     else:
-        ctx.emit("missed", target=t, reach=1, by=me.id, weapon=wname, attack=attack, defence=defence)
+        ctx.emit("missed", target=t, reach=1, by=me.id, weapon=wname, attack=attack, defence=defence, rolls=rolls,
+                 asleep=asleep)
     if me.state.braced:
         ctx.patch(me, {"braced": False})
     ctx.log(("hit for " + str(dmg) if hit else "miss") + " (" + str(attack) + " vs " + str(defence) + ")")

@@ -13,7 +13,12 @@ def tick(ctx):
     if water <= 3 and not st.thirsty:
         changes["thirsty"] = True
         ctx.emit("thirsty", target=me, reach=0, water=water)
+    roused = water <= 3 and bool(st.asleep)
+    if roused:
+        changes["asleep"] = False  # thirst wakes a sleeper, so it can drink
     ctx.patch(me, changes)
+    if roused:
+        ctx.emit("woke", target=me, reach=1, by=me.id, why="thirst")
     if water == 0:
         # dry: vigor goes down to the floor and no further. Thirst puts a body down; it does not kill. Water brings it up.
         v = int(st.vigor or 0)

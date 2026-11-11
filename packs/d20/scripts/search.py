@@ -1,3 +1,4 @@
+use("common")
 def room(ctx, who):
     # what more this body can carry, or None when it has no limit
     if not who.state.carry:
@@ -17,8 +18,8 @@ def fitting(ctx, it, free):
 def check(ctx):
     if ctx.target.parent.id != ctx.actor.parent.id:
         return "they are not here"
-    if not (ctx.target.state.down or ctx.target.state.dead):
-        return "they would not let you"
+    if not (ctx.target.state.down or ctx.target.state.dead or ctx.target.state.asleep):
+        return "they would not let you: only someone down, dead or asleep"
     free = room(ctx, ctx.actor)
     held = ctx.target.children()
     if free is not None and held and not any([fitting(ctx, it, free) > 0 for it in held]):
@@ -26,7 +27,19 @@ def check(ctx):
     return True
 
 def apply(ctx):
-    # what fits in your hands, by the bulk take counts (part of a stack when only part fits); the rest stays on the body
+    # what fits in your hands, by the bulk take counts (part of a stack when only part fits); the rest stays on the body.
+    # A sleeper is searched by stealth: d20 + wits + stealth against 10 + their wits. Done quietly, the event names the
+    # thief and the sleeper sleeps on; fumbled, nothing is taken and the hand on them wakes them.
+    t = ctx.target
+    sly = bool(t.state.asleep and not (t.state.down or t.state.dead))
+    if sly:
+        roll = ctx.rand.roll("1d20")
+        mod = bonus(ctx.actor, "stealth")
+        dc = 10 + int(t.state.wits or 0)
+        if roll + mod < dc:
+            ctx.emit("caught", target=t, reach=1, by=ctx.actor.id, roll=roll, mod=mod, total=roll + mod, dc=dc)
+            ctx.log("stealth: d20 " + str(roll) + " + " + str(mod) + " vs " + str(dc) + ": your hand wakes " + t.name)
+            return []
     found = []
     counts = {}
     left = []
@@ -42,7 +55,12 @@ def apply(ctx):
         counts[got.id] = n
         if not whole:
             left.append(it)
-    ctx.emit("searched", target=ctx.target, reach=1, by=ctx.actor.id, found=found, counts=counts, left=[it.id for it in left])
+    if sly:
+        # the event is on the thief: the room may see it, the sleeper does not
+        ctx.emit("lifted", target=ctx.actor, reach=1, by=ctx.actor.id, sleeper=t.id, found=found, counts=counts,
+                 left=[it.id for it in left], roll=roll, mod=mod, dc=dc)
+    else:
+        ctx.emit("searched", target=ctx.target, reach=1, by=ctx.actor.id, found=found, counts=counts, left=[it.id for it in left])
     msg = str(len(found)) + " things taken"
     if left:
         msg = msg + "; your hands are full, so " + ", ".join([it.name + (" (" + str(ctx.count(it)) + ")" if it.state.count is not None else "") for it in left]) + " stay on " + ctx.target.name

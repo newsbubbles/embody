@@ -1281,6 +1281,8 @@ class Session:
             card["embodied_by"] = emb["id"]
             if w.idle(e["id"]):
                 card["idle"] = True  # the seat has done nothing for a while; standing_orders in its state say what holds
+        if e["state"].get("asleep"):
+            card["asleep"] = True  # it hears only what is loud or done to it, and wakes to a hand or a noise
         kids = w.children(e["id"])
         if w.locked_by(e["id"]) is not None:
             card["locked"] = True
@@ -1635,12 +1637,13 @@ class Session:
         return {"ok": True, "reclaimed": tid, "name": r["name"], "from": r["from_name"], "why": r["why"]}
 
     def away(self, give: list[dict[str, Any]] | None = None, answer: str | None = None,
-             entity: str | None = None) -> dict[str, Any]:
+             entity: str | None = None, sleep: bool = False) -> dict[str, Any]:
         """Standing orders for your body while your seat is idle (you went to bed, your mind is on a long watch).
         give=[{"item": <name>, "to": <name> or "anyone"}]: who may reclaim() what from you. answer: one line your
         body says to whoever speaks to it. Others see them on your card while you are idle. away() with nothing
         clears them; they stay set while you play and only work while you are idle. entity: which of a mind's
-        bodies (default the one you embody)."""
+        bodies (default the one you embody). sleep=true: your body lies down to sleep now, by its own `sleep` verb
+        (the d20 pack's): it mends faster and is easy prey, so do it somewhere safe. Your next deed wakes it."""
         self._tick()
         w = self.world
         eid = self._resolve(entity) if entity else self._me()
@@ -1657,8 +1660,12 @@ class Session:
             if len(answer) > _SAY_MAX:
                 raise Rejected(f"a standing answer is at most {_SAY_MAX} characters", hint="one short line")
             orders["answer"] = str(answer)
+        if sleep and not w.need(eid)["state"].get("asleep"):
+            if "sleep" not in w.schema_actions(w.need(eid)["type"]):
+                raise Rejected("this body has no sleep verb", hint="away() without sleep; a world gets sleep from the d20 pack")
+            w.act(eid, "sleep", None, {}, principal_id=self.pid)
         w.patch(eid, {"standing_orders": orders or None}, replace=True)
-        return {"ok": True, "entity": eid, "standing_orders": orders,
+        return {"ok": True, "entity": eid, "standing_orders": orders, "asleep": bool(w.need(eid)["state"].get("asleep")),
                 "hint": "they work while your seat is idle; away() clears them"}
 
     def say(self, text: str, reach: int = 1, to: str | None = None) -> dict[str, Any]:
