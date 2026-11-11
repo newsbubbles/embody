@@ -1,4 +1,4 @@
-"""Village verbs: go, take, drop, put, give, show, talk, leave_word, read, follow, stay, watch, and person_on, the listener that
+"""Village verbs: go, take, drop, put, give, show, talk, leave_word, read, burn, follow, stay, watch, and person_on, the listener that
 answers from a person's dialog table while nobody embodies them. Extracted from the Ferry at Dusk, used by the
 Glass Reach too.
 
@@ -22,9 +22,13 @@ own, so a world may replace any of them with a file of the same name in its scri
   person ("the new guard" matches the template, type or faction) or "anyone"; someone else asking after the sender
   hears that word was left, not what it says. The sender never gets its own word back. Twenty words kept per person.
 - read: the `text` of a thing you hold or that is here.
+- burn: a thing whose state is `burnable`, held or here, at a fire: the place or something here with `fire` or `lit`
+  in its state, or a lit light in hand. It is destroyed, what it held drops where you stand, and the room sees a
+  `burned` event and a scene (that it burned, never what it said). Memories and past `read` events are untouched:
+  whoever read it keeps it. Bind it with a duration of a few seconds.
 - follow: someone here; when they `go`, you go with them (`state.follows`). stay: stop following.
 - watch: a connected place, without stepping into it: who and what is there now, for your eyes only.
 - a whisper is not a verb: `say(text, to=someone, reach=0)` reaches that one person and nobody else in the room.
 """
 
-PACK = {"name": "village", "description": "go, take, drop, put, give, show, talk, leave_word, read, follow, stay, watch and the dialog-table listener person_on."}
+PACK = {"name": "village", "description": "go, take, drop, put, give, show, talk, leave_word, read, burn, follow, stay, watch and the dialog-table listener person_on."}

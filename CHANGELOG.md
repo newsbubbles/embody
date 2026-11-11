@@ -6,6 +6,7 @@ The version in `pyproject.toml` is 0.1.0 until the first release; until then ent
 
 ## Unreleased
 
+- village `burn`: a `burnable` thing, held or here, burned at a fire (a place or thing with `fire` or `lit`, or a lit light in hand). It is destroyed, what it held drops, and the room sees a `burned` event and a scene, never what it said. Nothing is taken out of memories or past `read` events: whoever read a letter keeps it. A world binds the verb on its people, with a few seconds' duration.
 - d20 `search` honours `carry`: it takes what fits in the searcher's hands, by the same bulk count `take` uses, and leaves the rest on the body. The `searched` event names what was `left` and the log says so; a searcher whose hands are already full is refused before the search starts. Before, a robber walked off with everything a downed body held, past any limit.
 - d20 `quench`: a thirsty body nobody plays walks to the nearest water it knows the way to, a step a look and up to six steps, not only one step; there it drinks its fill (to within a draw of full, the skin kept for the road) before it walks back to its post the same way. Arlo, left on the Flats two steps from water, parched where he stood.
 - d20 `drink` refuses a body at full water ("you could not drink another drop"), so no draw is poured away from a jar or a skin. Before, drinking at 10 of 10 spent the draw and added nothing, and players used it to empty the jars.
