@@ -669,6 +669,7 @@ def test_chapter_two_waits_for_a_dreyer_man_and_a_carrier_then_starts_at_dawn():
     newcomer(eng, gm, "dreyer", "Ash")
     assert not story().get("chapter")  # it waits for the dawn crawler
     to_next(gm, "dawn")
+    gm.clock(run=False)  # the hosted clock runs on between the step and the read; a loaded box drifts past the tolerance
     assert story()["chapter"] == 2 and gm.inspect(gm.summary()["root"])["state"]["story"].startswith("chapter two")
     moon = {x["kind"]: x for x in gm.timers()}["moon_turns"]
     assert moon["in"] == pytest.approx(12 * 86400 - 1, abs=5)
