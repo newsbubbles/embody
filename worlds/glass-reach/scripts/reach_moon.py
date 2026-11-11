@@ -124,6 +124,8 @@ def hire(ctx, st, drifter, payer, it):
         return
     took[side] = today
     ctx.patch(story_of(ctx), {"hired_days": took})
+    if it.state.kind == "ember" and ctx.count(it) > 1:  # a drifter's price is one shard; the rest of a stack goes back
+        ctx.transfer(it, payer, ctx.count(it) - 1)
     hold = ctx.get(st.hold)
     changes = {"faction": "House Varrick", "hired": True, "post": st.hold}
     if side == "House Dreyer":
@@ -152,10 +154,11 @@ def pay_rook(ctx, st, rook, payer, it):
         ctx.move(it, payer)
         scene(ctx, rook.parent, "Rook hands the shard back. 'Say who it is for first. The Hold or the house.'")
         return
+    n = ctx.count(it)  # a stack pays its every shard
     paid = dict(rook.state.paid or {})
-    paid[side] = int(paid.get(side) or 0) + 1
+    paid[side] = int(paid.get(side) or 0) + n
     stakes = dict(rook.state.stakes or {})
-    stakes[payer.id] = [side, int((stakes.get(payer.id) or [side, 0])[1]) + 1]
+    stakes[payer.id] = [side, int((stakes.get(payer.id) or [side, 0])[1]) + n]
     ctx.patch(rook, {"paid": paid, "stakes": stakes})
     if rook.state.full_first:
         scene(ctx, rook.parent, "Rook marks the ledger. 'Noted. That side stands at " + str(paid[side]) + ". I sell when "
@@ -187,9 +190,14 @@ def close_convoy(ctx, st, rook):
         if stakes[pid][0] == side:
             continue
         payer = ctx.get(pid)
-        for n in range(int(stakes[pid][1])):
-            if payer is not None and len(glass) > 0:
-                ctx.move(glass.pop(), payer)
+        owed = int(stakes[pid][1])
+        while payer is not None and owed > 0 and len(glass) > 0:
+            g = glass.pop()
+            take = min(owed, ctx.count(g))
+            if take < ctx.count(g):
+                glass.append(g)
+            ctx.transfer(g, payer, take)
+            owed = owed - take
     sell(ctx, st, rook, side)
 
 def sell(ctx, st, rook, side):
@@ -293,18 +301,59 @@ def wall_and_water(ctx, st):
         w = ctx.get(wid) if wid else None
         if w is not None:
             water = water + int(w.state.left or 0)
+    for pid in [st.hold, st.yard]:  # a dew still built in the Hold or its yard
+        for it in ctx.children(pid, "thing"):
+            if it.state.dew:
+                water = water + int(it.state.left or 0)
     return men, water
+
+def riders_need(ctx, st):
+    # men on the wall that turn the riders back (scripts/reach_riders.py): the riders on their feet in the Hollow and
+    # two for the caltrops while the gate plan is still the house's. Fewer with no captain, dry with their cart
+    # spoiled or run low, unpaid with the paychest empty of glass. Before the muster, the wall the riders were told of.
+    if not st.riders_mustered or not st.riders_hollow:
+        return WALL
+    hollow = ctx.get(st.riders_hollow)
+    if hollow is None:
+        return WALL
+    n = 0
+    captain = False
+    for c in ctx.children(hollow, "creature"):
+        if c.state.rider and not c.state.dead and not c.state.down:
+            n = n + 1
+            if c.state.captain:
+                captain = True
+    if not captain:
+        n = n - 2
+    cart = ctx.get(st.riders_cart) if st.riders_cart else None
+    if cart is None or cart.state.spoiled or int(cart.state.left or 0) < 3:
+        n = n - 3
+    chest = ctx.get(st.riders_chest) if st.riders_chest else None
+    glass = 0
+    if chest is not None:
+        for it in ctx.children(chest):
+            if it.state.kind == "ember":
+                glass = glass + int(it.state.count or 1)
+    if glass == 0:
+        n = n - 2
+    plan = ctx.get(st.riders_plan) if st.riders_plan else None
+    if plan is not None and not plan.state.built:
+        holder = plan.parent
+        if holder is not None and (holder.id == hollow.id or holder.state.faction == "House Dreyer"):
+            n = n + 2
+    return max(3, n)
 
 def lean(ctx, st):
     # the dawn word on how the moon would go tonight: never the numbers, only the lean
     men, water = wall_and_water(ctx, st)
+    need = riders_need(ctx, st)
     days = int(max(0, (st.moon_due or ctx.t) - ctx.t) / 86400 + 0.5)
     left = str(days) + (" day" if days == 1 else " days") + " to the moon"
     if st.writ_given:
         way = "yielded"
-    elif st.truce and men >= WALL and water >= DRY and st.convoy_to != "House Dreyer":
+    elif st.truce and men >= need and water >= DRY and st.convoy_to != "House Dreyer":
         way = "held"
-    elif not st.truce and (men < WALL or water < DRY):
+    elif not st.truce and (men < need or water < DRY):
         way = "fallen"
     else:
         way = "siege"
@@ -376,7 +425,7 @@ def on(ctx, event):
             hire(ctx, st, to, payer, it)
         elif st.rook and to.id == st.rook:
             pay_rook(ctx, st, to, payer, it)
-        elif to.id == st.taan and it.name in ["Empty phial", "Dreyer manifest"] and not st.keth_proof \
+        elif to.id == st.taan and it.name in ["Empty phial", "Dreyer manifest", "The steading's deed"] and not st.keth_proof \
                 and not st.keth_proof_pending:
             ctx.patch(story, {"keth_proof_pending": it.name, "keth_proof_by": payer.id})
             ctx.schedule(COUNCIL, "keth_council", target=ctx.root())

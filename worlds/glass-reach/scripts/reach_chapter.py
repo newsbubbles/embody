@@ -32,7 +32,7 @@ def begin(ctx, story):
         ctx.schedule(b[0], b[1], target=ctx.root())
     scene(ctx, st.landing, "The dawn crawler comes in with its dust and its driver talking before the engine stops. Riders on the "
                            "south road, twelve days out, under a pennant with a well and a bar across it. Dreyer. 'And the "
-                           "convoy goes south at the moon's turn, same as the tally says. Whoever wants carrying had better "
+                           "convoy goes north at the moon's turn, same as the tally says. Whoever wants carrying had better "
                            "say so before.'")
     scene(ctx, st.hold, "The crawler's driver says it twice at the gate, so nobody can say they did not hear: Dreyer riders on "
                         "the south road. The moon turns in twelve nights.")
@@ -113,11 +113,52 @@ def wall_and_water(ctx, st):
         w = ctx.get(wid) if wid else None
         if w is not None:
             water = water + int(w.state.left or 0)
+    for pid in [st.hold, st.yard]:  # a dew still built in the Hold or its yard
+        for it in ctx.children(pid, "thing"):
+            if it.state.dew:
+                water = water + int(it.state.left or 0)
     return men, water, bought
+
+def riders_need(ctx, st):
+    # men on the wall that turn the riders back (scripts/reach_riders.py): the riders on their feet in the Hollow and
+    # two for the caltrops while the gate plan is still the house's. Fewer with no captain, dry with their cart
+    # spoiled or run low, unpaid with the paychest empty of glass. Before the muster, the wall the riders were told of.
+    if not st.riders_mustered or not st.riders_hollow:
+        return WALL
+    hollow = ctx.get(st.riders_hollow)
+    if hollow is None:
+        return WALL
+    n = 0
+    captain = False
+    for c in ctx.children(hollow, "creature"):
+        if c.state.rider and not c.state.dead and not c.state.down:
+            n = n + 1
+            if c.state.captain:
+                captain = True
+    if not captain:
+        n = n - 2
+    cart = ctx.get(st.riders_cart) if st.riders_cart else None
+    if cart is None or cart.state.spoiled or int(cart.state.left or 0) < 3:
+        n = n - 3
+    chest = ctx.get(st.riders_chest) if st.riders_chest else None
+    glass = 0
+    if chest is not None:
+        for it in ctx.children(chest):
+            if it.state.kind == "ember":
+                glass = glass + int(it.state.count or 1)
+    if glass == 0:
+        n = n - 2
+    plan = ctx.get(st.riders_plan) if st.riders_plan else None
+    if plan is not None and not plan.state.built:
+        holder = plan.parent
+        if holder is not None and (holder.id == hollow.id or holder.state.faction == "House Dreyer"):
+            n = n + 2
+    return max(3, n)
 
 def reckon(ctx, story):
     st = story.state
     men, water, bought = wall_and_water(ctx, st)
+    need = riders_need(ctx, st)
     dram = ctx.get(st.dram)
     where = "gone"
     if dram is not None and dram.state.dead:
@@ -126,16 +167,16 @@ def reckon(ctx, story):
         where = "held"
     if st.writ_given:
         outcome = "yielded"
-    elif st.truce and men >= WALL and water >= DRY and st.convoy_to != "House Dreyer":
+    elif st.truce and men >= need and water >= DRY and st.convoy_to != "House Dreyer":
         outcome = "held"
-    elif not st.truce and (men < WALL or water < DRY):
+    elif not st.truce and (men < need or water < DRY):
         outcome = "fallen"
     else:
         outcome = "siege"
     ctx.patch(story, {"moon_turned": True, "outcome": outcome,
                       "reckoning": {"truce": bool(st.truce), "wall": men, "water": water, "hollis": where, "bought": bought,
                                     "keth_bows": bool(st.keth_proof and st.truce), "cistern": bool(st.cistern_mended),
-                                    "convoy": st.convoy_to, "writ": bool(st.writ_given)}})
+                                    "convoy": st.convoy_to, "writ": bool(st.writ_given), "riders": need}})
     ctx.patch(ctx.root(), {"story": "chapter two: " + outcome})
     if outcome == "yielded":
         scene(ctx, st.hold, "The moon turns. The gate stands open, as the writ's new holder asked. Dreyer's riders come "
@@ -158,7 +199,7 @@ def reckon(ctx, story):
                             "camp in the Bone Field, in plain sight, and light their fires. A siege, then.")
         scene(ctx, st.dry_camp, "Halvard Dreyer rides out to meet the house's riders at the Bone Field. 'We wait,' he says. "
                                 "'They are thirstier than we are.'")
-    ctx.emit("moon_turned", target=ctx.root(), reach=-1, outcome=outcome, wall=men, water=water, hollis=where, bought=bought)
+    ctx.emit("moon_turned", target=ctx.root(), reach=-1, outcome=outcome, wall=men, water=water, hollis=where, bought=bought, riders=need)
 
 def newcomers(ctx, story):
     # who has come in from the templates so far: a Dreyer man, a Guild carrier

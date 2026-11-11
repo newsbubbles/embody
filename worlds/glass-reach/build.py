@@ -198,7 +198,7 @@ TEMPLATES = {
                       "the Thresher does not hear you. The Hold has a new reeve; Taan wants to know careful or afraid."},
     "dreyer": {"type": "person", "place": "The Dry Camp", "doc": "a House Dreyer man, come in at the house's hidden camp south of the Bone Field",
                "state": {"faction": "House Dreyer", "secret": ["dialog", "gives", "gave", "faction", "brief", "word_left"],
-                         "body": 3, "wits": 3, "will": 3, "skills": {"blade": 1, "stealth": 2, "parley": 2}, "carry": 8},
+                         "body": 3, "wits": 3, "will": 3, "skills": {"blade": 1, "stealth": 2, "parley": 2, "lockpick": 1}, "carry": 8},
                "kit": [{"type": "waterskin", "name": "Plain waterskin", "state": {"capacity": 4, "left": 4}},
                        {"type": "thing", "name": "Short knife", "state": KNIFE}],
                "brief": "You are Dreyer's, under another name. The house lost the writ, the Hold and the water and means to have "
@@ -238,6 +238,11 @@ MOON_KINDS = ["convoy_word", "rook_arrives", "riders_fires", "herald_comes", "gi
 WARDEN_KINDS = ["arrived", "talked", "given", "dawn", "dusk"]
 # The Guild Yard beside the Landing (scripts/reach_guild.py): the counting house kept, the yard tank filled by the crawler.
 GUILD_KINDS = ["arrived", "crawler"]
+# The Riders' Hollow (scripts/reach_riders.py): the muster at the fires, the watch, the cart at dawn, a freed prisoner home.
+# The wild ground (scripts/reach_wild.py): day and night, the dawn fills, the pack in the brake.
+WILD_KINDS = ["dusk", "dawn", "arrived", "downed", "killed"]
+RIDER_KINDS = ["riders_fires", "riders_muster", "arrived", "dawn", "freed_home", "pick_failed", "lock_broken",
+               "break_failed", "spoil_failed", "free_failed"]
 # What is hidden until someone looks (scripts/reach_finds.py) and what the road does to a newcomer (scripts/reach_road.py).
 FIND_KINDS = ["checked"]
 ROAD_KINDS = ["arrived", "squall", "squall_passes"]
@@ -333,6 +338,10 @@ def define(s):
                         "watch": {"script": "watch", "doc": "Look into the next place without stepping in: who and what is there now", "targets": "place", "scope": "exits", "duration": 5},
                         "drive": {"script": "guild_drive", "doc": "Drive a hauler you stand in to another stop on the road: params {\"to\": a stop's name}; the wheel says which stops",
                                   "targets": "thing", "scope": "here", "duration": 900, "params": {"to": "the stop to drive to"}},
+                        "spoil": {"script": "spoil", "doc": "Spoil water you stand by: cut a tank's seams or foul it with salt and sand (two minutes; quiet if your hand is steady, heard if not)",
+                                  "targets": "thing", "scope": "here", "duration": 120},
+                        "free": {"script": "free", "doc": "Cut loose someone here who is tied (a minute at the knots; heard if you fumble)",
+                                 "targets": "creature", "scope": "here", "duration": 60},
                         "burn": {"script": "burn", "doc": "Burn a paper you hold or that lies here, at a fire: it is gone for good, and only those who read it know what it said",
                                  "targets": "thing", "duration": 3},
                     },
@@ -355,6 +364,12 @@ def define(s):
                     state={"portable": False, "stone": 0},
                     actions={"dress": {"script": "dress", "doc": "Square a block out of the pile (half an hour, loud); "
                                                                  "the wall works take dressed stone", "duration": 1800}})
+    s.define_schema("beast", extends="creature", doc="An animal of the Reach: the d20 blows land on it and it strikes back; it does not drink, talk or carry.",
+                    state={"beast": True, "body": 2, "wits": 1, "will": 1, "skills": {}, "vigor": 6, "max_vigor": 6})
+    s.define_schema("nest", extends="thing", doc="A swarm's nest. Everyone in its place loses a point of vigor a minute, to one, until it is smoked.",
+                    state={"portable": False, "swarm": True, "calm_until": None},
+                    actions={"smoke": {"script": "wasp_smoke", "doc": "Burn a glassthorn smudge under the nest: the swarm sleeps a day", "duration": 10}},
+                    behaviors=[{"script": "wasp_tick", "every": 60}])
     s.define_schema("story", extends="entity", doc="The rails. Hidden; holds the facts the story has seen.",
                     state={"hidden": True, "seen_ridge": False, "seen_flats": False, "found_well": False, "truce": False,
                            "dram_done": False, "reeve_dead": False, "done": False})
@@ -455,6 +470,8 @@ def populate(s):
     s.set_rule(root, "reach_moon", kinds=MOON_KINDS)
     s.set_rule(root, "reach_wardens", kinds=WARDEN_KINDS)
     s.set_rule(root, "reach_guild", kinds=GUILD_KINDS)
+    s.set_rule(root, "reach_riders", kinds=RIDER_KINDS)
+    s.set_rule(root, "reach_wild", kinds=WILD_KINDS)
     by_name = {"Reeve Ansel Varrick": ansel, "Sefa of the Keth": sefa, "Captain Ruhl": ruhl, "Dram Hollis": dram,
                "Ossa the Carrier": ossa, "Elder Taan": taan, "Nico": nico}
     seed_reach(s, by_name)
@@ -526,6 +543,8 @@ def upgrade(s):
     s.set_rule(root, "reach_moon", kinds=MOON_KINDS)
     s.set_rule(root, "reach_wardens", kinds=WARDEN_KINDS)
     s.set_rule(root, "reach_guild", kinds=GUILD_KINDS)
+    s.set_rule(root, "reach_riders", kinds=RIDER_KINDS)
+    s.set_rule(root, "reach_wild", kinds=WILD_KINDS)
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
     keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
     keep_canon(s)
@@ -574,6 +593,12 @@ PLACES = [
     {"entity": "Hauler Nine", "at": [480, 3530, 0], "size": [14, 5, 4], "note": "a Guild crawler; it moves along the road"},
     {"entity": "The yard tank", "at": [520, 3500, 0], "radius": 2},
     {"entity": "The Guild strongbox", "at": [565, 3445, 0], "size": [1.5, 1, 1]},
+    {"entity": "The Thornbrake", "at": [420, -1150, 0], "radius": 320, "note": "glassthorn and barrel cactus in the Scar's lee, south of the Hold"},
+    {"entity": "Tessel's Steading", "at": [470, -1260, 0], "size": [14, 10], "note": "a roofless house in the brake"},
+    {"entity": "The root cellar", "at": [472, -1262, -3], "size": [5, 4], "floor": -4, "ceiling": -1, "note": "under the steading"},
+    {"entity": "Weeping Rock", "at": [-30, 1150, 0], "radius": 15, "note": "a cleft in the Scar wall west of the Salt Road"},
+    {"entity": "The Riders' Hollow", "at": [2700, -4600, -3], "radius": 200,
+     "note": "a long hollow under a second rib of black rock, south past the Dry Camp"},
 ]
 ROUTES = [
     {"a": "Scar Gate, the Hold", "b": "The Gate Yard", "route": [[10, 0], [20, 0]]},
@@ -592,6 +617,11 @@ ROUTES = [
     {"a": "The Guild Yard", "b": "The Yard Bunkhouse", "route": [[540, 3530], [560, 3550]]},
     {"a": "The Guild Yard", "b": "The Counting House", "route": [[540, 3470], [560, 3450]]},
     {"a": "The Guild Yard", "b": "Hauler Nine", "route": [[500, 3515], [480, 3530]]},
+    {"a": "The Gate Yard", "b": "The Thornbrake", "route": [[40, -15], [60, -300], [420, -1150]]},
+    {"a": "The Thornbrake", "b": "Tessel's Steading", "route": [[440, -1200], [465, -1255]]},
+    {"a": "Tessel's Steading", "b": "The root cellar", "route": [[470, -1260, 0], [472, -1262, -3]]},
+    {"a": "The Salt Road", "b": "Weeping Rock", "route": [[60, 1150], [-30, 1150]]},
+    {"a": "The Dry Camp", "b": "The Riders' Hollow", "route": [[2520, -3400], [2620, -4000], [2700, -4600, -3]]},
 ]
 
 
@@ -851,6 +881,13 @@ FINDS = [
      "found": "The wrong-set stone lifts. Under it, where someone hid it in a hurry and never came back, is an empty clay "
               "phial sealed with Dreyer's wax."},
 ]
+FINDS.append(
+    {"at": "The Thornbrake", "type": "thing", "name": "The cellar key", "dc": 13, "skills": LOOK,
+     "hint_on": "The Thornbrake", "hint": "Deep in the thorn, under a barrel cactus gone to husk, something pale lies tangled.",
+     "state": {"portable": True, "key": True,
+               "description": "A plain iron key on a cord gone stiff with age. A T is scratched into the bow."},
+     "found": "Under the dead cactus, in the thorn, are a man's bones in the rags of a farmer's coat. Around the neck, on "
+              "a cord, is an iron key with a T scratched into the bow. Old Tessel never left his ground."})
 CAIRN = {"portable": False, "description": "Three blocks of salt stacked at the road's edge, the top one marked with a Guild "
                                            "chalk ring. Carriers leave these where they leave something."}
 
@@ -1291,7 +1328,7 @@ YARD_BOOK = {"portable": True, "burnable": True,
                      "north at the moon: sixty shards of emberglass, counted twice. Hauler Nine in the shed, sound. The "
                      "tank filled by the dawn crawler. Nothing leaves the counting house but by the factor's word or the "
                      "wright's, written here."}
-SHARD = {"kind": "ember", "portable": True,
+SHARD = {"kind": "ember", "portable": True, "count": 1,
          "description": "A shard the length of a hand, dull red, warm through the cloth you wrap it in."}
 ARMS_RACK = {"portable": False, "holds": ["weapon"], "room": 8,
              "description": "A rack of Guild arms by the bunkhouse door: spears, and a crossbow on a hook."}
@@ -1374,8 +1411,7 @@ def keep_guild(s, names):
     if "The Guild strongbox" not in names:
         box = s.spawn("thing", names["The Counting House"], "The Guild strongbox", state=dict(STRONGBOX))["id"]
         s.spawn("letter", box, "The yard book", state=dict(YARD_BOOK))
-        for _ in range(60):
-            s.spawn("thing", box, "Emberglass", state=dict(SHARD))
+        s.spawn("thing", box, "Emberglass", state=dict(SHARD, count=60))
     if "The yard's arms rack" not in names:
         rack = s.spawn("thing", names["The Yard Bunkhouse"], "The yard's arms rack", state=dict(ARMS_RACK))["id"]
         s.spawn("thing", rack, "Guild crossbow", state=dict(CROSSBOW))
@@ -1398,8 +1434,7 @@ def keep_guild(s, names):
         names[name] = who
         s.spawn("thing", who, arm, state=dict(arm_state))
         s.spawn("waterskin", who, "Guild waterskin", state={"capacity": 4, "left": 4})
-        for _ in range(3):
-            s.spawn("thing", who, "Emberglass", state=dict(SHARD))
+        s.spawn("thing", who, "Emberglass", state=dict(SHARD, count=3))
     story = s.world.find(type="story", limit=1)[0]["id"]
     if s.world.get(story)["state"].get("guild_yard"):
         return
@@ -1443,6 +1478,400 @@ def keep_guild_locks(s, names):
         holder = names.get("Mira Ost") or names.get("Ossa the Carrier")
         if holder:
             s.spawn("thing", holder, "The counting house key", state=dict(DOOR_KEY))
+
+
+# Pointers (the chapter-two check, 2026-11-11): after eight days nobody had found the proof Taan asks for, because no
+# one in the world pointed anyone at where it lies. Each line points at a place, not at the thing, and says why its
+# speaker never went to look. And the convoy: the dawn crawler's driver said it goes south at the moon, the Guild's
+# books say north. North it is; Ossa and the wright remember the driver's slip for what it was.
+POINTERS = {
+    "Elder Taan": "The Low Well's dead lie under four cairns at the well-head. The smallest was put back wrong the season "
+                  "the well went black, and no Keth will open a grave to see why. If the Hold wants to bring me proof, "
+                  "the Hold has no such law.",
+    "Iska of the Keth": "The Dreyer crawler that died in the Bone Field came up the south road by night the season the "
+                        "Low Well went black. Its cab is still under the drift with its strongbox bolted on. No Keth "
+                        "will dig in a Dreyer wreck, and I have never asked who would.",
+    "Ossa the Carrier": "The dawn crawler's driver said the convoy goes south at the moon. He had the riders in his mouth: "
+                        "it is Dreyer's riders who come from the south. The Guild's convoy runs north up the road at the "
+                        "moon, as it always has, and takes the Reach leg's glass with it.",
+}
+WRIGHT_CONVOY = ("Whatever my letter or the crawler's driver said, the Guild's convoy runs north up the road at the moon, "
+                 "and the strongbox's glass goes with it. It is Dreyer's riders who come from the south.")
+SALLOW_WRECK = ("'The house's crawler that went under in the Bone Field?' She looks at the slate a long time. 'It carried "
+                "what it carried. Its strongbox is still bolted to the cab, and nobody here has asked me to dig it out. "
+                "Nobody will.'")
+
+
+def keep_pointers(s, names):
+    """Who points at the proof, and the convoy set right. Once, by a mark on the story."""
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    st = s.world.get(story)["state"]
+    if st.get("pointers"):
+        return
+    for who, text in POINTERS.items():
+        if names.get(who):
+            s.remember(text, entity=names[who])
+    wright = st.get("guild_wright")
+    if wright and s.world.get(wright):
+        s.remember(WRIGHT_CONVOY, entity=wright)
+    if names.get("Mother Sallow"):
+        dialog = dict(s.world.get(names["Mother Sallow"])["state"].get("dialog") or {})
+        dialog["crawler|wreck|bone|strongbox|manifest"] = SALLOW_WRECK
+        s.patch(names["Mother Sallow"], {"dialog": dialog})
+    s.patch(story, {"pointers": True})
+
+
+# The Riders' Hollow (Nate 2026-11-11; notes/the-reach-grows.md, A): the end of chapter two gets a place. Made at
+# boot, empty and hidden from all but the house, with the muster written on its state; scripts/reach_riders.py rides
+# the muster in at the fires and reach_chapter counts what is left of it at the moon. Who knows of it: Halvard (it is
+# his uncle's captain), Brisk and Wick (they carry the house's word to it), Nico (the Keth have seen fires there in
+# other years), and Garran Teague (a drifter's word that Sel Amory is alive behind Dreyer's riders).
+HOLLOW_NAME = "The Riders' Hollow"
+HOLLOW_EMPTY = ("A long hollow under a second rib of black rock, south past the Dry Camp. Old fire rings, black and "
+                "half drifted over, a line of picket stakes with nothing tied to them, and the sand trodden flat in "
+                "a wide ring, as if many horses stood here once and will again.")
+HOLLOW_FULL = ("A long hollow under a second rib of black rock, full of horses and low fires. Riders in dust-grey sit "
+               "by their saddles; a pennant with a well and a bar across it stands on a lance by the captain's fire. "
+               "A tank on a wheeled bed squats at the end of the picket line, and a man is tied to its wheel.")
+DRY_CAMP_TRACK = "Past the rib a trodden track runs on south toward a second rib of black rock."
+RIDER = {"faction": "House Dreyer", "rider": True, "secret": CAMP_SECRET, "body": 3, "wits": 2, "will": 3,
+         "skills": {"blade": 2, "survival": 1}, "vigor": 7, "max_vigor": 7,
+         "description": "A Dreyer rider in dust-grey, saber at the hip, face wrapped to the eyes.",
+         "default_line": "The rider looks at you over the fire and says nothing at all.",
+         "dialog": {"captain|strake|who leads": "'The captain is by the pennant. Go and ask him, if you like your teeth.'",
+                    "moon|gate|hold|wall": "'At the moon we ride up and count their wall. That is all I know and all you'll get.'"}}
+SABER = {"weapon": True, "damage": 2, "bonus": 0, "portable": True,
+         "description": "A rider's saber, plain and well kept, the well-and-bar stamped on the guard."}
+RIDER_NAMES = ["Corran", "Hesk", "Lusk", "Tamsin", "Varro", "Edric"]
+STRAKE = {"faction": "House Dreyer", "rider": True, "captain": True, "secret": CAMP_SECRET, "body": 4, "wits": 3,
+          "will": 4, "skills": {"blade": 3, "resolve": 2, "parley": 1}, "vigor": 9, "max_vigor": 9,
+          "description": "A big quiet man in a rider's coat gone white at the seams, grey in the beard, the well-and-bar "
+                         "on a ring he turns while he listens.",
+          "brief": "You are Captain Iven Strake, sworn to the old lord of House Dreyer, and you bring his riders up to "
+                   "Scar Gate at the moon. You pay drifters from the chest whose key you carry, and you count the Hold's "
+                   "wall before you charge it: you do not throw riders at a held gate.",
+          "default_line": "Strake turns the ring on his finger. 'You are a long way south of anything that wants you.'",
+          "dialog": {"moon|gate|hold|wall|charge": "'At the moon I count their wall. Enough men and water behind it and I "
+                                                   "turn for home; I do not spend riders on a held gate. Too few and the "
+                                                   "gate is ours by morning.'",
+                     "drifter|pay|chest|glass": "'The house pays for arms, the same as anyone. The chest is mine to open "
+                                                "and nobody else's.'",
+                     "sel|amory|driver|prisoner|tank|cart": "'The Guild man drives our water. He is fed, and watered, "
+                                                            "and alive, which is more than the Guild did for him.'",
+                     "halvard|camp|cousin": "'Halvard holds the camp. I hold the riders. We meet at the moon.'",
+                     "hollis|dram": "'The house's business, not mine.'"}}
+STRAKE_SABER = {"weapon": True, "damage": 3, "bonus": 1, "portable": True,
+                "description": "A heavy saber with a basket guard, older than the man who carries it."}
+PAYCHEST_KEY = {"portable": True, "key": True, "description": "A small brass key on a chain, warm from a pocket."}
+SEL = {"faction": "the Carriers", "bound": True, "free_dc": 12, "home": None, "body": 3, "wits": 3, "will": 3,
+       "skills": {"survival": 2, "craft": 1}, "vigor": 5, "max_vigor": 7,
+       "description": "A thin man in what was a Guild coat, roped by the wrists to the wheel of the riders' water cart. "
+                      "Driver's calluses, a cracked lip, eyes that do not stop moving.",
+       "description_free": "A thin man in what was a Guild coat, rope-burned at both wrists, driver's calluses on his hands.",
+       "default_line": "The tied man wets his lips. 'Guild? Tell Garran Teague that Sel Amory is not dead yet.'",
+       "dialog": {"guild|garran|yard|ossa|carrier": "'Hauler fourteen. Three years I have driven their water for them "
+                                                    "because nobody else here can. Tell the yard. Tell Garran.'",
+                  "cart|tank|water|drive": "'It is my own tank, off my own hauler. They fill it at the house's wells every "
+                                           "dawn. Cut the seams and there is no water south of the Bone Field but "
+                                           "Sallow's.'",
+                  "strake|captain|riders|moon": "'Strake counts. He will not charge a full wall. He told the lord so to "
+                                                "his face.'"}}
+CART = {"portable": False, "water_source": True, "left": 30, "max_left": 30, "spoil_dc": 14,
+        "description": "Hauler fourteen's tank, cut off its crawler and bolted to a wheeled bed: the riders' water, "
+                       "filled each dawn from the house's wells and drawn by the cup.",
+        "description_spoiled": "Hauler fourteen's tank on its wheeled bed, seams cut and the sand under it dark and "
+                               "stinking of salt. Empty, and nothing will fill it again."}
+PAYCHEST = {"portable": False, "holds": ["any"], "room": 40,
+            "description": "An iron-bound chest by the captain's fire with a brass lock, the well-and-bar burned into the lid."}
+PAYCHEST_LOCK = {"key": "The paychest key", "pick_dc": 17, "break_dc": 19,
+                 "description": "A brass lock, newer than the chest, close-fitted."}
+PAYCHEST_GLASS = dict(SHARD, count=12)  # the same shards as the Flats give, so they stack with them
+GATE_PLAN = {"portable": True, "burnable": True,
+             "description": "A rolled hide drawn in charcoal: the Hold's south gate from above, and a field of glass "
+                            "caltrops seeded across the approach, in a careful hand.",
+             "text": "Caltrops of glass, three sacks, seeded across the gate's approach the night of the moon: whoever "
+                     "comes out to meet us comes out lame. Glass from the Flats, sand for the sacks, and an hour in the dark.",
+             "becomes": {"type": "thing", "name": "Glass caltrops at the gate",
+                         "state": {"portable": False, "caltrops": True,
+                                   "description": "Glass caltrops seeded in the sand of the gate's approach: walk it "
+                                                  "barefoot and bleed, ride it and lame your horse."},
+                         "scene": "The last sack is emptied in the dark. The approach to the gate glitters when the "
+                                  "moon catches it, and anything coming up it at a run will not arrive whole."},
+             "stages": [{"name": "seed the approach", "labour": 2, "needs": {"ember": 3}, "roles": {"hands": 1}}],
+             "where": {"places": ["The Gate Yard", "Scar Gate, the Hold"]}}
+MUSTER_SCENE = ("Out of the south dunes in the last light: horses, dust, a pennant with a well and a bar across it. "
+                "They come into the Hollow at a walk, lead a tank on a wheeled bed in after them with a man tied to "
+                "its wheel, and light their fires in a line that anyone on Red Ridge can count.")
+RIDERS_KNOW = {
+    "Halvard Dreyer": "When the house's riders come up for the moon they camp in the Riders' Hollow, under the second rib "
+                      "south of ours. Captain Iven Strake leads them, sworn to my uncle, not to me. He pays drifters from "
+                      "a chest only he has the key to, and he will not charge a held gate: he counts the wall first. His "
+                      "water is hauler fourteen's old tank on wheels, and the Guild man who drives it is his prisoner.",
+    "Nico": "South past the Dreyer camp's rib there is a second rib and a long hollow behind it. In other years the Keth "
+            "have seen riders' fires there before a moon, and the old fire rings are still in the sand.",
+    "Garran Teague": "A drifter at the Salt Works swore to me he saw Sel Amory alive, roped to the wheel of a tank on a "
+                     "cart behind Dreyer riders, south of the Bone Field. Sel, driving their water. If it is true the "
+                     "Guild owes him three years.",
+}
+BRISK_HOLLOW = ("'South past our rib there's a second one, and a hollow behind it. That's where the riders camp when "
+                "they come up. Captain Strake. You'll know it by the fires, and by the time you see them it's too late "
+                "to be anywhere else.'")
+WICK_HOLLOW = ("'The riders camp in the Hollow past the second rib when they come. I carry for Strake too. He reads "
+               "everything twice and pays once.'")
+
+
+def keep_riders(s, names):
+    """The Riders' Hollow, hidden and empty, with its muster on its state; the track past the Dry Camp's rib; and who
+    knows of it. The place by name; the lore once, by a mark on the story. A muster already ridden in is never written
+    again, and if the fires came before this ran, the muster is called at once."""
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    st = s.world.get(story)["state"]
+    camp = names.get("The Dry Camp")
+    if HOLLOW_NAME not in names and camp:
+        root = s.summary()["root"]
+        people = [{"name": "Captain Iven Strake", "state": dict(STRAKE),
+                   "kit": [{"type": "thing", "name": "Strake's saber", "state": dict(STRAKE_SABER)},
+                           {"type": "thing", "name": "The paychest key", "state": dict(PAYCHEST_KEY)}]}]
+        for n in RIDER_NAMES:
+            people.append({"name": "Rider " + n, "state": dict(RIDER),
+                           "kit": [{"type": "thing", "name": "Rider's saber", "state": dict(SABER)}]})
+        people.append({"name": "Sel Amory", "state": dict(SEL, home=names.get(YARD_NAME))})
+        things = [{"type": "thing", "name": "The riders' water cart", "state": dict(CART), "key": "riders_cart"},
+                  {"type": "thing", "name": "The riders' paychest", "state": dict(PAYCHEST), "key": "riders_chest",
+                   "holds": [{"type": "lock", "name": "The paychest lock", "state": dict(PAYCHEST_LOCK)},
+                             {"type": "thing", "name": "Emberglass", "state": dict(PAYCHEST_GLASS)}]},
+                  {"type": "blueprint", "name": "Dreyer's plan for the gate", "state": dict(GATE_PLAN), "key": "riders_plan"}]
+        hollow = s.spawn("place", root, HOLLOW_NAME, state={
+            "description": HOLLOW_EMPTY, "hidden": True, "known_to": "House Dreyer",
+            "muster": {"people": people, "things": things, "description": HOLLOW_FULL, "scene": MUSTER_SCENE}})["id"]
+        s.connect(camp, hollow)
+        names[HOLLOW_NAME] = hollow
+        if st.get("riders_seen") and not st.get("riders_mustered"):
+            s.schedule(1, "riders_muster", entity=root)
+    if camp:
+        d = s.world.get(camp)["state"].get("description") or ""
+        if DRY_CAMP_TRACK not in d:
+            s.patch(camp, {"description": (d + " " + DRY_CAMP_TRACK).strip()})
+    if st.get("riders_lore"):
+        return
+    for who, text in RIDERS_KNOW.items():
+        if names.get(who):
+            s.remember(text, entity=names[who])
+    for who, key, line in (("Brisk", "riders|hollow|strake|fires|south|captain", BRISK_HOLLOW),
+                           (RUNNER_NAME, "riders|hollow|strake|captain", WICK_HOLLOW)):
+        if names.get(who):
+            dialog = dict(s.world.get(names[who])["state"].get("dialog") or {})
+            dialog[key] = line
+            s.patch(names[who], {"dialog": dialog})
+    s.patch(story, {"riders_lore": True})
+
+
+# The wild ground (Nate 2026-11-11; notes/the-reach-grows.md, B and C), and water the Hold can make or claim before the
+# moon. The Thornbrake: glassthorn and barrel cactus south of the Hold, through a postern in the yard's south wall, on
+# the way to the Bone Field. The Tessels farmed the Scar's runoff there until Dreyer took their well right; old Tessel
+# would not leave and died on his ground. His steading stands roofless in the brake: a cupboard with the dew still's
+# plan, and a root cellar under a lock whose key is on his bones. Thornbacks hold the brake at night. Weeping Rock: a
+# cleft in the Scar wall west of the Salt Road where sweet water runs from the west into a basin under a wasps' nest;
+# the Keth call it the child's well and smoke the wasps with glassthorn smudge. Who knows: Taan and Iska (the child's
+# well and the smudge), Cass (the water tastes like her seep), Dram Hollis (Dreyer's books took Tessel's well right),
+# Ossa (the Guild carried Tessel's seed), Ruhl (the postern), Marr (the cleft off her road).
+THORNBRAKE = ("A belt of glassthorn and barrel cactus in the lee of the Scar, south of the Hold: grey-green spines that "
+              "glitter where the sand has glazed them, paths that close behind you, and the trodden runs of something "
+              "heavy that comes out at night. A roofless house stands in the thick of it.")
+STEADING = ("A roofless house of fitted stone in the thorn, the beams long gone for firewood. A hearth, a cupboard still "
+            "on its pegs against the north wall, a trapdoor in the floor with a lock on its hasp, and a lintel with "
+            "TESSEL cut into it.")
+CELLAR = ("A root cellar cut into the rock under the steading, cool and dry. Shelves, jars, a cask in the corner, and the "
+          "smell of seed kept a long time.")
+WEEPING = ("A cleft in the Scar wall just west of the Salt Road, so narrow the sun reaches the bottom only at noon. "
+           "Water runs down fern and green moss into a stone basin, and it is sweet. Above the basin, worn soft, a "
+           "crown over a closed eye is cut into the rock. A hum fills the cleft.")
+# The Keth's own until someone looks from the road and sees the green in the cleft (scripts/reach_finds.py).
+WEEPING_HIDDEN = {"hidden": True, "known_to": "the Keth", "find_dc": 13, "find_skills": ["search", "survival", "lore", "track"],
+                  "find_text": "West of the road, where the Scar wall is cracked, there is green: fern in a cleft too "
+                               "narrow for the sun, and a hum like a hive. A trodden way runs into it."}
+GATE_YARD_POSTERN = "A postern in the yard's south wall opens on a belt of grey-green thorn."
+ROAD_CLEFT = "Not far north of the gate, a cleft in the Scar wall west of the road shows green."
+CACTUS = {"portable": False, "water_source": True, "cactus": True, "left": 3, "max_left": 3,
+          "description": "Barrel cactus as tall as a child, fat with water under the spines. Cut one and drink; the "
+                         "brake grows them full again in a week."}
+CUPBOARD = {"portable": False, "holds": ["any"], "room": 10,
+            "description": "A cupboard of grey wood on iron pegs against the north wall, its door warped but shut."}
+DEW_PLAN = {"portable": True, "burnable": True,
+            "description": "A hide drawn in a farmer's careful hand, wrapped in an old shirt: a pit, a sheet of glass "
+                           "panes over it, a cup at the bottom where the dew runs.",
+            "text": "TESSEL'S DEW STILL. Dig a pit an arm deep. Set panes of glass over it on a frame, tilted to a cup. "
+                    "The cold of the night sweats on the underside and runs down. Two draws at dawn, every dawn, if the "
+                    "glass is clean. Panes: three good shards, split. Mind the thornbacks while you dig.",
+            "becomes": {"type": "thing", "name": "A dew still",
+                        "state": {"portable": False, "water_source": True, "dew": True, "left": 0, "max_left": 4,
+                                  "per_dawn": 2,
+                                  "description": "A pit under a tilted sheet of glass panes, a cup at the low corner. At "
+                                                 "dawn the underside of the glass runs with water."},
+                        "scene": "The last pane goes into its frame over the pit. Nothing happens, because it is not "
+                                 "night yet. At dawn, the glass will run."},
+            "stages": [{"name": "dig and glaze the pit", "labour": 3, "needs": {"ember": 3}, "roles": {"hands": 1}}]}
+CELLAR_LOCK = {"key": "The cellar key", "pick_dc": 13, "break_dc": 14,
+               "description": "An iron lock on the trapdoor's hasp, rusted but whole."}
+STEADING_CASK = {"portable": False, "water_source": True, "left": 8,
+                 "description": "A cask in the corner, sealed with wax, and still full: old Tessel's last water."}
+SEED_JARS = {"portable": False, "description": "Clay jars of seed, waxed shut, labelled in a farmer's hand: squash, "
+                                               "bean, glassroot, thornmelon."}
+DEED = {"portable": True, "burnable": True,
+        "description": "A deed on Crown vellum with a cracked seal, and a line added at the foot in another hand.",
+        "text": "By the Crown's grant, the runoff of the Scar south of the gate, and the well at the steading, to the "
+                "Tessels and their heirs, to farm. Beneath, in a clerk's hand under a well-and-bar seal: 'The well "
+                "right taken this day for the house's use. The family to remove.' Beneath that, pressed so hard the "
+                "pen went through: 'NO. T.'"}
+SMUDGE = {"kind": "smudge", "portable": True, "bulk": 0.5,
+          "description": "A bundle of dried glassthorn bound with fat and cord. Lit, it smokes thick and grey."}
+BASIN = {"portable": False, "water_source": True, "basin": True, "left": 6, "max_left": 12, "per_dawn": 2,
+         "description": "A stone basin under the fern, the water in it clear and sweet, from the west under the Scar."}
+NEST = {"description": "A nest like a hanging lantern of grey paper, high in the cleft, and around it a glittering haze "
+                       "of glass wasps. The hum never stops.",
+        "description_angry": "A nest like a hanging lantern of grey paper, high in the cleft, and around it a glittering "
+                             "haze of glass wasps. The hum never stops.",
+        "description_calm": "A nest like a hanging lantern of grey paper, high in the cleft. The wasps lie on the rock "
+                            "around it, sleepy with smoke."}
+TUSKS = {"weapon": True, "damage": 2, "bonus": 0, "portable": False, "description": "Tusks of glass-hard bone."}
+SNOUT = {"weapon": True, "damage": 1, "bonus": 0, "portable": False, "description": "A snout plated in glass scale."}
+BOAR = {"beast": True, "pack": True, "leader": True, "body": 4, "wits": 2, "will": 3, "skills": {"brawl": 2},
+        "vigor": 9, "max_vigor": 9,
+        "description": "A thornback boar the size of a calf, plated in glass-glazed scale, tusks like broken bottles. "
+                       "It leads the pack."}
+SOW = {"beast": True, "pack": True, "body": 3, "wits": 2, "will": 2, "skills": {"brawl": 1}, "vigor": 6, "max_vigor": 6,
+       "description": "A thornback, low and quick, its back a ridge of glassy scale."}
+WILD_KNOWS = {
+    "Elder Taan": "There is sweet water in a cleft of the Scar wall north of the Hold, west of the road: the child's "
+                  "well. Glass wasps nest over it. We smoke them with glassthorn smudge when we must, and no child is "
+                  "let go there. The water comes from the west, under the Scar, the way the nine hands went.",
+    "Iska of the Keth": "The child's well in the Scar wall north of the Hold has sweet water under a wasps' nest. A "
+                        "glassthorn smudge, lit and held under the nest, puts the wasps to sleep for a day. Taan keeps "
+                        "a bundle of smudge by the cups.",
+    "Dram Hollis": "Dreyer's books have an old line: the well right at Tessel's steading, south of the gate, taken for "
+                   "the house's use, the family to remove. A note beside it: the old man would not go. I never read "
+                   "what became of him.",
+    "Ossa the Carrier": "Before Dreyer's time the Guild carried seed for the Tessels, who farmed the Scar's runoff south "
+                        "of the gate. Their steading is in the thorn now. The Guild still has the last order on the tally: "
+                        "glassroot and thornmelon seed, never collected.",
+    "Captain Ruhl": "There is a postern in the Gate Yard's south wall onto the thornbrake. Thornbacks in there at night: "
+                    "I keep it barred after dark and nobody goes through without telling me.",
+    "Sergeant Edda Marr": "There is a cleft off the road north of the Hold, west side, with green in it. Sweet water, "
+                          "they say, but wasps. Drifters who try it come back stung and dry.",
+}
+CASS_ROCK = ("'Up in the wasps' cleft north of the gate? Same water as my seep, sweeter. It all comes from the west. "
+             "Take smoke with you or don't go.'")
+
+
+def keep_wild(s, names):
+    """The Thornbrake, Tessel's Steading and its root cellar (locked, the key a hidden find on old Tessel's bones),
+    Weeping Rock with its basin and nest, the thornback pack, the smudge at the Deepwell and in the cupboard, the
+    pointers on the Gate Yard and the Salt Road, and who knows of them. Places and things by name; the lore once, by a
+    mark on the story."""
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    st = s.world.get(story)["state"]
+    root = s.summary()["root"]
+    yard, road = names.get("The Gate Yard"), names.get("The Salt Road")
+    if "The Thornbrake" not in names and yard:
+        brake = s.spawn("place", root, "The Thornbrake", state={"description": THORNBRAKE})["id"]
+        names["The Thornbrake"] = brake
+        s.connect(yard, brake)  # out through the postern only: the far side of the brake is thorn to the Bone Field
+        for _ in range(3):
+            s.spawn("thing", brake, "Barrel cactus", state=dict(CACTUS))
+        boar = s.spawn("beast", brake, "The thornback boar", state=dict(BOAR, home=brake))["id"]
+        s.spawn("thing", boar, "Tusks", state=dict(TUSKS))
+        for n in ("Thornback sow", "Thornback yearling"):
+            b = s.spawn("beast", brake, n, state=dict(SOW, home=brake))["id"]
+            s.spawn("thing", b, "Snout", state=dict(SNOUT))
+        s.patch(story, {"thornbrake": brake})
+    brake = names.get("The Thornbrake")
+    if brake and "Tessel's Steading" not in names:
+        home = s.spawn("place", root, "Tessel's Steading", state={"description": STEADING})["id"]
+        names["Tessel's Steading"] = home
+        s.connect(brake, home)
+        cup = s.spawn("thing", home, "The steading cupboard", state=dict(CUPBOARD))["id"]
+        s.spawn("blueprint", cup, "Tessel's dew still", state=dict(DEW_PLAN))
+        s.spawn("thing", cup, "Glassthorn smudge", state=dict(SMUDGE, count=2))
+        cellar = s.spawn("place", root, "The root cellar", state={"description": CELLAR})["id"]
+        s.connect(home, cellar)
+        s.spawn("lock", cellar, "The cellar lock", state=dict(CELLAR_LOCK))
+        s.spawn("thing", cellar, "Tessel's cask", state=dict(STEADING_CASK))
+        s.spawn("thing", cellar, "Seed jars", state=dict(SEED_JARS))
+        s.spawn("letter", cellar, "The steading's deed", state=dict(DEED))
+        s.patch(story, {"steading": home})
+    if "Weeping Rock" not in names and road:
+        rock = s.spawn("place", root, "Weeping Rock", state=dict(WEEPING_HIDDEN, description=WEEPING))["id"]
+        names["Weeping Rock"] = rock
+        s.connect(road, rock)
+        s.spawn("thing", rock, "The basin", state=dict(BASIN))
+        s.spawn("nest", rock, "The wasps' nest", state=dict(NEST))
+    deepwell = names.get("The Deepwell")
+    if deepwell and "Glassthorn smudge" not in [c["name"] for c in s.world.children(deepwell)]:
+        s.spawn("thing", deepwell, "Glassthorn smudge", state=dict(SMUDGE, count=4))
+    for where, line in ((yard, GATE_YARD_POSTERN), (road, ROAD_CLEFT)):
+        if where:
+            d = s.world.get(where)["state"].get("description") or ""
+            if line not in d:
+                s.patch(where, {"description": (d + " " + line).strip()})
+    keep_finds(s, names)  # the cellar key, now that the brake is there
+    if st.get("wild_lore"):
+        return
+    for who, text in WILD_KNOWS.items():
+        if names.get(who):
+            s.remember(text, entity=names[who])
+    cass = names.get("Cass the Salter")
+    if cass:
+        dialog = dict(s.world.get(cass)["state"].get("dialog") or {})
+        dialog["weeping|rock|cleft|wasps|sweet|child"] = CASS_ROCK
+        s.patch(cass, {"dialog": dialog})
+    s.patch(story, {"wild_lore": True})
+
+
+# Lockpick (the locks pack's own skill, Nate 2026-11-11): the trade belongs to those who would have learned it. A
+# Dreyer spy and the house's scout and runner, the Guild's door-keeper and the wright's mate, and Merrow at the Salt
+# Works, who fixes anything that moves. A Dreyer newcomer comes in with a little of it (TEMPLATES).
+LOCKPICKS = {"Dram Hollis": 3, "Brisk": 2, RUNNER_NAME: 2, "Mira Ost": 2, "Dov Ashby": 1, "Merrow": 2}
+MERROW_LOCKS = "'Locks? A lock is a slow machine that doesn't want to move. I can talk one round, given ten minutes and quiet.'"
+
+
+def keep_lockpicks(s, names):
+    """Each one's lockpick, set once by a mark on the story, so a skill learned or lost in play is not reset."""
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    if s.world.get(story)["state"].get("lockpicks"):
+        return
+    for who, n in LOCKPICKS.items():
+        if names.get(who):
+            skills = dict(s.world.get(names[who])["state"].get("skills") or {})
+            skills["lockpick"] = max(n, int(skills.get("lockpick") or 0))
+            s.patch(names[who], {"skills": skills})
+    if names.get("Merrow"):
+        dialog = dict(s.world.get(names["Merrow"])["state"].get("dialog") or {})
+        dialog["lock|pick|open|key|chest"] = MERROW_LOCKS
+        s.patch(names["Merrow"], {"dialog": dialog})
+    s.patch(story, {"lockpicks": True})
+
+
+# Stacks (the village verbs take a count, Nate 2026-11-11): Emberglass is one stack a holder, "Emberglass (60)", and
+# take, give, put and drop move part of it. The Reach made its shards one by one before; at every boot each loose
+# shard gets the Flats' own shard state (what harvest gives) and folds into the stack beside it. Nothing else in the
+# Reach is folded: skins, salve pouches and casks each keep their own water or doses.
+STACKED = {"Emberglass": SHARD}
+
+
+def keep_stacks(s):
+    """Fold every holder's loose shards into one stack. Idempotent: a lone stack folds into nothing."""
+    for name, canon in STACKED.items():
+        found = [e for e in s.world.find(name=name, limit=None) if e["name"] == name]
+        for e in found:
+            st = s.world.get(e["id"])["state"]
+            want = {k: v for k, v in canon.items() if k != "count" and st.get(k) != v}
+            if "count" not in st:
+                want["count"] = 1
+            if want:
+                s.patch(e["id"], want)
+        for e in found:
+            if s.world.get(e["id"]):
+                s.world.merge(e["id"])
 
 
 def keep_canon(s):
@@ -1492,6 +1921,11 @@ def keep_canon(s):
     keep_burn(s, names_of(s))
     keep_guild(s, names_of(s))
     keep_guild_locks(s, names_of(s))
+    keep_pointers(s, names_of(s))
+    keep_riders(s, names_of(s))
+    keep_wild(s, names_of(s))
+    keep_lockpicks(s, names_of(s))
+    keep_stacks(s)
     keep_carry(s)
     if st.get("garrison"):
         return

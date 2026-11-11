@@ -453,7 +453,7 @@ def test_hosted_bodies_thirst_at_the_pace_of_the_day():
                 out.setdefault(p["payload"]["script"], set()).add(p["every"])
         return out
 
-    assert beats() == {"thirst": {8640}, "quench": {600}, "mend": {21600}, "fighter_tick": {6}}
+    assert beats() == {"thirst": {8640}, "quench": {600}, "mend": {21600}, "fighter_tick": {6}, "wasp_tick": {60}}
     kit = eng.session_for_token(gm.invite("player", label="Kit")["token"])
     kit.join(template="guard", name="Kit")
     assert beats("Kit") == {"thirst": {8640}, "quench": {600}, "mend": {21600}}
@@ -517,7 +517,8 @@ def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_
     m = gm.map(depth=2)
     rows = {e["name"]: e for e in m["entities"]}
     places = [e for e in m["entities"] if e["type"] == "place"]
-    assert len(places) == 17 and all(e["own"] for e in places)  # thirteen, and the Guild Yard, its two rooms and Hauler Nine
+    assert len(places) == 22 and all(e["own"] for e in places)  # thirteen, the Guild Yard, its two rooms, Hauler Nine,
+    # the Riders' Hollow, the Thornbrake, Tessel's Steading and its cellar, and Weeping Rock
     assert rows["The Keth jars"]["own"] and rows["The Hold's ration cask"]["own"]  # spawned by the routines, placed after
     assert len(m["paths"]) >= 7 and all(p["drawn"] for p in m["paths"])
     ridge = gm.measure("Scar Gate, the Hold", "Red Ridge")
@@ -1123,7 +1124,8 @@ def test_the_guild_yard_keeps_its_counting_house_fills_its_tank_and_its_hauler_d
     yard = gm.inspect("The Guild Yard")["id"]
     box = gm.inspect("The Guild strongbox")
     shards = [c for c in gm.world.children(box["id"]) if c["name"] == "Emberglass"]
-    assert len(shards) == 60 and gm.inspect("Mira Ost")["parent"] == yard
+    assert len(shards) == 1 and gm.inspect(shards[0]["id"])["state"]["count"] == 60  # one stack
+    assert gm.inspect("Mira Ost")["parent"] == yard
     kinds = lambda k: gm.world.store.count("event", "world_id=? AND kind=?", (gm.world.id, k))
     # a Keth stranger walks into the counting house and the yard turns them back
     me = newcomer(eng, gm, "keth", "Tam")
@@ -1176,4 +1178,121 @@ def test_the_strongbox_opens_to_its_key_or_the_code_and_the_counting_house_to_mi
     assert any("AMORY" in n for n in notes)
     load_world(gm, "glass-reach", upgrade=True)  # a reboot makes no second lock and no second key
     assert len([e for e in gm.find(name="The strongbox key") if e["name"] == "The strongbox key"]) == 1
+
+
+def test_the_riders_hollow_fills_at_the_fires_and_what_is_done_there_counts_at_the_moon():
+    eng, gm = hosted(truce=True)
+    hollow = gm.inspect("The Riders' Hollow")
+    assert hollow["state"]["hidden"] and gm.find(name="Captain Iven Strake") == []  # empty until the fires
+    assert "second rib" in gm.inspect("The Dry Camp")["state"]["description"]
+    notes = [n["text"] for n in gm.world.get(gm.inspect("Halvard Dreyer")["id"])["state"]["memory"]]
+    assert any("Riders' Hollow" in n for n in notes)
+    chapter_two_now(gm)
+    to_next(gm, "riders_fires")
+    st = gm.inspect("Story")["state"]
+    assert st["riders_mustered"] and not gm.inspect("The Riders' Hollow")["state"]["hidden"]
+    assert where(gm, "Captain Iven Strake") == "The Riders' Hollow" and where(gm, "Sel Amory") == "The Riders' Hollow"
+    kinds = lambda k: gm.world.store.count("event", "world_id=? AND kind=?", (gm.world.id, k))
+    # a Hold man walking in is run out to the Bone Field
+    me = newcomer(eng, gm, "guard", "Tam")
+    gm.move("Tam", "The Dry Camp")
+    me.act("go", "The Riders' Hollow")
+    assert where(gm, "Tam") == "The Bone Field" and kinds("run_out") == 1
+    # one who got in unseen spoils the cart and cuts Sel loose; a careful hand is not heard
+    gm.move("Tam", "The Riders' Hollow")
+    gm.patch("Tam", {"wits": 10, "skills": {"stealth": 10}, "carry": 40})
+    me.act("spoil", "The riders' water cart")
+    gm.clock(step=121)
+    assert gm.inspect("The riders' water cart")["state"]["spoiled"] and gm.inspect("The riders' water cart")["state"]["left"] == 0
+    me.act("free", "Sel Amory")
+    gm.clock(step=61)
+    assert not gm.inspect("Sel Amory")["state"]["bound"]
+    gm.clock(step=1801)
+    assert where(gm, "Sel Amory") == "The Guild Yard"
+    # the paychest is locked; picked, its glass comes out; the plan goes with the thief
+    with pytest.raises(Rejected):
+        me.act("take", "Emberglass")
+    me.act("pick", "The paychest lock")
+    gm.clock(step=601)
+    me.act("take", "Emberglass")
+    me.act("take", "Dreyer's plan for the gate")
+    to_next(gm, "dawn")
+    assert gm.inspect("The riders' water cart")["state"]["left"] == 0  # spoiled water is never filled again
+    gm.patch("The Keth jars", {"left": 9})
+    gm.patch("The Hold's ration cask", {"left": 8})
+    to_next(gm, "moon_turns")
+    r = gm.inspect("Story")["state"]["reckoning"]
+    assert r["riders"] == 3  # seven riders, dry and unpaid, and the caltrops gone with the plan: the floor
+    errs = gm.world.store.query("event", "world_id=? AND kind='script_error'", (gm.world.id,))
+    assert not errs, errs[:2]
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot makes no second hollow and no second muster
+    assert len([e for e in gm.find(name="Captain Iven Strake") if e["name"] == "Captain Iven Strake"]) == 1
+
+
+def test_the_thornbrake_bites_at_night_and_tessels_steading_keeps_a_dew_still_and_a_deed():
+    eng, gm = hosted(truce=True)
+    me = newcomer(eng, gm, "guard", "Tam")
+    gm.patch("Tam", {"vigor": 30, "max_vigor": 30, "carry": 40})
+    gm.patch("Story", {"wild_night": True})
+    gm.move("Tam", "The Gate Yard")
+    me.act("go", "The Thornbrake")
+    kinds = lambda k: gm.world.store.count("event", "world_id=? AND kind=?", (gm.world.id, k))
+    assert kinds("hit") + kinds("missed") == 3  # the pack goes for you at night
+    gm.patch("The thornback boar", {"vigor": 0})
+    gm.patch("Tam", {"skills": {"blade": 20}})
+    me.act("attack", "The thornback boar")
+    assert gm.inspect("Thornback sow")["state"]["hidden"]  # the leader down, the rest run
+    # the key is on old Tessel's bones; the cellar opens to it; the deed is proof Taan takes
+    me.act("go", "Tessel's Steading")
+    with pytest.raises(Rejected, match="locked"):
+        me.act("go", "The root cellar")
+    gm.move(gm.inspect("The cellar key")["id"], "Tam")
+    me.act("unlock", "The cellar lock")
+    me.act("go", "The root cellar")
+    me.act("take", "The steading's deed")
+    me.act("go", "Tessel's Steading")
+    me.act("take", "Tessel's dew still")
+    gm.move("Tam", "The Gate Yard")
+    shard(gm, "Tam"), shard(gm, "Tam"), shard(gm, "Tam")
+    me.act("build", "Tessel's dew still")
+    proj = next(e for e in gm.find(type="project") if gm.inspect(e["id"])["parent"] == gm.inspect("The Gate Yard")["id"])
+    for _ in range(3):
+        if any(c["name"] == "Emberglass" for c in gm.world.children(gm.inspect("Tam")["id"])):
+            me.act("supply", proj["id"], params={"item": "Emberglass"})
+    for _ in range(3):
+        me.act("work", proj["id"], params={"role": "hands"})
+        gm.clock(step=3601)
+    to_next(gm, "dawn")
+    assert gm.inspect("A dew still")["state"]["left"] == 2
+    errs = gm.world.store.query("event", "world_id=? AND kind='script_error'", (gm.world.id,))
+    assert not errs, errs[:2]
+
+
+def test_weeping_rock_stings_until_it_is_smoked():
+    eng, gm = hosted(truce=True)
+    me = newcomer(eng, gm, "keth", "Ani")
+    gm.move("Ani", "The Salt Road")
+    me.act("go", "Weeping Rock")
+    v0 = gm.inspect("Ani")["state"]["vigor"]
+    gm.clock(step=121)
+    assert gm.inspect("Ani")["state"]["vigor"] < v0
+    with pytest.raises(Rejected, match="smudge"):
+        me.act("smoke", "The wasps' nest")
+    gm.move(next(c["id"] for c in gm.world.children(gm.inspect("The Deepwell")["id"]) if c["name"] == "Glassthorn smudge"), "Ani")
+    me.act("smoke", "The wasps' nest")
+    v1 = gm.inspect("Ani")["state"]["vigor"]
+    gm.clock(step=600)
+    assert gm.inspect("Ani")["state"]["vigor"] == v1
+    notes = [n["text"] for n in gm.world.get(gm.inspect("Elder Taan")["id"])["state"]["memory"]]
+    assert any("child's well" in n for n in notes)
+
+
+def test_loose_shards_fold_into_one_stack_at_boot_and_take_parts_it():
+    eng, gm = hosted(truce=True)
+    for _ in range(3):
+        shard(gm, "Ossa the Carrier")  # the old way: one thing a shard
+    load_world(gm, "glass-reach", upgrade=True)
+    held = [c for c in gm.world.children(gm.inspect("Ossa the Carrier")["id"]) if c["name"] == "Emberglass"]
+    assert len(held) == 1 and held[0]["state"]["count"] == 3
+    assert gm.inspect("Dram Hollis")["state"]["skills"]["lockpick"] == 3
 

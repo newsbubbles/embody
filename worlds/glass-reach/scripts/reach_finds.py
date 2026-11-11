@@ -21,3 +21,13 @@ def on(ctx, event):
         ctx.patch(c, {"hidden": False, "found_by": me.id})
         ctx.emit("scene", target=place, reach=1, text=st.find_text)
         ctx.emit("found", target=c, reach=1, by=me.id, place=place.id, thing=c.name)
+    # a hidden place one step off (Weeping Rock off the road): found, it is on everyone's map
+    for e in ctx.edges(place.id, "connects_to", "out"):
+        t = ctx.get(e["target"])
+        if t is None or not t.state.hidden or not t.state.find_dc:
+            continue
+        if skill not in (t.state.find_skills or []) or total < int(t.state.find_dc):
+            continue
+        ctx.patch(t, {"hidden": False, "known_to": None, "found_by": me.id})
+        ctx.emit("scene", target=place, reach=1, text=t.state.find_text)
+        ctx.emit("found", target=t, reach=1, by=me.id, place=place.id, thing=t.name)

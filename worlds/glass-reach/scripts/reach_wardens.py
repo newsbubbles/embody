@@ -42,7 +42,7 @@ def paid(ctx, who):
     return bool(who.state.road_paid_until) and ctx.t < who.state.road_paid_until
 
 def toll(ctx, who, glass, sgt, road):
-    ctx.move(glass, sgt if sgt is not None else road)
+    ctx.transfer(glass, sgt if sgt is not None else road, 1)  # one shard off the stack, not the stack
     ctx.emit("road_toll", target=who, reach=1, by=who.id)
 
 def arrive(ctx, st, who, quiet):
@@ -127,5 +127,9 @@ def on(ctx, event):
         if sgt is None or it is None or who is None or event.target != sgt.id or it.state.kind != "ember":
             return
         ctx.patch(who, {"road_paid_until": ctx.t + ROAD_DAY})
+        back = ""
+        if ctx.count(it) > 1:  # a day's road is one shard; the rest of a stack goes back
+            ctx.transfer(it, who, ctx.count(it) - 1)
+            back = " She hands the rest back. 'One. I'm a warden, not a thief.'"
         scene(ctx, sgt.parent, SERGEANT + " weighs the shard and writes a line. 'A day's road. Nobody at the post stops you "
-              "till this hour tomorrow.'")
+              "till this hour tomorrow.'" + back)
