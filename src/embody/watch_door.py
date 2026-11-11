@@ -4,7 +4,9 @@ It is the long wait a mind (or a narrator, or the host) runs from a shell instea
 turn: it connects with the grant in the door file, calls wait(until=...) in short pieces for as long as --for
 says, reconnects when the line drops, takes the seat again with --rejoin if it lapsed, and exits printing what
 happened when the condition comes true (FIRED) or the time is up (TIME UP). Every wait keeps the seat warm.
-Exit code 0 for both; 2 when the door refuses (the reason is printed). The token never leaves the door file.
+Exit code 0 for both; 2 when the door refuses (the reason is printed); 3 when the door has been unreachable for
+LOST_LIMIT, so whoever runs it wakes and looks instead of sitting blind until --for runs out. The token never
+leaves the door file.
 """
 
 from __future__ import annotations
@@ -18,6 +20,14 @@ from pathlib import Path
 from typing import Any
 
 PIECE = 50.0  # seconds per wait call: under what proxies and clients hold a request open
+LOST_LIMIT = 600.0  # seconds without the door before the watch gives up: past a redeploy, short of a blind night
+
+
+def cause(e: BaseException) -> str:
+    """The error under the transport's exception groups, as one short line."""
+    while isinstance(e, BaseExceptionGroup) and e.exceptions:
+        e = e.exceptions[0]
+    return f"{type(e).__name__}: {str(e)[:160]}".rstrip(": ")
 
 
 def read_door(path: str, server: str | None = None) -> tuple[str, str]:
@@ -70,6 +80,7 @@ async def _watch(args: argparse.Namespace) -> int:
     end = time.monotonic() + parse_span(args.for_)
     since: int | None = None
     who = {"principal": args.principal} if args.principal else {}
+    lost: float | None = None  # when the door was last lost, while it stays lost
 
     def out(r: dict[str, Any]) -> int:
         print(json.dumps(r, default=str) if args.json else render_watch(r))
@@ -81,6 +92,7 @@ async def _watch(args: argparse.Namespace) -> int:
                     streamable_http_client(url, http_client=hc) as streams:
                 async with ClientSession(streams[0], streams[1]) as s:
                     await s.initialize()
+                    lost = None
                     world = args.world
                     if not world:
                         ws = _one(await s.call_tool("worlds", {}))
@@ -121,7 +133,12 @@ async def _watch(args: argparse.Namespace) -> int:
             raise
         except Exception as e:  # the line dropped, a redeploy, a proxy timeout: wait a little and go again
             if time.monotonic() >= end:
-                print("TIME UP (the door was unreachable at the end)")
+                print(f"TIME UP (the door was unreachable at the end: {cause(e)})")
                 return 0
-            print(f"(lost the door: {type(e).__name__}; trying again in 15 s)", file=sys.stderr)
+            lost = lost or time.monotonic()
+            if time.monotonic() - lost >= LOST_LIMIT:
+                print(f"LOST THE DOOR for {round((time.monotonic() - lost) / 60)} min ({cause(e)}): nothing was watched "
+                      f"since. Check the server with one wait() call, then start the watch again.")
+                return 3
+            print(f"(lost the door: {cause(e)}; trying again in 15 s)", file=sys.stderr)
             await anyio.sleep(15)

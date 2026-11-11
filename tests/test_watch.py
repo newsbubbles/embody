@@ -146,3 +146,15 @@ def test_watch_over_a_hosted_door_rejoins_fires_and_times_out(tmp_path, capsys):
     finally:
         server.should_exit = True
         t.join(timeout=5)
+
+
+def test_a_watch_that_loses_the_door_says_why_and_wakes_its_runner(tmp_path, capsys, monkeypatch):
+    import embody.watch_door as wd
+    from tests.test_grants import _free_port
+    monkeypatch.setattr(wd, "LOST_LIMIT", 0.0)  # nothing is listening: give up at the first loss
+    door = tmp_path / ".mcp.json"
+    door.write_text(json.dumps({"mcpServers": {"w": {"type": "http", "url": f"http://127.0.0.1:{_free_port()}/mcp",
+                                                     "headers": {"Authorization": "Bearer not-a-real-token"}}}}))
+    assert cli_main(["watch", "--door", str(door), "--until", "t >= 0", "--for", "1h"]) == 3
+    out = capsys.readouterr().out
+    assert out.startswith("LOST THE DOOR") and "ExceptionGroup" not in out and "not-a-real-token" not in out
