@@ -31,6 +31,10 @@ def on(ctx, event):
         ctx.patch(c, {"hidden": False, "found_by": me.id})
         unhint(ctx, c)
         ctx.emit("scene", target=place, reach=1, text=st.find_text)
+        if st.portable:
+            # finding is not holding: a player once told the Landing he carried a log still lying where he found it
+            ctx.emit("scene", target=me, reach=0, text="The " + c.name + " lies where you found it. To carry it, take it ("
+                     + c.id + "); it is anyone's to pick up until someone does.")
         ctx.emit("found", target=c, reach=1, by=me.id, place=place.id, thing=c.name)
     # a hidden place one step off (Weeping Rock off the road): found, it is on everyone's map
     for e in ctx.edges(place.id, "connects_to", "out"):

@@ -741,6 +741,7 @@ def test_hidden_things_turn_up_for_the_right_look_and_the_place_says_where_to_lo
     assert "Hollis's count" not in seen()
     r = ash.act("check", params={"skill": "search", "dc": 14})
     assert any("careful hand" in t for t in scenes(r["events"])) and "Hollis's count" in seen()
+    assert any("lies where you found it" in t for t in scenes(r["events"]))  # finding is not holding: take it
     assert "finger proud" not in gm.inspect("The Gate Yard")["state"]["description"]  # found, the hint goes
     ash.act("take", "Hollis's count")
     assert "Hollis's count" in {c["name"] for c in gm.inspect("Ash")["contents"]}
