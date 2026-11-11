@@ -480,6 +480,7 @@ def populate(s):
     s.schedule(500, "dusk", entity=root)
     s.schedule(600, "cistern_cracks", entity=root)
     keep_canon(s)
+    keep_corins_file_kit(s, names_of(s))  # after the nine are made
     lay_out(s)
     s.clock(run=False, turn=3)
     return s.summary()
@@ -548,6 +549,7 @@ def upgrade(s):
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
     keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
     keep_canon(s)
+    keep_corins_file_kit(s, names_of(s))  # after the nine are made
     lay_out(s)
 
 
@@ -1874,6 +1876,76 @@ def keep_stacks(s):
                 s.world.merge(e["id"])
 
 
+# Corin's file (scripts/reach_file.py, Nate 2026-11-11): Ruhl has picked Corin Vass for a file of three, two bows and a
+# spear, given the first time Corin talks to him. Ruhl knows it is coming; the three learn it when he calls their names.
+FILE_KINDS = ["talked", "say"]
+RUHL_FILE = ("The Reach is filling: Guild wardens on the road, a Guild yard at the Landing, Dreyer's people walking in "
+             "under other names. One captain cannot be at the gate and out past it. I have settled on Corin Vass for a "
+             "file of his own, he has walked the Flats and come back, and the Keth trust him. The next time he comes to "
+             "me I give him Brannoc Hale and Lute Callow with two bows off the pegs, and Osk Barran with the boar spear.")
+
+
+def keep_corins_file(s, names):
+    """The rule that gives Corin his file when he talks to Ruhl, and Ruhl's memory of the plan, once."""
+    root = s.summary()["root"]
+    s.set_rule(root, "reach_file", kinds=FILE_KINDS)
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    st = s.world.get(story)["state"]
+    if st.get("corin_file_lore") or st.get("corin_file") or not names.get("Captain Ruhl"):
+        return
+    s.remember(RUHL_FILE, entity=names["Captain Ruhl"])
+    s.patch(story, {"corin_file_lore": True})
+
+
+# The three for Corin's file, made ready once (Nate 2026-11-11): each a full Varrick skin, Lute the Hold's field pouch,
+# Osk the two shards he dug the one time he went out on the glass. Each has a past of his own, and each heard from the
+# captain tonight that he is going to Corin.
+FILE_SKIN = {"capacity": 4, "left": 4}
+FIELD_POUCH = {"doses": 3, "heals": 3, "issued_by": "Captain Ruhl",
+               "description": "The Hold's field pouch: boiled linen, a bone needle and gut, and a Keth pouch of glassroot "
+                              "salve Iska left with the Hold the week the truce was made.",
+               "description_empty": "The Hold's field pouch, the linen gone and the salve scraped out."}
+FILE_PAST = {
+    "Brannoc Hale": [
+        "I came up to the Hold eleven years ago with the old reeve's men, a hunter's son from the salt pans north of the "
+        "Landing. My father taught me the short bow on sand grouse; I can put an arrow through a waterskin at sixty paces.",
+        "I have killed two men, both at the gate, both Dreyer's. I do not talk about either. I cannot cook; Hobb lets me peel.",
+    ],
+    "Lute Callow": [
+        "I was a Guild night runner before I took the Varrick coat: four years on the Salt Road between the Landing and the "
+        "Salt Works. Sergeant Marr thinks I left the Guild for a woman. I left because the Guild pays by the mile and the "
+        "Hold pays by the month.",
+        "I sleep three hours, toward dawn, and that is all. Iska of the Keth showed me how to pack a wound with glassroot "
+        "the week the truce was made; the captain gave me the Hold's field pouch for the file because of it.",
+    ],
+    "Osk Barran": [
+        "I am a Varrick tenant's son, third of five; the house took me for the wall because I was the big one.",
+        "The one time I went out on the glass I dug two shards with a pick, loud, and the sand moved under me like a "
+        "sleeping dog turning over. I ran. I still have the two shards in a rag. Nobody knows but Tobin, who wants to dice "
+        "for them.",
+    ],
+}
+FILE_TOLD = ("Tonight the captain took me aside at the wall stair: I am going to Corin Vass's file with {others}, two "
+             "bows and the boar spear. When Corin next reports to him he calls our names and hands out the arms. Corin "
+             "says where and when; Ruhl says whether. Bring each other back, he said.")
+
+
+def keep_corins_file_kit(s, names):
+    """The three's skins, Lute's pouch, Osk's shards, their pasts and the captain's word, once by a mark on the story."""
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    st = s.world.get(story)["state"]
+    if st.get("corin_file_kit") or not all(names.get(n) for n in FILE_PAST):
+        return
+    for who, past in FILE_PAST.items():
+        s.spawn("waterskin", names[who], "Varrick waterskin", state=dict(FILE_SKIN))
+        for text in past:
+            s.remember(text, entity=names[who])
+        s.remember(FILE_TOLD.format(others=" and ".join(n for n in FILE_PAST if n != who)), entity=names[who])
+    s.spawn("medicine", names["Lute Callow"], "The Hold's field pouch", state=dict(FIELD_POUCH))
+    s.spawn("thing", names["Osk Barran"], "Emberglass", state=dict(SHARD, count=2))
+    s.patch(story, {"corin_file_kit": True})
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -1926,6 +1998,7 @@ def keep_canon(s):
     keep_wild(s, names_of(s))
     keep_lockpicks(s, names_of(s))
     keep_stacks(s)
+    keep_corins_file(s, names_of(s))
     keep_carry(s)
     if st.get("garrison"):
         return

@@ -1296,3 +1296,35 @@ def test_loose_shards_fold_into_one_stack_at_boot_and_take_parts_it():
     assert len(held) == 1 and held[0]["state"]["count"] == 3
     assert gm.inspect("Dram Hollis")["state"]["skills"]["lockpick"] == 3
 
+
+
+def test_corin_talks_to_ruhl_and_gets_a_file_of_two_bows_and_a_spear_once():
+    eng, gm = hosted(truce=True)
+    notes = [n["text"] for n in gm.world.get(gm.inspect("Captain Ruhl")["id"])["state"]["memory"]]
+    assert any("file of his own" in n for n in notes)  # Ruhl knows it is coming
+    corin = newcomer(eng, gm, "guard", "Corin Vass")
+    gm.move("Corin Vass", gm.inspect("Captain Ruhl")["parent"])
+    corin.act("talk", "Captain Ruhl", {"about": "orders"})
+    cid = gm.inspect("Corin Vass")["id"]
+    file = gm.inspect("Story")["state"]["corin_file"]
+    assert gm.inspect("Corin Vass")["state"]["file"] == file and len(file) == 3
+    arms = {gm.world.get(m)["name"]: [c["name"] for c in gm.world.children(m) if c["state"].get("weapon")] for m in file}
+    assert arms == {"Brannoc Hale": ["Varrick bow"], "Lute Callow": ["Varrick bow"], "Osk Barran": ["The Hold's boar spear"]}
+    assert all(gm.world.get(m)["state"]["file_of"] == cid for m in file)
+    rack = gm.inspect("Rack of practice blades")["id"]
+    assert sum(1 for c in gm.world.children(rack) if c["name"] == "Varrick blade") == 3
+    assert "two empty pegs" in gm.inspect("Bows on the wall")["state"]["description"]
+    corin.act("talk", "Captain Ruhl", {"about": "orders"})  # once: no second issue
+    assert sum(1 for m in file for c in gm.world.children(m) if c["state"].get("weapon")) == 3
+
+
+def test_corins_three_carry_skins_a_pouch_and_two_shards_and_know_they_are_going_to_him():
+    eng, gm = hosted(truce=True)
+    held = {n: {c["name"]: c["state"] for c in gm.world.children(gm.inspect(n)["id"])} for n in ("Brannoc Hale", "Lute Callow", "Osk Barran")}
+    assert all("Varrick waterskin" in h for h in held.values())
+    assert held["Lute Callow"]["The Hold's field pouch"]["doses"] == 3
+    assert held["Osk Barran"]["Emberglass"]["count"] == 2
+    notes = [n["text"] for n in gm.world.get(gm.inspect("Osk Barran")["id"])["state"]["memory"]]
+    assert any("Corin Vass's file with Brannoc Hale and Lute Callow" in n for n in notes) and any("Tobin" in n for n in notes)
+    load_world(gm, "glass-reach", upgrade=True)  # once: a reboot hands out nothing more
+    assert sum(1 for c in gm.world.children(gm.inspect("Osk Barran")["id"]) if c["name"] == "Varrick waterskin") == 1
