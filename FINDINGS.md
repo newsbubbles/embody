@@ -4,6 +4,18 @@ Ways the system surprised us in play: what we saw, why it happened, and what it 
 work (worlds, minds) and the engine work add here. A finding is something the design did not predict, good or bad; a
 plain bug goes in its fix's commit.
 
+## 2026-11-11: Out-of-character talk has no channel
+
+**Seen.** Nate, playing the reeve, sent Aaron's player an out-of-character note about exploring the Reach together.
+There is no private or out-of-fiction channel, so it went out as speech: Ruhl and Hollis heard it, and their minds had
+to decide it was not theirs to answer. Aaron's player answered out of character the same way.
+
+**Why.** Every word a player sends travels through the world (`say`), and every mind in the room reads the world. The
+table (players talking as players) and the world (characters talking) share one wire.
+
+**Taught.** Multiplayer needs a table layer the minds never receive, the way a host's news needs a channel that is not
+a letter in the Hold. Until there is one, the minds are carrying the separation themselves, and they did it well.
+
 ## 2026-11-11: A body that drank once walked back into its thirst
 
 **Seen.** When idle bodies first walked more than one step to water, a soak showed one on the Flats going to the Old
