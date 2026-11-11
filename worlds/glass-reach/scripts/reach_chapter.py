@@ -5,6 +5,8 @@
 # the Hold's wall, the Hold's water, and where Hollis is.
 MOON_AFTER = 1036800  # twelve world days: three real days at the hosted rate, time for the Reach to fill and choose
 WALL = 9  # men on their feet in the Hold and the yard that the riders count as a held wall
+KETH_BOWS = 3  # Keth on the wall at the moon, when Taan has proof and the truce still stands
+BEATS = [(259200, "convoy_word"), (518400, "rook_arrives"), (777600, "riders_fires"), (950400, "herald_comes")]  # the herald: the day before the moon
 DRY = 4  # draws in the Keth jars and the ration cask together, below which the Hold is called thirsty
 
 def scene(ctx, place, text):
@@ -26,6 +28,8 @@ def begin(ctx, story):
     ctx.patch(story, {"chapter": 2, "moon_due": ctx.t + MOON_AFTER, "strain": 0})
     ctx.patch(ctx.root(), {"story": "chapter two: the moon turns", "chapter": 2})
     ctx.schedule(MOON_AFTER, "moon_turns", target=ctx.root())
+    for b in BEATS:  # the middle of the chapter, in scripts/reach_moon.py
+        ctx.schedule(b[0], b[1], target=ctx.root())
     scene(ctx, st.landing, "The dawn crawler comes in with its dust and its driver talking before the engine stops. Riders on the "
                            "south road, twelve days out, under a pennant with a well and a bar across it. Dreyer. 'And the "
                            "convoy goes south at the moon's turn, same as the tally says. Whoever wants carrying had better "
@@ -72,38 +76,59 @@ def strain(ctx, story, why):
         ctx.emit("truce_strained", target=ctx.root(), reach=-1, why=why, strain=n)
 
 def wall_and_water(ctx, st):
+    # a bought man on the wall is worse than none: he counts against it. Keth bows stand on it with proof and the truce.
     men = 0
+    bought = 0
     for pid in [st.hold, st.yard]:
         for b in ctx.children(pid):
             bs = b.state
             if bs.faction == "House Varrick" and not bs.dead and not bs.down:
-                men = men + 1
+                if bs.turncoat:
+                    bought = bought + 1
+                else:
+                    men = men + 1
+    men = men - bought
+    if st.keth_proof and st.truce:
+        men = men + KETH_BOWS
     water = 0
-    for wid in [st.keth_jars, st.hold_ration]:
+    wids = [st.keth_jars, st.hold_ration]
+    if st.cistern_mended:
+        wids.append(st.cistern)
+    for wid in wids:
         w = ctx.get(wid) if wid else None
         if w is not None:
             water = water + int(w.state.left or 0)
-    return men, water
+    return men, water, bought
 
 def reckon(ctx, story):
     st = story.state
-    men, water = wall_and_water(ctx, st)
+    men, water, bought = wall_and_water(ctx, st)
     dram = ctx.get(st.dram)
     where = "gone"
     if dram is not None and dram.state.dead:
         where = "dead"
     elif dram is not None and dram.parent is not None and dram.parent.id in [st.hold, st.yard]:
         where = "held"
-    if st.truce and men >= WALL and water >= DRY:
+    if st.writ_given:
+        outcome = "yielded"
+    elif st.truce and men >= WALL and water >= DRY and st.convoy_to != "House Dreyer":
         outcome = "held"
     elif not st.truce and (men < WALL or water < DRY):
         outcome = "fallen"
     else:
         outcome = "siege"
     ctx.patch(story, {"moon_turned": True, "outcome": outcome,
-                      "reckoning": {"truce": bool(st.truce), "wall": men, "water": water, "hollis": where}})
+                      "reckoning": {"truce": bool(st.truce), "wall": men, "water": water, "hollis": where, "bought": bought,
+                                    "keth_bows": bool(st.keth_proof and st.truce), "cistern": bool(st.cistern_mended),
+                                    "convoy": st.convoy_to, "writ": bool(st.writ_given)}})
     ctx.patch(ctx.root(), {"story": "chapter two: " + outcome})
-    if outcome == "held":
+    if outcome == "yielded":
+        scene(ctx, st.hold, "The moon turns. The gate stands open, as the writ's new holder asked. Dreyer's riders come "
+                            "up out of the south dunes at a walk, and the men of the Hold go north on the Salt Road with "
+                            "full skins and nothing else.")
+        scene(ctx, st.dry_camp, "Halvard Dreyer rides north with the writ in his coat. 'No blood,' he says. 'The Crown "
+                                "likes a clean seal.'")
+    elif outcome == "held":
         scene(ctx, st.hold, "The moon turns. Dreyer's riders come up out of the south dunes in the last light and stop at the "
                             "edge of the Flats. They count the men on the wall, and the Keth fires on Red Ridge, and they "
                             "count again. Then they turn back into the dark.")
@@ -118,7 +143,7 @@ def reckon(ctx, story):
                             "camp in the Bone Field, in plain sight, and light their fires. A siege, then.")
         scene(ctx, st.dry_camp, "Halvard Dreyer rides out to meet the house's riders at the Bone Field. 'We wait,' he says. "
                                 "'They are thirstier than we are.'")
-    ctx.emit("moon_turned", target=ctx.root(), reach=-1, outcome=outcome, wall=men, water=water, hollis=where)
+    ctx.emit("moon_turned", target=ctx.root(), reach=-1, outcome=outcome, wall=men, water=water, hollis=where, bought=bought)
 
 def newcomers(ctx, story):
     # who has come in from the templates so far: a Dreyer man, a Guild carrier

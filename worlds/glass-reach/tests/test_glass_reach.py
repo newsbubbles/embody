@@ -517,7 +517,7 @@ def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_
     m = gm.map(depth=2)
     rows = {e["name"]: e for e in m["entities"]}
     places = [e for e in m["entities"] if e["type"] == "place"]
-    assert len(places) == 12 and all(e["own"] for e in places)
+    assert len(places) == 13 and all(e["own"] for e in places)
     assert rows["The Keth jars"]["own"] and rows["The Hold's ration cask"]["own"]  # spawned by the routines, placed after
     assert len(m["paths"]) >= 7 and all(p["drawn"] for p in m["paths"])
     ridge = gm.measure("Scar Gate, the Hold", "Red Ridge")
@@ -776,3 +776,106 @@ def test_the_host_can_begin_chapter_two_at_once_and_the_moon_is_twelve_days_out(
     gm.schedule(1, "chapter_two_begins", entity=root)  # a second word does not start it twice
     gm.clock(step=2)
     assert len([x for x in gm.timers() if x["kind"] == "moon_turns"]) == 1
+
+
+def chapter_two_now(gm):
+    chapter_one_done(gm)
+    gm.schedule(1, "chapter_two_begins", entity=gm.summary()["root"])
+    gm.clock(step=2)
+    assert gm.inspect("Story")["state"]["chapter"] == 2
+
+
+def shard(gm, who):
+    return gm.spawn("thing", gm.inspect(who)["id"], name="Emberglass", state={"kind": "ember", "portable": True})["id"]
+
+
+def test_the_twelve_days_bring_the_convoy_master_the_riders_fires_and_the_herald():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    assert {x["kind"] for x in gm.timers()} >= {"convoy_word", "rook_arrives", "riders_fires", "herald_comes"}
+    to_next(gm, "rook_arrives")
+    assert where(gm, "Bellan Rook") == "The Carriers' Landing" and gm.inspect("The convoy crawler")["state"]["load"] == 8
+    to_next(gm, "riders_fires")
+    assert gm.inspect("Story")["state"]["riders_seen"]
+    to_next(gm, "herald_comes")
+    assert where(gm, "Dreyer's herald") == "The Gate Yard" and gm.inspect("The Crown's writ")["state"]["portable"]
+
+
+def test_drifters_go_to_the_wall_for_pay_and_a_bought_one_counts_against_it():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    assert len([e for e in gm.find(type="person") if gm.inspect(e["id"])["state"].get("drifter")]) == 5
+    hold = newcomer(eng, gm, "guard", "Bram")
+    spy = newcomer(eng, gm, "dreyer", "Vey")
+    gm.move("Bram", "The Old Salt Works")
+    gm.move("Vey", "The Old Salt Works")
+    hold.act("give", "Cass the Salter", params={"item": "Varrick waterskin"})
+    assert where(gm, "Cass the Salter") == "Scar Gate, the Hold" and gm.inspect("Cass the Salter")["state"]["faction"] == "House Varrick"
+    spy.act("give", "Joss", params={"item": "Plain waterskin"})
+    joss = gm.inspect("Joss")["state"]
+    assert where(gm, "Joss") == "Scar Gate, the Hold" and joss["turncoat"] and joss["faction"] == "House Varrick"
+    card = next(c for c in hold.perceive()["present"] if c["name"] == "Joss") if where(gm, "Bram") == "Scar Gate, the Hold" else None
+    assert card is None or "turncoat" not in json.dumps(card)
+    gm.move("Bram", "The Gate Yard")
+    to_next(gm, "moon_turns")
+    r = gm.inspect("Story")["state"]["reckoning"]
+    assert r["bought"] == 1
+
+
+def test_pitch_mends_the_cistern_once_the_wedge_is_out_and_the_mended_cistern_counts():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    me = newcomer(eng, gm, "guard", "Bram")
+    gm.patch("Bram", {"skills": {"search": 30, "lore": 30}})
+    gm.move("Bram", "Scar Gate, the Hold")
+    pot = next(e["id"] for e in gm.find(name="Pot of Guild pitch") if e["name"] == "Pot of Guild pitch")
+    gm.move(pot, "Bram")
+    r = me.act("check", params={"skill": "lore", "dc": 13})
+    assert any("will not take" in t for t in scenes(r["events"])) and not gm.inspect("Story")["state"].get("cistern_mended")
+    me.act("check", params={"skill": "search", "dc": 15})
+    me.act("take", "Bronze wedge")
+    r = me.act("check", params={"skill": "lore", "dc": 13})
+    assert any("trickling" in t for t in scenes(r["events"]))
+    assert gm.inspect("Story")["state"]["cistern_mended"] and gm.inspect("The cistern")["state"]["left"] >= 6
+    to_next(gm, "moon_turns")
+    assert gm.inspect("Story")["state"]["reckoning"]["cistern"]
+
+
+def test_proof_for_the_keth_puts_bows_on_the_wall_and_the_convoy_goes_to_who_pays():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    to_next(gm, "rook_arrives")
+    keth = newcomer(eng, gm, "keth", "Sen")
+    gm.spawn("thing", gm.inspect("Sen")["id"], name="Empty phial", state={"portable": True})
+    gm.move("Sen", "The Deepwell")
+    keth.act("give", "Elder Taan", params={"item": "Empty phial"})
+    assert gm.inspect("Story")["state"]["keth_proof"] == "Empty phial"
+    car = newcomer(eng, gm, "carrier", "Enzo")
+    shard(gm, "Enzo")
+    car.act("give", "Bellan Rook", params={"item": "Emberglass"})  # no side named: handed back
+    assert "Emberglass" in [c["name"] for c in gm.inspect("Enzo")["contents"]]
+    car.act("talk", "Bellan Rook", {"about": "for the Hold"})
+    before = gm.inspect("The Hold's ration cask")["state"].get("left") or 0
+    for _ in range(2):
+        shard(gm, "Enzo")
+    for _ in range(3):
+        car.act("give", "Bellan Rook", params={"item": "Emberglass"})
+    assert gm.inspect("Story")["state"]["convoy_to"] == "House Varrick"
+    assert gm.inspect("The Hold's ration cask")["state"]["left"] == before + 8
+    to_next(gm, "moon_turns")
+    r = gm.inspect("Story")["state"]["reckoning"]
+    assert r["keth_bows"] and r["convoy"] == "House Varrick"
+
+
+def test_the_writ_in_the_heralds_hand_yields_the_gate_at_the_moon():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    to_next(gm, "herald_comes")
+    spy = newcomer(eng, gm, "dreyer", "Vey")
+    gm.move("Vey", "Scar Gate, the Hold")
+    spy.act("take", "The Crown's writ")
+    spy.act("go", "The Gate Yard")
+    spy.act("give", "Dreyer's herald", params={"item": "The Crown's writ"})
+    assert gm.inspect("Story")["state"]["writ_given"]
+    to_next(gm, "moon_turns")
+    assert gm.inspect("Story")["state"]["outcome"] == "yielded"

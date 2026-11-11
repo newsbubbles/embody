@@ -1,4 +1,4 @@
-"""The Glass Reach: a desert fief with table-top rules, twelve places, seven NPCs and Ruhl's nine, two seats to play.
+"""The Glass Reach: a desert fief with table-top rules, thirteen places, seven NPCs and Ruhl's nine, two seats to play.
 
     uv run embody --as gm --author load glass-reach
     uv run embody --as you join glass-reach "Reeve Ansel Varrick"
@@ -40,7 +40,7 @@ not. What keeps the Reach alive with nobody at the keyboard is its routines (scr
 water run at dusk while the truce holds, the Guild crawler at dawn while Ossa keeps the tally, and every body whose
 seat has done nothing for a quarter hour of real time seeing to its own water. Players can get in their way.
 
-Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on, reach_story, reach_chapter, reach_finds, reach_road and reach_routines; take, drop, give, talk,
+Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on, reach_story, reach_chapter, reach_moon, reach_finds, reach_road and reach_routines; take, drop, give, talk,
 read and person_on come from packs/village, the rules from packs/d20), define(s), populate(s), upgrade(s).
 """
 
@@ -60,7 +60,7 @@ POLICY = {
     "fixed": [
         "the rules: d20 + stat + skill against a difficulty, opposed attacks, a ward stops fast blows and the slow blade passes it, "
         "water runs out, the Thresher comes to rhythm on deep sand, the ring holds during a duel; the engine rolls, the narrator tells",
-        "the seven NPCs, Ruhl's nine men, the twelve places and the four sides",
+        "the seven NPCs, Ruhl's nine men, the thirteen places and the four sides",
         "the Deepwell is hidden until found or shown; Dram Hollis is Dreyer's and calls the reeve out at t=240; the cistern fails at t=600",
         "nobody but a Keth knows the way down to the Deepwell without finding it",
     ],
@@ -230,6 +230,8 @@ HOSTED = {"rate": 4, "claim_lapse": 3600,
 ROUTINE_KINDS = ["keth_run", "crawler"]
 # Chapter two (scripts/reach_chapter.py): the dawn that starts it, what strains the truce, the moon.
 CHAPTER_KINDS = ["dawn", "harvested", "downed", "killed", "given", "moon_turns", "chapter_two_begins"]
+# Chapter two's middle (scripts/reach_moon.py): the beats on the calendar and the four contests the moon counts.
+MOON_KINDS = ["convoy_word", "rook_arrives", "riders_fires", "herald_comes", "given", "talked", "checked"]
 # What is hidden until someone looks (scripts/reach_finds.py) and what the road does to a newcomer (scripts/reach_road.py).
 FIND_KINDS = ["checked"]
 ROAD_KINDS = ["arrived", "squall", "squall_passes"]
@@ -436,6 +438,7 @@ def populate(s):
     s.set_rule(root, "reach_chapter", kinds=CHAPTER_KINDS)
     s.set_rule(root, "reach_finds", kinds=FIND_KINDS)
     s.set_rule(root, "reach_road", kinds=ROAD_KINDS)
+    s.set_rule(root, "reach_moon", kinds=MOON_KINDS)
     by_name = {"Reeve Ansel Varrick": ansel, "Sefa of the Keth": sefa, "Captain Ruhl": ruhl, "Dram Hollis": dram,
                "Ossa the Carrier": ossa, "Elder Taan": taan, "Nico": nico}
     seed_reach(s, by_name)
@@ -495,6 +498,7 @@ def upgrade(s):
     s.set_rule(root, "reach_chapter", kinds=CHAPTER_KINDS)
     s.set_rule(root, "reach_finds", kinds=FIND_KINDS)
     s.set_rule(root, "reach_road", kinds=ROAD_KINDS)
+    s.set_rule(root, "reach_moon", kinds=MOON_KINDS)
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
     keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
     keep_canon(s)
@@ -520,6 +524,7 @@ PLACES = [
     {"entity": "The Dry Camp", "at": [2500, -3300, -4], "radius": 90, "note": "a hollow in the south dunes behind a rib of black rock"},
     {"entity": "The house's tank", "at": [2480, -3310, -4], "radius": 1.5},
     {"entity": "The Crawler's Lee", "at": [96, 1800, 0], "radius": 10, "note": "the shade of a dead hauler beside the Salt Road"},
+    {"entity": "The Old Salt Works", "at": [-300, 5600, -2], "radius": 120, "note": "brine pans west of the road, past the Landing"},
     {"entity": "The Low Well", "at": [3950, -250, -6], "radius": 40, "floor": -30,
      "note": "a stone well-head in a hollow at the ridge's south foot, dry and poisoned"},
     {"entity": "The Deep", "at": [3000, -500, -60], "footprint": [[1500, -2500], [4500, -2500], [4500, 1500], [1500, 1500]],
@@ -547,6 +552,7 @@ ROUTES = [
     {"a": "Red Ridge", "b": "The Deepwell", "route": [[4100, 1050, 0], [4150, 1000, -25]]},
     {"a": "The Bone Field", "b": "The Dry Camp", "route": [[2600, -2100], [2550, -2900], [2500, -3300, -4]]},
     {"a": "The Salt Road", "b": "The Crawler's Lee", "route": [[80, 1800], [96, 1800, 0]]},
+    {"a": "The Salt Road", "b": "The Old Salt Works", "route": [[60, 5600], [-300, 5600, -2]]},
     {"a": "The Glass Flats", "b": "The Low Well", "route": [[2800, 1000], [3600, 100], [3950, -250, -6]]},
     {"a": "Red Ridge", "b": "The Low Well", "route": [[4050, 100, 0], [3950, -250, -6]]},
 ]
@@ -811,6 +817,53 @@ CAIRN = {"portable": False, "description": "Three blocks of salt stacked at the 
                                            "chalk ring. Carriers leave these where they leave something."}
 
 
+# The Old Salt Works (scripts/reach_moon.py): five drifters up the road past the Landing who sell their arms. Paid by
+# the Hold (a shard of glass or a skin with water in it) a drifter goes to the wall and counts at the moon; bought by
+# Dreyer he goes too, and counts against it. Guild pitch at the Landing mends the cistern once the wedge is out.
+SALT_WORKS = ("Brine pans gone to crust west of the road, a collapsed boiling shed, and a seep the drifters strain "
+              "through cloth into a stone trough. Men who missed the last convoy sit in the shed's shade and wait for "
+              "someone to pay them for something.")
+SEEP = {"portable": False, "water_source": True,
+        "description": "A brackish seep strained through cloth into a stone trough. It tastes of salt and keeps you alive."}
+DRIFTER = {"body": 3, "wits": 2, "will": 2, "skills": {"blade": 1, "survival": 1}, "vigor": 6, "max_vigor": 6,
+           "drifter": True, "secret": ["dialog", "turncoat", "bought_by", "word_left"]}
+DRIFTER_WORK = {"work|hire|pay|wall|sign|fight": "'A shard of glass or a skin with water in it, and I go where you send "
+                                                 "me. I do not ask whose wall.'",
+                "dreyer|house|riders": "'Riders in the south, they say. Riders pay too.'",
+                "hold|varrick|reeve|gate": "'The Hold wants twenty and has nine. A man could eat there.'"}
+DRIFTERS = [
+    ("Cass the Salter", "A woman with salt-cracked hands who boiled brine here when the works still ran. Steady.",
+     "Cass looks up from the trough. 'Pay first. Then I listen.'"),
+    ("Joss", "A big quiet man with a Guild brand on his forearm and no Guild coat.",
+     "Joss says nothing and looks at your water."),
+    ("Merrow", "Young, quick, too thin, a crawler mechanic's rag still tucked in his belt.",
+     "Merrow grins. 'You hiring? I can fix anything that moves.'"),
+    ("Lark", "Older than she looks, a short bow across her back with no string on it.",
+     "Lark watches the road, not you. 'String costs. Wall costs more.'"),
+    ("Dunmore", "A road-worn man who flinches at loud noise and was a soldier once, somewhere.",
+     "Dunmore nods without looking up. 'I have stood on walls. They fall.'"),
+]
+PITCH = {"portable": True, "description": "A clay pot of Guild crawler pitch, black and sticky, for sealing tanks."}
+
+
+def keep_salt_works(s, names):
+    """The Old Salt Works and its five drifters off the Salt Road, and two pots of Guild pitch at the Landing.
+    Each made once, by name; a drifter already gone to the wall stays where he went."""
+    if "The Old Salt Works" not in names and "The Salt Road" in names:
+        works = s.spawn("place", s.summary()["root"], "The Old Salt Works", state={"description": SALT_WORKS, "open": True})["id"]
+        names["The Old Salt Works"] = works
+        s.connect(names["The Salt Road"], works)
+        s.spawn("thing", works, "The salt seep", state=SEEP)
+        for name, look, line in DRIFTERS:
+            s.spawn("person", works, name, state={**DRIFTER, "description": look, "default_line": line,
+                                                   "dialog": dict(DRIFTER_WORK), "post": works, "water": 10, "max_water": 10})
+        story = s.find(type="story", limit=1)[0]["id"]
+        s.patch(story, {"salt_works": works})
+    if "Pot of Guild pitch" not in names and "The Carriers' Landing" in names:
+        for _ in range(2):
+            s.spawn("thing", names["The Carriers' Landing"], "Pot of Guild pitch", state=dict(PITCH))
+
+
 def keep_finds(s, names):
     """The hidden finds, the cairn on the Salt Road that marks one, the hint on each place, and the camp's stores (the
     medicine chest with four pouches of the house's salve, Sallow's pouch for the hurt). Checks before every write."""
@@ -879,6 +932,7 @@ def keep_canon(s):
     if rack and s.world.get(rack)["state"].get("holds") is None:
         s.patch(rack, RACK)
     keep_finds(s, {e["name"]: e["id"] for e in s.find(limit=1000)})
+    keep_salt_works(s, {e["name"]: e["id"] for e in s.find(limit=1000)})
     if st.get("garrison"):
         return
     hold, ruhl = st["hold"], st["ruhl"]
