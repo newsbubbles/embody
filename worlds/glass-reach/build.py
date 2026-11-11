@@ -1027,9 +1027,15 @@ def keep_finds(s, names):
                 **f["state"], "hidden": True, "find_dc": f["dc"], "find_skills": f["skills"], "find_text": f["found"]})["id"]
         on = names.get(f["hint_on"])
         if on and f["hint"]:
+            # the hint says something is still there to find: it goes once the thing is found (scripts/reach_finds.py)
+            found = s.world.get(names[f["name"]])["state"]
+            if found.get("find_hint") != f["hint"]:
+                s.patch(names[f["name"]], {"find_hint": f["hint"], "hint_on": on})
             d = s.world.get(on)["state"].get("description") or ""
-            if f["hint"] not in d:
+            if found.get("hidden") and f["hint"] not in d:
                 s.patch(on, {"description": (d + " " + f["hint"]).strip()})
+            elif not found.get("hidden") and f["hint"] in d:
+                s.patch(on, {"description": " ".join(d.replace(f["hint"], "").split())})
     camp = names.get("The Dry Camp")
     if camp and "The house's medicine chest" not in names:
         chest = s.spawn("thing", camp, "The house's medicine chest", state=MEDICINE_CHEST)["id"]

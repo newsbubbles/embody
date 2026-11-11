@@ -741,11 +741,12 @@ def test_hidden_things_turn_up_for_the_right_look_and_the_place_says_where_to_lo
     assert "Hollis's count" not in seen()
     r = ash.act("check", params={"skill": "search", "dc": 14})
     assert any("careful hand" in t for t in scenes(r["events"])) and "Hollis's count" in seen()
+    assert "finger proud" not in gm.inspect("The Gate Yard")["state"]["description"]  # found, the hint goes
     ash.act("take", "Hollis's count")
     assert "Hollis's count" in {c["name"] for c in gm.inspect("Ash")["contents"]}
-    load_world(gm, "glass-reach", upgrade=True)  # a reboot makes no second one and no second hint
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot makes no second one and does not put the hint back
     assert len([e for e in gm.find(name="Hollis's count") if e["name"] == "Hollis's count"]) == 1
-    assert gm.inspect("The Gate Yard")["state"]["description"].count("finger proud") == 1
+    assert "finger proud" not in gm.inspect("The Gate Yard")["state"]["description"]
 
 
 def test_the_dry_camp_never_runs_dry_and_keeps_the_houses_salve():
@@ -855,8 +856,12 @@ def test_pitch_mends_the_cistern_once_the_wedge_is_out_and_the_mended_cistern_co
     gm.move(pot, "Bram")
     r = me.act("check", params={"skill": "lore", "dc": 13})
     assert any("will not take" in t for t in scenes(r["events"])) and not gm.inspect("Story")["state"].get("cistern_mended")
+    hint = "something catches the light that is not stone"
     me.act("check", params={"skill": "search", "dc": 15})
+    assert hint not in gm.inspect("The cistern")["state"]["description"]  # found, the glint is gone from the crack
     me.act("take", "Bronze wedge")
+    load_world(gm, "glass-reach", upgrade=True)  # and a reboot does not put it back
+    assert hint not in gm.inspect("The cistern")["state"]["description"]
     r = me.act("check", params={"skill": "lore", "dc": 13})
     assert any("wants the night to set" in t for t in scenes(r["events"])) and not gm.inspect("Story")["state"].get("cistern_mended")
     to_next(gm, "pitch_sets")
