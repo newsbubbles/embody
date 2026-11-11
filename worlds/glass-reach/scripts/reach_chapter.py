@@ -1,9 +1,9 @@
 # Chapter two: the moon turns. It begins at the first dawn after chapter one is done and both a Dreyer newcomer and a
-# Guild newcomer are in the world (a template body is only ever made by someone joining); the dawn crawler brings the news, and the moon turns at nightfall of the
-# third day. Until then the truce can strain and break, Hollis's letter can reach Taan, Wick's note can reach Hollis,
+# Guild newcomer are in the world (a template body is only ever made by someone joining), or when the host schedules
+# `chapter_two_begins`; the crawler brings the news, and the moon turns twelve days later (three real days at 4x). Until then the truce can strain and break, Hollis's letter can reach Taan, Wick's note can reach Hollis,
 # and the Thresher can die. When the moon turns the world reckons from facts, not from a stage: the truce, the men on
 # the Hold's wall, the Hold's water, and where Hollis is.
-MOON_AFTER = 226800  # from that dawn to nightfall of the third day: two days and fifteen hours of world time
+MOON_AFTER = 1036800  # twelve world days: three real days at the hosted rate, time for the Reach to fill and choose
 WALL = 9  # men on their feet in the Hold and the yard that the riders count as a held wall
 DRY = 4  # draws in the Keth jars and the ration cask together, below which the Hold is called thirsty
 
@@ -27,19 +27,19 @@ def begin(ctx, story):
     ctx.patch(ctx.root(), {"story": "chapter two: the moon turns", "chapter": 2})
     ctx.schedule(MOON_AFTER, "moon_turns", target=ctx.root())
     scene(ctx, st.landing, "The dawn crawler comes in with its dust and its driver talking before the engine stops. Riders on the "
-                           "south road, three days out, under a pennant with a well and a bar across it. Dreyer. 'And the "
+                           "south road, twelve days out, under a pennant with a well and a bar across it. Dreyer. 'And the "
                            "convoy goes south at the moon's turn, same as the tally says. Whoever wants carrying had better "
                            "say so before.'")
     scene(ctx, st.hold, "The crawler's driver says it twice at the gate, so nobody can say they did not hear: Dreyer riders on "
-                        "the south road. The moon turns in three nights.")
+                        "the south road. The moon turns in twelve nights.")
     scene(ctx, st.deepwell, "Word comes down the broken step with the morning: riders under Dreyer's pennant in the south dunes. "
                             "The cups on their cords go still while the camp listens.")
     scene(ctx, st.dry_camp, "A rider comes in off the south road at first light and kneels to Halvard Dreyer. The house's riders "
-                            "are three nights out. The moon turns, and they come up.")
+                            "are twelve nights out. The moon turns, and they come up.")
     notice = by_name(ctx, "Notice by the cistern")
     if notice is not None:
         ctx.patch(notice, {"text": "BY ORDER OF THE REEVE. Dreyer riders are on the south road and will be at the Reach when "
-                                   "the moon turns, in three nights. Every man to the wall at the moon. Water is drawn by "
+                                   "the moon turns, in twelve nights. Every man to the wall at the moon. Water is drawn by "
                                    "the captain's count. The truce with the Keth holds: no man of the Hold digs glass or "
                                    "draws steel on a Keth. Anyone who knows Dreyer's business in the Reach brings it to the "
                                    "reeve."})
@@ -138,6 +138,12 @@ def on(ctx, event):
     st = story.state
     k = event.kind
     p = event.payload
+    if k == "chapter_two_begins":
+        # the host's word: begin now, whoever has come in so far
+        if not st.chapter and not st.reeve_dead:
+            newcomers(ctx, story)
+            begin(ctx, story_of(ctx))
+        return
     if k == "dawn":
         if st.chapter or not st.done or st.reeve_dead:
             return

@@ -670,10 +670,10 @@ def test_chapter_two_waits_for_a_dreyer_man_and_a_carrier_then_starts_at_dawn():
     to_next(gm, "dawn")
     assert story()["chapter"] == 2 and gm.inspect(gm.summary()["root"])["state"]["story"].startswith("chapter two")
     moon = {x["kind"]: x for x in gm.timers()}["moon_turns"]
-    assert moon["in"] == pytest.approx(226800 - 1, abs=5)
+    assert moon["in"] == pytest.approx(12 * 86400 - 1, abs=5)
     assert "Dreyer riders" in gm.inspect("Notice by the cistern")["state"]["text"]
     texts = scenes(gm.history(kinds=["scene"], limit=40, newest=True))
-    assert any("three days out" in x for x in texts) and any("Halvard Dreyer" in x for x in texts)
+    assert any("twelve days out" in x for x in texts) and any("Halvard Dreyer" in x for x in texts)
 
 
 def test_the_moon_turns_on_a_held_wall_or_a_broken_truce():
@@ -760,3 +760,19 @@ def test_the_dry_camp_never_runs_dry_and_keeps_the_houses_salve():
     lines = said(ash.act("talk", "Mother Sallow", {"about": "I am hurt"}), me)
     assert any("next one" in x for x in lines)
     assert [c["name"] for c in gm.inspect("Ash")["contents"]].count("Pouch of house salve") == 2
+
+
+def test_the_host_can_begin_chapter_two_at_once_and_the_moon_is_twelve_days_out():
+    eng, gm = hosted()
+    newcomer(eng, gm, "dreyer", "Ash")  # no carrier yet: the dawn alone would wait
+    root = gm.summary()["root"]
+    gm.schedule(1, "chapter_two_begins", entity=root)
+    gm.clock(step=2)
+    st = gm.inspect("Story")["state"]
+    assert st["chapter"] == 2 and st["dreyer_came"] and not st.get("guild_came")
+    moon = {x["kind"]: x for x in gm.timers()}["moon_turns"]
+    assert 12 * 86400 - 10 < moon["in"] <= 12 * 86400
+    assert "twelve nights" in gm.inspect("Notice by the cistern")["state"]["text"]
+    gm.schedule(1, "chapter_two_begins", entity=root)  # a second word does not start it twice
+    gm.clock(step=2)
+    assert len([x for x in gm.timers() if x["kind"] == "moon_turns"]) == 1

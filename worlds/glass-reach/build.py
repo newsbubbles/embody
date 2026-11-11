@@ -229,7 +229,7 @@ HOSTED = {"rate": 4, "claim_lapse": 3600,
 
 ROUTINE_KINDS = ["keth_run", "crawler"]
 # Chapter two (scripts/reach_chapter.py): the dawn that starts it, what strains the truce, the moon.
-CHAPTER_KINDS = ["dawn", "harvested", "downed", "killed", "given", "moon_turns"]
+CHAPTER_KINDS = ["dawn", "harvested", "downed", "killed", "given", "moon_turns", "chapter_two_begins"]
 # What is hidden until someone looks (scripts/reach_finds.py) and what the road does to a newcomer (scripts/reach_road.py).
 FIND_KINDS = ["checked"]
 ROAD_KINDS = ["arrived", "squall", "squall_passes"]
