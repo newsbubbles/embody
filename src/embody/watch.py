@@ -23,6 +23,7 @@ import ast
 import json
 import os
 import sqlite3
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,15 @@ def _loads(v):
         return json.loads(v)
     except (TypeError, ValueError):
         return v
+
+
+def _has_table(c, name: str) -> bool:
+    return c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
+
+
+def _col(row, key: str):
+    """A column an older database may not have yet (the store adds them on open)."""
+    return row[key] if key in row.keys() else None
 
 
 def find_db(root: Path = Path(".")) -> Path:
@@ -165,8 +175,11 @@ class Reader:
             hyper = [{"id": r["id"], "relation": r["relation"], "participants": _loads(r["participants"]),
                       "data": _loads(r["data"])}
                      for r in c.execute("SELECT * FROM hyperedge WHERE world_id=?", (world_id,))]
+            labels = {r["id"]: r["label"] for r in c.execute("SELECT id, label FROM grants WHERE world_id=?", (world_id,))}                 if _has_table(c, "grants") else {}
             prin = [{"id": r["id"], "kind": r["kind"], "name": r["name"], "entity": r["entity_id"],
-                     "capabilities": _loads(r["capabilities"]), "cursor": r["cursor_seq"]}
+                     "capabilities": _loads(r["capabilities"]), "cursor": r["cursor_seq"],
+                     "role": _col(r, "role"), "label": labels.get(_col(r, "grant_id")) or None,
+                     "last_seen": _col(r, "last_seen"), "acted_t": _col(r, "acted_t")}
                     for r in c.execute("SELECT * FROM principal WHERE world_id=?", (world_id,))]
             sched = [{"id": r["id"], "t": r["t"], "kind": r["kind"], "entity": r["entity_id"],
                       "payload": _loads(r["payload"]), "every": r["every"]}
@@ -182,7 +195,12 @@ class Reader:
         return {"ok": True, "world": {"id": w["id"], "name": w["name"], "root": w["root_id"], "t": w["t"],
                                       "running": bool(w["clock_running"]), "rate": w["clock_rate"],
                                       "turn": meta.get("turn_seconds"), "forked_from": meta.get("forked_from"),
-                                      "policy": None, "folder": self.folder(w["id"])},
+                                      "policy": None, "folder": self.folder(w["id"]),
+                                      # what the page needs to read seats and the day: when a seat counts as idle (world
+                                      # seconds), when it is released (real seconds), how long a day is, and now (real)
+                                      "idle_after": float(meta.get("idle_after", 900.0)),
+                                      "claim_lapse": float(meta.get("claim_lapse", 900.0)),
+                                      "day_seconds": float(meta.get("day_seconds") or 86400), "now": time.time()},
                 "entities": ents, "edges": edges, "hyperedges": hyper, "principals": prin, "scheduled": sched,
                 "schemas": schemas, "max_seq": maxseq, "events": list(reversed(evs))}
 

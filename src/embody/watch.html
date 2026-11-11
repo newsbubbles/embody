@@ -51,6 +51,13 @@ aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; tex
 .lbl { fill:var(--dim); font-size:10px; }
 .tag { fill:var(--me); font-size:10px; font-weight:600; }
 .badge { fill:var(--hot); font-size:10px; }
+.node text.stat { fill:#c9b98f; font-size:10px; }
+.node text.stat.bad { fill:var(--hot); }
+.node.asleep rect { stroke-dasharray:2 3; }
+.node.down rect, .node.dead rect { stroke:var(--hot); }
+.tag.away { fill:var(--dim); }
+.ev .line { color:var(--ink); white-space:pre-wrap; word-break:break-word; }
+#timers { color:var(--dim); }
 </style>
 </head>
 <body>
@@ -61,7 +68,7 @@ aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; tex
   <span class="dim" id="folder" title="the world's folder in the workspace"></span>
   <span><span id="dot" class="dot"></span><span id="clock"></span></span>
   <span class="dim" id="counts"></span>
-  <span class="dim" id="sched"></span>
+  <span id="timers" title="what the world clock has coming"></span>
   <span class="dim" id="err"></span>
   <span id="auth" hidden><input id="tok" type="password" placeholder="your invite token" size="30" autocomplete="off"> <button id="tokgo">watch</button></span>
   <span class="dim" id="where" title="database · workspace"></span>
@@ -76,7 +83,7 @@ aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; tex
   <div id="detail">click a box</div>
 </aside>
 <script>
-const BOX_W = 150, BOX_H = 44, GAP_X = 14, GAP_Y = 84, PAD = 24, TOP = 70;
+const BOX_W = 170, BOX_H = 58, GAP_X = 14, GAP_Y = 84, PAD = 24, TOP = 70;
 let lastSeq = -1, lastVersions = "", pinned = null, data = null, seenSeq = 0;
 // Standalone (tools/watch.py) the page is the root of its own server and needs no token. Hosted, the MCP server
 // serves it at /watch and its data answers only to a grant's bearer token, kept in this tab once given.
@@ -150,6 +157,51 @@ function short(v, n = 90) { const s = typeof v === "string" ? v : JSON.stringify
 function nameOf(id) { if (!data || !id) return id || ""; const e = data.entities.find(x => x.id === id); return e ? (e.name || e.type) + " (" + e.id + ")" : id; }
 function plain(id) { return nameOf(id).split(" (")[0]; }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+let kidsBy = {};
+function kidsOf(id) { return kidsBy[id] || []; }
+function num(v) { return v === undefined || v === null ? null : Number(v); }
+// a stack is that many of itself: Emberglass ×60
+function label(e) { const c = num((e.state || {}).count); return (e.name || e.type) + (c !== null ? " ×" + c : ""); }
+function labelOf(id) { const e = data && data.entities.find(x => x.id === id); return e ? label(e) : plain(id); }
+// what keeps it shut: its own `locked`, or an attached lock child that is locked
+function lockOf(e) { const st = e.state || {}; if (st.locked) return e; return kidsOf(e.id).find(k => k.state && k.state.attached && k.state.locked) || null; }
+function bulkOf(e) { const st = e.state || {}; const each = st.bulk !== undefined && st.bulk !== null ? Number(st.bulk) : (st.capacity !== undefined && st.capacity !== null ? 2 : 1); return each * (num(st.count) ?? 1); }
+function hm(sec) { sec = Math.max(0, sec); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? h + "h" + (m ? String(m).padStart(2, "0") : "") : m + "m"; }
+function ago(sec) { return sec < 90 ? Math.round(sec) + "s" : sec < 5400 ? Math.round(sec / 60) + "m" : (sec / 3600).toFixed(1) + "h"; }
+// the box's status line: a body's water and vigor and what is wrong with it, a stack, a lock, a well's level,
+// a hidden place and who knows it, a works' stage and labour
+function status(e, k) {
+  const st = e.state || {}, out = [], bad = [];
+  if (st.water !== undefined && st.water !== null && k === "creature") {
+    out.push("w " + st.water + "/" + (st.max_water ?? 10), "v " + (st.vigor ?? "?") + "/" + (st.max_vigor ?? 6));
+  } else if (st.hp !== undefined) out.push("hp " + st.hp);
+  ["dead", "down", "asleep", "wounded", "thirsty"].forEach(f => { if (st[f]) bad.push(f); });
+  if (st.left !== undefined && st.left !== null && (st.capacity !== undefined || st.water_source || st.max_left !== undefined))
+    out.push("left " + st.left + ((st.capacity ?? st.max_left) !== undefined ? "/" + (st.capacity ?? st.max_left) : ""));
+  else if (st.water_source) out.push("water, endless");
+  const lk = lockOf(e);
+  if (lk) bad.push("🔒 locked");
+  else if (st.broken && (e.type === "lock" || st.attached)) bad.push("lock broken");
+  else if (kidsOf(e.id).some(c => c.state && c.state.attached && c.state.broken)) out.push("lock broken");
+  if (st.hidden) out.push("hidden" + (st.known_to ? " · " + st.known_to : "") + (st.find_dc ? " · dc " + st.find_dc : ""));
+  if (Array.isArray(st.stages)) {
+    const i = num(st.stage);
+    if (i === null) out.push("plan · " + st.stages.length + " stages");
+    else {
+      const sg = st.stages[i];
+      out.push(sg ? "stage " + (i + 1) + "/" + st.stages.length + " " + (sg.name || "") + " · " + (Math.round((num(st.labour) ?? 0) * 10) / 10) + "/" + (sg.labour ?? "?") + "h" : "built");
+    }
+  } else if (st.stage !== undefined && st.stage !== null) out.push("stage " + st.stage);
+  if (st.lit) out.push("lit"); if (st.fog) out.push("fog");
+  return { text: bad.concat(out).join(" · "), bad: bad.length > 0, flags: ["dead", "down", "asleep"].filter(f => st[f]) };
+}
+// a seat in a word: whose it is, the role, and whether it is in use
+function seatTag(p, w) {
+  const who = p.label || p.name || p.id;
+  const idle = p.acted_t === null || p.acted_t === undefined || w.t - p.acted_t > w.idle_after;
+  const seen = p.last_seen ? " · seen " + ago(w.now - p.last_seen) + " ago" : "";
+  return { text: who + (p.role ? " · " + p.role : "") + (idle ? " · away" : " · in play") + seen, away: idle };
+}
 
 function layout(d) {
   const byParent = {};
@@ -184,6 +236,7 @@ function render(d, changed) {
   const firstDraw = !cam.w;
   cam.w = totalW; cam.h = totalH;
   const me = {}; d.principals.forEach(p => { if (p.entity) me[p.entity] = p; });
+  kidsBy = {}; d.entities.forEach(e => { if (e.parent) (kidsBy[e.parent] ||= []).push(e); });
   let out = "";
   d.entities.forEach(e => {
     if (e.parent && pos[e.parent]) {
@@ -213,16 +266,13 @@ function render(d, changed) {
   d.entities.forEach(e => {
     const p = pos[e.id]; if (!p) return;
     const k = kindOf(e, d.schemas), st = e.state || {};
-    const cls = ["node", k, st.hidden ? "hidden" : "", me[e.id] ? "me" : "", changed.has(e.id) ? "changed" : ""].join(" ");
-    const bits = [e.type, e.id];
-    if (st.hp !== undefined) bits.push("hp " + st.hp);
-    if (st.lit) bits.push("lit");
-    if (st.fog) bits.push("fog");
-    if (st.stage) bits.push("stage " + st.stage);
-    out += `<g class="${cls}" data-id="${e.id}" transform="translate(${p.x},${p.y})"><rect width="${BOX_W}" height="${BOX_H}"/>`;
-    out += `<text x="10" y="18">${esc(short(e.name || e.type, 20))}</text><text class="sub" x="10" y="34">${esc(short(bits.join(" · "), 26))}</text>`;
-    if (me[e.id]) out += `<text class="tag" x="${BOX_W - 6}" y="-5" text-anchor="end">${esc(me[e.id].id)} ◀</text>`;
-    if (st.rules && st.rules.length) out += `<text class="badge" x="${BOX_W - 6}" y="34" text-anchor="end">⚖ ${st.rules.length}</text>`;
+    const s = status(e, k);
+    const cls = ["node", k, st.hidden ? "hidden" : "", me[e.id] ? "me" : "", changed.has(e.id) ? "changed" : ""].concat(s.flags).join(" ");
+    out += `<g class="${cls}" data-id="${e.id}" transform="translate(${p.x},${p.y})"><title>${esc(label(e) + (s.text ? "\n" + s.text : ""))}</title><rect width="${BOX_W}" height="${BOX_H}"/>`;
+    out += `<text x="10" y="18">${esc(short(label(e), 23))}</text><text class="sub" x="10" y="33">${esc(short(e.type + " · " + e.id, 30))}</text>`;
+    if (s.text) out += `<text class="stat${s.bad ? " bad" : ""}" x="10" y="48">${esc(short(s.text, 30))}</text>`;
+    if (me[e.id]) { const t = seatTag(me[e.id], d.world); out += `<text class="tag${t.away ? " away" : ""}" x="${BOX_W - 6}" y="-5" text-anchor="end">${esc(short(t.text, 40))} ◀</text>`; }
+    if (st.rules && st.rules.length) out += `<text class="badge" x="${BOX_W - 6}" y="33" text-anchor="end">⚖ ${st.rules.length}</text>`;
     out += `</g>`;
   });
   d.hyperedges.forEach((h, i) => {
@@ -246,22 +296,68 @@ function showDetail() {
   if (!data || !pinned) return;
   const e = data.entities.find(x => x.id === pinned);
   if (!e) { $("detail").textContent = pinned + " no longer exists"; return; }
-  const kids = data.entities.filter(x => x.parent === e.id).map(x => x.name || x.type);
+  const kidRows = data.entities.filter(x => x.parent === e.id), st = e.state || {};
+  const kids = kidRows.map(label);
   const rel = data.edges.filter(x => x.source === e.id || x.target === e.id).map(x => plain(x.source) + " -" + x.relation + "-> " + plain(x.target));
-  let txt = `<b>${esc(e.name || e.type)}</b> ${esc(e.id)} : ${esc(e.type)}  v${e.version}\n`;
+  let txt = `<b>${esc(label(e))}</b> ${esc(e.id)} : ${esc(e.type)}  v${e.version}\n`;
+  const s = status(e, kindOf(e, data.schemas));
+  if (s.text) txt += esc(s.text) + "\n";
   txt += `in: ${esc(e.parent ? nameOf(e.parent) : "(root)")}\nholds: ${esc(kids.join(", ") || "nothing")}\n`;
+  if (st.carry !== undefined && st.carry !== null) txt += `carries: ${Math.round(kidRows.reduce((a, c) => a + bulkOf(c), 0) * 100) / 100} of ${st.carry}\n`;
+  const lk = e.type === "lock" ? e : (lockOf(e) || kidRows.find(c => c.type === "lock"));
+  if (lk) { const ls = lk.state || {}; txt += `lock: ${esc(lk.name)}${ls.locked ? " · locked" : " · open"}${ls.broken ? " · broken" : ""}${ls.key ? " · key " + esc(labelOf(ls.key)) : ""}${ls.code ? " · code set" : ""}${ls.pick_dc ? " · pick dc " + ls.pick_dc : ""}${ls.break_dc ? " · break dc " + ls.break_dc : ""}${ls.picking ? " · being picked by " + esc(plain(ls.picking.who)) : ""}\n`; }
+  const seat = data.principals.filter(p => p.entity === e.id);
+  seat.forEach(p => { txt += "seat: " + esc(seatTag(p, data.world).text) + "\n"; });
   if (rel.length) txt += "edges: " + esc(rel.join("\n       ")) + "\n";
   txt += "state: " + esc(JSON.stringify(e.state, null, 1));
   $("detail").innerHTML = txt;
+}
+
+// one readable line for the events people care about; the raw payload stays in the tooltip
+function line(ev) {
+  const p = ev.payload || {}, a = ev.actor ? plain(ev.actor) : "", t = ev.target ? plain(ev.target) : "";
+  const n = p.count !== undefined && p.count !== null ? p.count + " " : "";
+  const by = p.by ? plain(p.by) : a;
+  const bare = id => labelOf(id).replace(/ ×\d+(\.\d+)?$/, "");
+  switch (ev.kind) {
+    case "taken": return `${by} took ${n}${bare(p.item || ev.target)}` + (p.source && p.source !== p.by ? " from " + plain(p.source) : "");
+    case "dropped": return `${by} dropped ${n}${bare(p.item || ev.target)}`;
+    case "given": return `${by} gave ${n}${bare(p.item)} to ${t}`;
+    case "put": return `${by} put ${n}${bare(p.item)} in ${t}`;
+    case "burned": return `${by} burned ${p.count > 1 ? p.count + " " : ""}${p.name || "something"}`;
+    case "renamed": return `${p.old} is now ${p.new}`;
+    case "slept": return `${t} fell asleep`;
+    case "woke": return `${t} woke` + (p.why ? " (" + p.why + (p.by && p.by !== ev.target ? ", " + plain(p.by) : "") + ")" : "");
+    case "unlocked": case "locked": return `${by} ${ev.kind} ${p.lock ? plain(p.lock) : t}`;
+    case "lock_picked": return `${by} picked ${plain(p.lock)} (${p.total} vs ${p.dc})`;
+    case "pick_failed": return `${by} failed to pick ${plain(p.lock)} (${p.total} vs ${p.dc}), heard`;
+    case "lock_broken": return `${by} broke ${plain(p.lock)} open`;
+    case "break_failed": return `${by} hammered at ${plain(p.lock)}, it held`;
+    case "searched": return `${by} searched ${t}: ${(p.found || []).length} taken` + ((p.left || []).length ? `, ${p.left.length} left` : "");
+    case "lifted": return `${by} lifted ${(p.found || []).length} things off ${plain(p.sleeper)}, unseen`;
+    case "caught": return `${by} was caught reaching for ${t}'s things`;
+    case "merged": return `${t} gathers ${p.count} more (${p.total})`;
+    case "hit": return `${by} hit ${t} for ${p.dmg}${p.weapon ? " with " + p.weapon : ""} (${p.attack} vs ${p.defence})${p.asleep ? ", asleep" : ""}`;
+    case "downed": return `${t} went down` + (p.by ? " (" + plain(p.by) + ")" : "");
+    case "wounded": return `${t} is wounded` + (p.by ? " (" + plain(p.by) + ")" : "");
+    case "rose": return `${t} is back on their feet`;
+    case "missed": return `${by} missed ${t} (${p.attack} vs ${p.defence})`;
+    case "say": return `${a}${p.to ? " to " + plain(p.to) : ""}: "${short(p.text || "", 160)}"`;
+    case "arrived": return `${plain(p.who || ev.actor)} arrived at ${plain(p.place || ev.target)}${p.quiet ? " (quiet)" : ""}`;
+  }
+  return null;
 }
 
 function renderEvents(d) {
   let html = "";
   d.events.slice().reverse().forEach(ev => {
     const who = [ev.actor ? plain(ev.actor) : "", ev.target ? "→ " + plain(ev.target) : ""].join(" ").trim();
-    const pl = ev.payload && Object.keys(ev.payload).length ? short(ev.payload, 140) : "";
-    html += `<div class="ev ${ev.seq > seenSeq ? "new" : ""}"><span class="t">${ev.t.toFixed(1)}</span><span><span class="k">${esc(ev.kind)}</span> <span class="who">${esc(who)}</span> <span class="dim">#${ev.seq} r${ev.reach}</span>`;
-    if (pl) html += `<div class="pl">${esc(pl)}</div>`;
+    const raw = ev.payload && Object.keys(ev.payload).length ? JSON.stringify(ev.payload) : "";
+    let ln = null; try { ln = line(ev); } catch (e) { ln = null; }
+    const pl = raw ? short(ev.payload, 140) : "";
+    html += `<div class="ev ${ev.seq > seenSeq ? "new" : ""}" title="${esc(raw)}"><span class="t">${ev.t.toFixed(1)}</span><span><span class="k">${esc(ev.kind)}</span> <span class="who">${esc(ln ? "" : who)}</span> <span class="dim">#${ev.seq} r${ev.reach}</span>`;
+    if (ln) html += `<div class="line">${esc(ln)}</div>`;
+    else if (pl) html += `<div class="pl">${esc(pl)}</div>`;
     html += `</span></div>`;
   });
   $("events").innerHTML = html;
@@ -282,10 +378,22 @@ async function poll() {
     if ($("wsel").value !== w.id) $("wsel").value = w.id;
     $("fork").textContent = w.forked_from ? "forked from " + w.forked_from.world + " at t=" + Number(w.forked_from.t).toFixed(1) + " (seq " + w.forked_from.seq + ")" : "";
     $("folder").textContent = w.folder || "";
-    $("clock").textContent = "t=" + w.t.toFixed(1) + (w.running ? " running x" + w.rate : (" paused" + (w.turn ? " · turn " + w.turn + "s" : "")));
+    const day = w.day_seconds || 86400, root = d.entities.find(e => e.id === w.root), amb = (root && root.state && root.state.ambient) || {};
+    const tod = w.t % day, clockTxt = "day " + (Math.floor(w.t / day) + 1) + " · " + String(Math.floor(tod / 3600)).padStart(2, "0") + ":" + String(Math.floor(tod % 3600 / 60)).padStart(2, "0") + (amb.time_of_day ? " · " + amb.time_of_day : "");
+    $("clock").textContent = clockTxt + " · t=" + w.t.toFixed(0) + (w.running ? " · x" + w.rate : (" · paused" + (w.turn ? " · turn " + w.turn + "s" : "")));
     $("dot").className = "dot" + (w.running ? " run" : "");
     $("counts").textContent = d.entities.length + " entities · " + d.edges.length + " edges · " + d.max_seq + " events · " + d.principals.length + (d.principals.length === 1 ? " principal" : " principals");
-    $("sched").textContent = d.scheduled.length ? "next: " + d.scheduled.slice(0, 3).map(s => s.kind + "@" + s.t.toFixed(0)).join(", ") : "";
+    // timers by kind, soonest first: the story's (dusk, the moon, a muster), not the bodies' ticks
+    const next = {}; let ticks = 0;
+    d.scheduled.forEach(s => {
+      if (s.kind === "tick" || s.kind === "finish") { ticks++; return; }
+      const nm = (s.payload && (s.payload.name || s.payload.event || s.payload.script)) || "";
+      const key = s.kind + (nm && nm !== s.kind ? " " + nm : "");
+      if (!next[key] || s.t < next[key].t) next[key] = { t: s.t, every: s.every, n: (next[key] ? next[key].n : 0) + 1 }; else next[key].n++;
+    });
+    const tl = Object.entries(next).sort((a, b) => a[1].t - b[1].t);
+    $("timers").textContent = (tl.length ? "coming: " + tl.slice(0, 6).map(([k, v]) => k + " in " + hm(v.t - w.t) + (v.n > 1 ? " (" + v.n + ")" : "")).join(" · ") + (tl.length > 6 ? " · +" + (tl.length - 6) : "") : "") + (ticks ? " · " + ticks + " ticks" : "");
+    $("timers").title = tl.map(([k, v]) => k + " at t=" + v.t.toFixed(0) + (v.every ? " every " + hm(v.every) : "")).join("\n");
     if (d.max_seq !== lastSeq || versions !== lastVersions) {
       const changed = new Set(d.entities.filter(e => data && e.updated_seq > lastSeq).map(e => e.id));
       data = d; render(d, changed); renderEvents(d); showDetail();
