@@ -329,6 +329,8 @@ def define(s):
                         "follow": {"script": "follow", "doc": "Go where they go, until you stay", "targets": "creature", "scope": "here"},
                         "stay": {"script": "stay", "doc": "Stop following"},
                         "watch": {"script": "watch", "doc": "Look into the next place without stepping in: who and what is there now", "targets": "place", "scope": "exits", "duration": 5},
+                        "burn": {"script": "burn", "doc": "Burn a paper you hold or that lies here, at a fire: it is gone for good, and only those who read it know what it said",
+                                 "targets": "thing", "duration": 3},
                     },
                     listeners=[{"script": "leave_word", "fn": "keep", "kinds": ["word_left"]},
                                {"script": "person_on", "kinds": ["talked"], "unless_embodied": True},
@@ -481,9 +483,18 @@ def nail_notice(s, hold):
         "description": "A sheet nailed to the cistern's frame, the ink still wet, in a hand nobody in the Hold writes."})
 
 
+def names_of(s):
+    """Every name in the world to its id, and every burned thing's name to None. The keep functions make what is missing
+    by name; a thing burned is gone for good, so they must not make it again."""
+    names = {e["name"]: e["id"] for e in s.world.find(limit=None)}
+    for ev in s.world.store.query("event", "world_id=? AND kind='burned'", (s.world.id,)):
+        names.setdefault(ev["payload"].get("name"), None)
+    return names
+
+
 def upgrade(s):
     """Bring a world built from an older version of this file up to this one. Checks before every write."""
-    names = {e["name"]: e["id"] for e in s.world.find(limit=None)}
+    names = names_of(s)
     if "Notice by the cistern" not in names and "Scar Gate, the Hold" in names:
         nail_notice(s, names["Scar Gate, the Hold"])
     need = ["Reeve Ansel Varrick", "Sefa of the Keth", "Captain Ruhl", "Dram Hollis", "Ossa the Carrier", "Elder Taan", "Nico"]
@@ -1202,6 +1213,30 @@ def keep_host(s, names):
     s.patch(story, {"host_lore": True})
 
 
+# Burning (Nate 2026-11-11): a letter burned at a fire is gone from the world and lives on only in the memory of whoever
+# read it. Paper burns; the Guild's tally post and the Host's pewter flask do not. The Hold has a hearth and the Deepwell
+# its cookfire, so there is somewhere to burn a thing on both sides of the truce.
+NOT_PAPER = {"Tally post", "A Crown flask"}
+HEARTH_NAME = "The hearth"
+HEARTH = {"portable": False, "fire": True,
+          "description": "A deep stone hearth in the hall, banked low against the heat of the day. The reeve's men keep it in "
+                         "for the night cold and the cookpot."}
+
+
+def keep_burn(s, names):
+    """Every letter says whether it burns (paper does), a hearth that was always in the Hold, and the Deepwell's
+    cookfire burning. Checks before every write."""
+    for e in s.world.find(type="letter", limit=None):
+        if "burnable" not in s.world.get(e["id"])["state"]:
+            s.patch(e["id"], {"burnable": e["name"] not in NOT_PAPER})
+    hold = names.get("Scar Gate, the Hold")
+    if hold and HEARTH_NAME not in names:
+        s.introduce("thing", hold, HEARTH_NAME, how="always_there", state=dict(HEARTH), known_by={})
+    well = names.get("The Deepwell")
+    if well and not s.world.get(well)["state"].get("fire"):
+        s.patch(well, {"fire": True})
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -1240,12 +1275,13 @@ def keep_canon(s):
     rack = names.get("Rack of practice blades")
     if rack and s.world.get(rack)["state"].get("holds") is None:
         s.patch(rack, RACK)
-    keep_finds(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
-    keep_salt_works(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
-    keep_wardens(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
-    keep_lore(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
-    keep_works(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
-    keep_host(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
+    keep_finds(s, names_of(s))
+    keep_salt_works(s, names_of(s))
+    keep_wardens(s, names_of(s))
+    keep_lore(s, names_of(s))
+    keep_works(s, names_of(s))
+    keep_host(s, names_of(s))
+    keep_burn(s, names_of(s))
     keep_carry(s)
     if st.get("garrison"):
         return

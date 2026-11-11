@@ -1090,3 +1090,29 @@ def test_the_notice_by_the_cistern_was_the_hosts_and_a_flask_on_the_ridge_says_s
     assert len([e for e in gm.find(name="A Crown flask") if e["name"] == "A Crown flask"]) == 1
     notes = [n["text"] for n in gm.world.get(gm.inspect("Dram Hollis")["id"])["state"]["memory"]]
     assert len([n for n in notes if "to the Host" in n]) == 1
+
+
+def test_a_letter_burned_at_the_hearth_is_gone_and_only_its_readers_know_it():
+    eng, gm = hosted()
+    me = newcomer(eng, gm, "keth", "Tam")
+    gm.move("Tam", "Scar Gate, the Hold")
+    notice = gm.inspect("Notice by the cistern")["id"]
+    assert gm.inspect("The hearth")["state"]["fire"] and gm.inspect("Notice by the cistern")["state"]["burnable"]
+    me.act("read", notice)
+    me.act("burn", notice)
+    assert gm.world.get(notice) is None
+    kinds = lambda k: gm.world.store.count("event", "world_id=? AND kind=?", (gm.world.id, k))
+    assert kinds("burned") == 1 and kinds("read") >= 1  # the reading happened, and stays happened
+    assert gm.inspect("Tally post")["state"]["burnable"] is False  # a post in the ground, not paper
+    gm.move(gm.inspect("A Crown flask")["id"], "Tam")
+    with pytest.raises(Rejected, match="will not burn"):
+        me.act("burn", "A Crown flask")  # pewter
+    gm.move("Tam", "The Gate Yard")
+    gm.spawn("letter", "Tam", "A scrap", state={"text": "x", "burnable": True})
+    with pytest.raises(Rejected, match="no fire here"):
+        me.act("burn", "A scrap")
+    gm.move("Tam", "The Deepwell")
+    me.act("burn", "A scrap")
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot nails no second notice and builds no second hearth
+    assert len([e for e in gm.find(name="The hearth") if e["name"] == "The hearth"]) == 1
+    assert not [e for e in gm.find(name="Notice by the cistern") if e["name"] == "Notice by the cistern"]

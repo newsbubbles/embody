@@ -4,6 +4,19 @@ Ways the system surprised us in play: what we saw, why it happened, and what it 
 work (worlds, minds) and the engine work add here. A finding is something the design did not predict, good or bad; a
 plain bug goes in its fix's commit.
 
+## 2026-11-11: A reboot would have unburned the letter
+
+**Seen.** The first Reach test of `burn` burned the notice by the cistern at the Hold's hearth, rebooted the world, and
+found the notice nailed up again.
+
+**Why.** A world's build keeps itself whole by name: on every boot it makes whatever is missing (the notice, the books,
+the hidden finds), so an old world catches up with new content. Until burning, nothing in the world could be destroyed
+on purpose, so missing always meant "not made yet". Burning made missing mean "gone".
+
+**Taught.** A self-healing build and a world where things can end need the event log between them: the build now reads
+what was burned and leaves those names alone. Any new way to destroy something has to be added to that read, or a
+reboot quietly undoes it.
+
 ## 2026-11-11: Out-of-character talk has no channel
 
 **Seen.** Nate, playing the reeve, sent Aaron's player an out-of-character note about exploring the Reach together.
