@@ -240,3 +240,28 @@ def test_introduce_asks_how_and_what_the_room_saw():
     with pytest.raises(Rejected):
         gm.introduce("thing", "Cell", "Crate", how="always_there", known_by={"Nobody at all": "x"})
     assert not w.find(name="Crate")
+
+
+def test_introduce_after_is_news_now_and_an_arrival_later():
+    eng, w, i = engine_with_two_rooms()
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    gm.use("two-rooms")
+    r = gm.introduce("person", "Hall", "Mason", how="arrived", after=3600, scene="A mason walks in, dust to the knees.",
+                     known_by={"Guard": "A mason is sent for; he comes within the hour."},
+                     remembers=["I was sent for from the Landing."])
+    assert r["scheduled"] and not w.find(name="Mason")
+    assert "sent for" in w.get(i["Guard"])["state"]["memory"][-1]["text"]  # the news is known now
+    assert any(t["id"] == r["scheduled"] for t in gm.timers())
+    w.step(3600)
+    mason = w.find(name="Mason")[0]["id"]
+    assert w.get(mason)["state"]["provenance"]["how"] == "arrived"
+    assert any(e["target"] == mason for e in w.edges(i["Guard"], "knows", "out"))
+    scene = w.store.query("event", "world_id=? AND kind='scene'", (w.id,))[-1]
+    assert scene["payload"]["introduced"] == mason and i["Hall"] in scene["path"]
+    # an arrival can be called off before it lands, and something always there never comes later
+    r = gm.introduce("thing", "Hall", "Crate", how="appeared", after=60, scene="A crate.", known_by={})
+    gm.unschedule(r["scheduled"])
+    w.step(120)
+    assert not w.find(name="Crate")
+    with pytest.raises(Rejected):
+        gm.introduce("thing", "Hall", "Crate", how="always_there", after=60, known_by={})

@@ -482,14 +482,16 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @_wrap
     def introduce(type: str, parent: str, name: str, how: str, known_by: dict[str, str],
                   state: dict[str, Any] | None = None, scene: str | None = None, by: str | None = None,
-                  remembers: list[str] | None = None, pos: list[float] | None = None) -> dict[str, Any]:
+                  remembers: list[str] | None = None, pos: list[float] | None = None,
+                  after: float | None = None) -> dict[str, Any]:
         """(author) Bring something new into the world with a past, in one call; prefer it to spawn for anything a
         player or mind could meet. how: always_there (no sound; it was here all along), arrived, delivered (by=),
         built (by=) or appeared; every way but always_there needs the scene the room sees. known_by {entity: note}
         is who already knows it and what they know, written to their memory ({} = nobody). remembers: for a
-        person, what it knows itself."""
+        person, what it knows itself. after: world seconds until it arrives (sent for, on its way); known_by
+        learn of it now, the thing and its scene land then."""
         return s.introduce(type, parent, name, how, known_by, state=state, scene=scene, by=by, remembers=remembers,
-                           pos=pos)
+                           pos=pos, after=after)
 
     @tool()
     @_wrap

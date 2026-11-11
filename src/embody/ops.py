@@ -1970,11 +1970,15 @@ class Session:
 
     def introduce(self, type: str, parent: str, name: str, how: str, known_by: dict[str, str],
                   state: dict[str, Any] | None = None, scene: str | None = None, by: str | None = None,
-                  remembers: list[str] | None = None, pos: list[float] | None = None) -> dict[str, Any]:
+                  remembers: list[str] | None = None, pos: list[float] | None = None,
+                  after: float | None = None) -> dict[str, Any]:
         """Bring something new into the world the way the world would have it, in one call: where it is, how it
         came (INTRODUCE_HOW), who already knows it and what they know, and for a person what it knows itself.
         always_there arrives without a sound; every other way shows the room a scene. known_by {entity: note} writes
-        each note into that one's memory (and, for a person, a `knows` link); {} says nobody knows it."""
+        each note into that one's memory (and, for a person, a `knows` link); {} says nobody knows it.
+        after=N world seconds: announced now, arrives then. known_by learn it now (write the note as news: "a
+        mason comes on the crawler in three days"); the thing, its links and the scene land when the timer fires.
+        The timer is listed by timers() and unschedule cancels the arrival."""
         self._need(AUTHOR)
         w = self.world
         if how not in INTRODUCE_HOW:
@@ -1987,24 +1991,25 @@ class Session:
             raise Rejected(f"{how} by whom?", hint="by='<who brought or made it>'")
         if not isinstance(known_by, dict):
             raise Rejected("known_by is {entity: what they know of it}", hint="known_by={} if nobody knows it")
+        if after is not None and (how == "always_there" or float(after) <= 0):
+            raise Rejected("after= is for something on its way: a positive number of world seconds, and a way it comes"
+                           if how != "always_there" else "something always there cannot arrive later",
+                           hint="after=259200 for three days, with how='arrived' or 'delivered'")
+        w.schema(type)
         where = self._resolve(parent)
         knowers = {self._resolve(k): str(note) for k, note in known_by.items()}  # every name resolves before a write
         maker = self._resolve(by) if by else None
         self._record("introduce", type=type, parent=parent, name=name, how=how, known_by=known_by, state=state,
-                     scene=scene, by=by, remembers=remembers, pos=pos)
-        st = dict(state or {})
-        st["provenance"] = {"how": how, "by": maker, "t": w.t}
-        eid = w.spawn(type, where, name=name, state=st, pos=pos, actor=self._actor_or_none(),
-                      announce=how != "always_there")
-        person = w.is_a(type, "person")
+                     scene=scene, by=by, remembers=remembers, pos=pos, after=after)
         for k, note in knowers.items():
             w.remember(k, note, actor=k)
-            if person and k != eid:
-                w.link(k, eid, "knows", {"standing": 0, "note": note, "met_t": w.t, "count": 0})
-        for note in remembers or []:
-            w.remember(eid, str(note), actor=eid)
-        if scene:
-            w.emit("scene", target=where, reach=1, payload={"text": scene, "introduced": eid, "how": how})
+        spec = {"type": type, "parent": where, "name": name, "how": how, "by": maker, "state": state, "pos": pos,
+                "known_by": knowers, "remembers": remembers, "scene": scene}
+        if after is not None:
+            sid = w.schedule(float(after), "introduce", entity=where, payload={"spec": spec})
+            return {"ok": True, "scheduled": sid, "at": w.t + float(after), "name": name, "how": how,
+                    "known_by": sorted(knowers), "hint": "it lands then, with its scene; unschedule(id) calls it off"}
+        eid = w.land(spec, actor=self._actor_or_none())
         out = self._card(w.need(eid), full=True)
         out.update(how=how, known_by=sorted(knowers), remembers=len(remembers or []))
         return out

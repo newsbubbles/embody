@@ -1443,6 +1443,9 @@ class World:
                 self.emit("script_error", actor=eid, target=eid, reach=0,
                           payload={"script": p["script"], "fn": "finish", "reason": getattr(e, "reason", str(e))})
             return
+        if kind == "introduce":  # introduce(after=...): what was announced lands now
+            self.land(p["spec"])
+            return
         # Any other scheduled kind is just an event that fires later (listeners may react).
         self.emit(kind, actor=p.get("actor"), target=eid, reach=int(p.get("reach", 1)), payload=p)
 
@@ -1654,6 +1657,27 @@ class World:
         self.emit("intended", actor=actor or entity_id, target=entity_id, reach=0,
                   payload={"goal": g["id"], "text": g["text"], "status": g["status"]})
         return g
+
+    def land(self, spec: dict[str, Any], actor: str | None = None) -> str | None:
+        """The arrival half of `introduce`: spawn with provenance, the `knows` links of a person, its own memories and
+        the scene the room sees. The knowers' notes are written by the caller (at once, or when it was announced).
+        A place or knower gone by the time it lands is skipped; returns the new id, or None when the place is gone."""
+        where = spec["parent"]
+        if self.get(where) is None:
+            return None
+        st = dict(spec.get("state") or {})
+        st["provenance"] = {"how": spec["how"], "by": spec.get("by"), "t": self.t}
+        eid = self.spawn(spec["type"], where, name=spec.get("name") or "", state=st, pos=spec.get("pos"), actor=actor,
+                         announce=spec["how"] != "always_there")
+        if self.is_a(spec["type"], "person"):
+            for k, note in (spec.get("known_by") or {}).items():
+                if k != eid and self.get(k) is not None:
+                    self.link(k, eid, "knows", {"standing": 0, "note": note, "met_t": self.t, "count": 0})
+        for note in spec.get("remembers") or []:
+            self.remember(eid, str(note), actor=eid)
+        if spec.get("scene"):
+            self.emit("scene", target=where, reach=1, payload={"text": spec["scene"], "introduced": eid, "how": spec["how"]})
+        return eid
 
     def remember(self, entity_id: str, text: str, actor: str | None = None) -> dict[str, Any]:
         """Append to the entity's secret memory. Whoever embodies it next reads the same notes."""
