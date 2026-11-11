@@ -1349,6 +1349,7 @@ class Session:
         eid = self._resolve(entity)
         e = w.need(eid)
         full = self._privileged()
+        me = None
         if not full:
             me = self._me()
             ok, why = w.reachable(me, eid)
@@ -1359,12 +1360,20 @@ class Session:
         card["schema_chain"] = [s["id"] for s in w.schema_chain(e["type"])]
         card["doc"] = w.schema(e["type"])["doc"]
         card["contents"] = [self._card(c) for c in w.children(eid) if full or not c["state"].get("hidden")]
-        card["relations"] = self._relations(eid)
+        rels = self._relations(eid)
+        own = full or eid == me or eid in self.scope
+        if not own:
+            # whom someone knows, what they think of them and what passed between them is theirs: another body sees
+            # the groups held in the open or that it is part of, and whether it has met them
+            rels = [r for r in rels if _seen_relation(r, me)]
+            card["met"] = any(x["target"] == eid for x in w.edges(me, "knows", "out"))
+        card["relations"] = rels
         card["actions"] = {v: {"doc": a.get("doc", ""), "targets": a.get("targets"), "params": a.get("params", {})}
                            for v, a in w.schema_actions(e["type"]).items() if full or not a.get("hidden")}
         if full:
             card["rules"] = e["state"].get("rules", [])
             card["version"] = e["version"]
+        if own:
             card["knows"] = self._knows(eid)
         return card
 
@@ -2322,6 +2331,16 @@ def _guard(name: str, fn: Callable[..., Any]) -> Callable[..., Any]:
 
 for _op in OPS:
     setattr(Session, _op, _guard(_op, getattr(Session, _op)))
+
+
+def _seen_relation(r: dict[str, Any], me: str) -> bool:
+    """A relation another body may see on someone it inspects: a group it is part of or one held in the open (a duel,
+    a truce: `public`), and an edge between the two marked `public` (readable by its other end, as recall reads it).
+    Whom they know, their side's standing and what they think of anyone else stay theirs."""
+    public = bool((r.get("data") or {}).get("public"))
+    if "participants" in r:
+        return public or me in r["participants"]
+    return public and r.get("with") == me
 
 
 def _brief(e: dict[str, Any]) -> dict[str, Any]:
