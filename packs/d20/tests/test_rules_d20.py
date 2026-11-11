@@ -188,6 +188,10 @@ def test_thirst_on_the_open_road_and_water_from_a_skin_or_a_source():
     with pytest.raises(Rejected) as ex:  # a full skin takes no draw
         you.act("fill", "Waterskin")
     assert "already full" in str(ex.value) and state(gm, "The cistern")["left"] == 11
+    gm.patch("Reeve Ansel Varrick", {"water": 10})
+    with pytest.raises(Rejected) as ex:  # a full body takes no draw either: the water is not poured away
+        you.act("drink", "The cistern")
+    assert "another drop" in str(ex.value) and state(gm, "The cistern")["left"] == 11
     # under the ridge the rock itself is the source: the Keth do not thirst there, and thirsty, Taan drinks from it
     gm.patch("Elder Taan", {"water": 2})
     gm.clock(step=60)

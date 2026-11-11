@@ -6,6 +6,9 @@ def check(ctx):
         return "it is empty"
     if ctx.actor.state.dead:
         return "the dead do not thirst"
+    have = int(ctx.actor.state.water if ctx.actor.state.water is not None else 10)
+    if have >= int(ctx.actor.state.max_water or 10):
+        return "you could not drink another drop (water " + str(have) + " of " + str(int(ctx.actor.state.max_water or 10)) + "): it stays in the vessel"
     return True
 
 def apply(ctx):
