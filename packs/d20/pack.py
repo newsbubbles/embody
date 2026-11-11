@@ -80,7 +80,7 @@ COMBATANT_ACTIONS = {
     "challenge": {"script": "challenge", "doc": "Call someone out: a duel nobody else may enter", "targets": "creature", "scope": "here"},
     "drink": {"script": "drink", "doc": "Drink from a skin or a vessel within reach (+4 water)", "targets": "thing", "scope": "any", "duration": 2},
     "fill": {"script": "fill", "doc": "Fill a skin you hold at a source here", "targets": "thing", "scope": "held", "duration": 5},
-    "search": {"script": "search", "doc": "Take everything off someone who is down or dead", "targets": "creature", "scope": "here", "duration": 5},
+    "search": {"script": "search", "doc": "Take what you can carry off someone who is down or dead; the rest stays on them", "targets": "creature", "scope": "here", "duration": 5},
     "tend": {"script": "tend", "doc": "See to someone hurt here (or yourself): medicine in hand heals a dose's worth, bare hands "
                                       "(survival vs 12) get a downed body up at 1", "targets": "creature", "scope": "here", "duration": 10},
 }

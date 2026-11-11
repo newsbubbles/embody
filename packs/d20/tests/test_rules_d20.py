@@ -293,6 +293,34 @@ def test_search_the_downed_and_harvest_the_vein():
     assert state(gm, "Red vein")["ember"] == 2
 
 
+def bulk_of(gm, name):
+    return sum(int(c["state"].get("bulk") or (2 if c["state"].get("capacity") else 1))
+               for c in gm.find(parent=gm.inspect(name)["id"], limit=100))
+
+
+def test_a_search_takes_only_what_your_hands_can_carry():
+    # the same bulk count take uses: what does not fit stays on the body, and the searcher hears what was left
+    eng, gm, you = reach()
+    you.act("go", "The Gate Yard")
+    gm.patch("Captain Ruhl", {"down": True})
+    gm.spawn("thing", "Captain Ruhl", "Iron strongbox", state={"portable": True, "bulk": 4})
+    gm.spawn("thing", "Captain Ruhl", "Brass button", state={"portable": True})
+    before = bulk_of(gm, "Reeve Ansel Varrick")
+    gm.patch("Reeve Ansel Varrick", {"carry": before + 3})
+    r = you.act("search", "Captain Ruhl")
+    ev = [e for e in r["events"] if e["kind"] == "searched"][0]["payload"]
+    on_ruhl = [c["name"] for c in gm.find(parent=gm.inspect("Captain Ruhl")["id"], limit=100)]
+    assert "Iron strongbox" in on_ruhl and gm.inspect("Iron strongbox")["id"] in ev["left"]
+    assert "Brass button" not in on_ruhl and ev["found"]
+    assert bulk_of(gm, "Reeve Ansel Varrick") <= before + 3
+    assert "Iron strongbox" in str(r) and "stay on Captain Ruhl" in str(r)
+    # hands already full: nothing left on him fits, so the search is refused before it starts
+    gm.patch("Reeve Ansel Varrick", {"carry": bulk_of(gm, "Reeve Ansel Varrick")})
+    with pytest.raises(Rejected) as ex:
+        you.act("search", "Captain Ruhl")
+    assert "hands are full" in str(ex.value)
+
+
 def test_loud_steps_and_digging_wake_the_thresher_the_broken_step_does_not():
     eng, gm, you = reach()
     for place in ["The Gate Yard", "The Salt Road", "The Glass Flats"]:
