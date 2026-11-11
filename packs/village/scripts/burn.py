@@ -33,7 +33,7 @@ def apply(ctx):
     name = it.name
     for c in it.children():
         ctx.move(c, here)
-    ctx.emit("burned", target=here, reach=1, by=ctx.actor.id, thing=it.id, name=name, fire=fire.id)
+    ctx.emit("burned", target=here, reach=1, by=ctx.actor.id, thing=it.id, name=name, count=ctx.count(it), fire=fire.id)
     ctx.emit("scene", target=here, reach=1,
              text=ctx.actor.name + " holds the " + name.lower() + " to the " + (fire.name.lower() if fire.id != here.id else "fire") +
                   " until it is ash.")

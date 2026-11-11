@@ -101,7 +101,7 @@ def define(s):
     s.define_schema("medicine", extends="thing", doc="Doses that heal: tend someone with it in hand.",
                     state={"portable": True, "medicine": True, "doses": 3, "heals": 3,
                            "description": "A pouch of salve, bitter-smelling.", "description_empty": "An empty pouch, still bitter."})
-    s.define_schema("vein", extends="thing", doc="Emberglass in the sand. Harvesting takes time and makes noise.",
+    s.define_schema("vein", extends="thing", doc="Emberglass in the sand. Harvesting takes time and makes noise; each shard joins the Emberglass stack in hand.",
                     state={"portable": False, "ember": 3},
                     actions={"harvest": {"script": "harvest", "doc": "Dig a shard out (20 s, and the sand hears it)", "duration": 20}})
     s.define_schema("thresher", extends="creature", doc="What lives under the deep sand. It comes to rhythm.",

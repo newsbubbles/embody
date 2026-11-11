@@ -29,7 +29,7 @@ When it ends, `perceive()` and tell your human what happened. Pick the condition
 
 ## Tell what the world holds
 
-Your telling is the human's only window, so tell it from the world, not from what anyone said. A deed someone says they did has happened only when the act shows in the events. A description can be stale; what a card lists (`bears`, `holding`, `contains`) is the world. Before you tell your human a thing does not exist, look for it. Never say an entity id to your human or in a `say`.
+Your telling is the human's only window, so tell it from the world, not from what anyone said. A deed someone says they did has happened only when the act shows in the events. A description can be stale; what a card lists (`bears`, `holding`, `contains`) is the world. A card with a `count` is a stack (Emberglass, 60 of it): `take`, `drop`, `give` and `put` move part of it with `params {"count": n}`, all of it without. Before you tell your human a thing does not exist, look for it. Never say an entity id to your human or in a `say`.
 
 ## 3. When your human stops for a while
 

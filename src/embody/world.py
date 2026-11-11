@@ -214,6 +214,7 @@ class Ctx(ScriptObject):
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
         "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "embodied", "locked", "remember",
+        "count", "split", "merge", "transfer", "bulk", "load",
     )
 
     def __init__(self, world: "World", *, actor: str | None, target: str | None, owner: str | None,
@@ -354,6 +355,40 @@ class Ctx(ScriptObject):
     def move(self, id: Any, parent: Any, pos: Any = None) -> None:
         self._hold(id, parent)
         self._w.move(_ev(self._w, id), _ev(self._w, parent), pos=pos, actor=self._actor, caused_by=self._caused_by)
+
+    def count(self, id: Any, what: str | None = None) -> int:
+        """How many of a thing there are (its `count`, else 1). With `what`, how many units of things by that name
+        or `kind` the entity holds, stacks and loose ones together: ctx.count(me, "ember")."""
+        if what is None:
+            return self._w.units(_ev(self._w, id))
+        w = str(what).lower()
+        return sum(_units(c) for c in self._w.children(_ev(self._w, id))
+                   if (c["name"] or "").lower() == w or str(c["state"].get("kind") or "").lower() == w)
+
+    def split(self, id: Any, count: Any) -> EntityView:
+        """Part `count` units off a stack where it lies; returns the part (the stack itself when it is all of it)."""
+        self._hold(id)
+        return EntityView(self._w, self._w.split(_ev(self._w, id), count, actor=self._actor, caused_by=self._caused_by))
+
+    def merge(self, id: Any) -> EntityView:
+        """Fold a stack into a like stack in the same holder; returns the stack that holds the units now."""
+        self._hold(id)
+        return EntityView(self._w, self._w.merge(_ev(self._w, id), actor=self._actor, caused_by=self._caused_by))
+
+    def transfer(self, id: Any, to: Any, count: Any = None) -> EntityView:
+        """Move a thing, or `count` units of a stack, into `to`, joining a like stack there; returns what holds the
+        moved units now (a new stack, the old one it joined, or the thing itself)."""
+        self._hold(id, to)
+        return EntityView(self._w, self._w.transfer(_ev(self._w, id), _ev(self._w, to), count=count,
+                                                    actor=self._actor, caused_by=self._caused_by))
+
+    def bulk(self, id: Any) -> float:
+        """A thing's weight in the hands: `bulk` a unit (fractions allowed), else 2 with a capacity, else 1; times count."""
+        return _bulk(self._w.need(_ev(self._w, id)))
+
+    def load(self, id: Any) -> float:
+        """The bulk a body carries: the sum of what it holds."""
+        return _num(sum(_bulk(c) for c in self._w.children(_ev(self._w, id))))
 
     def set_pos(self, id: Any, pos: Any) -> None:
         self._hold(id)
@@ -933,6 +968,73 @@ class World:
                   payload={"entity": id, "to": parent})
         self.emit("moved", actor=actor, target=id, reach=1, caused_by=caused_by,
                   payload={"from": old, "to": parent})
+
+    # -- stacks: a thing whose state has a `count` is that many of itself (Emberglass x60). docs/SCRIPTING.md, Stacks.
+    def units(self, id: str) -> int:
+        """How many of a thing there are: its `count`, else 1."""
+        return _units(self.need(id))
+
+    def split(self, id: str, count: Any, actor: str | None = None, caused_by: int | None = None) -> str:
+        """Part `count` units off a stack where it lies: the stack keeps the rest, a like stack beside it gets them.
+        Returns the new stack's id, or the stack's own when `count` is all of it."""
+        e = self.need(id)
+        have = _units(e)
+        try:
+            n = int(count)
+        except (TypeError, ValueError):
+            raise Rejected(f"count must be a whole number, not {count!r}", hint="say how many, e.g. count 5") from None
+        if n < 1:
+            raise Rejected("count must be at least 1", hint="leave count out to take the whole thing")
+        if n > have:
+            raise Rejected(f"there are only {have} of {e['name']}", hint=f"ask for {have} or fewer")
+        if n == have:
+            return id
+        self.patch(id, {"count": have - n}, actor=actor, caused_by=caused_by)
+        st = json.loads(json.dumps(e["state"]))
+        st["count"] = n
+        return self.spawn(e["type"], e["parent_id"], name=e["name"], state=st, pos=e["pos"], actor=actor,
+                          caused_by=caused_by, announce=False)
+
+    def stack_with(self, id: str, holder: str) -> dict[str, Any] | None:
+        """The stack under `holder` that `id` would join: same type and name, the same state but for its count and
+        who last handed it over (given_by). Only stacks join, and only empty ones (a box of things is not a stack)."""
+        e = self.need(id)
+        if "count" not in e["state"] or e["state"].get("attached") or self.children(id):
+            return None
+        key = _stack_key(e)
+        for c in self.children(holder):
+            if c["id"] != id and "count" in c["state"] and _stack_key(c) == key and not self.children(c["id"]):
+                return c
+        return None
+
+    def merge(self, id: str, actor: str | None = None, caused_by: int | None = None) -> str:
+        """Fold a stack into a like stack in the same holder (stack_with). Returns the id that holds the units now.
+        The arriving stack's hand-over marks (given_by) win, so a gift rule reads the gift that just landed."""
+        e = self.need(id)
+        into = self.stack_with(id, e["parent_id"]) if e["parent_id"] else None
+        if into is None:
+            return id
+        n = _units(e)
+        total = _units(into) + n
+        changes: dict[str, Any] = {"count": total}
+        for k in _HANDOVER:
+            if e["state"].get(k) != into["state"].get(k):
+                changes[k] = e["state"].get(k)
+        self.patch(into["id"], changes, actor=actor, caused_by=caused_by)
+        self.emit("merged", actor=actor, target=into["id"], reach=0, caused_by=caused_by,
+                  payload={"from": id, "count": n, "total": total})
+        self.store.execute("DELETE FROM edge WHERE world_id=? AND (source=? OR target=?)", (self.id, id, id))
+        self.store.execute("DELETE FROM scheduled WHERE world_id=? AND entity_id=?", (self.id, id))
+        self.store.delete("entity", self.id, id)
+        return into["id"]
+
+    def transfer(self, id: str, to: str, count: Any = None, actor: str | None = None,
+                 caused_by: int | None = None) -> str:
+        """Move a thing, or `count` units of a stack, into `to`, where it joins a like stack. Returns the id of what
+        holds the moved units now. A plain move is this with no count and nothing to join."""
+        piece = id if count is None else self.split(id, count, actor=actor, caused_by=caused_by)
+        self.move(piece, to, actor=actor, caused_by=caused_by)
+        return self.merge(piece, actor=actor, caused_by=caused_by)
 
     def _is_body(self, id: str) -> bool:
         e = self.get(id)
@@ -1827,10 +1929,38 @@ class World:
         }
 
 
+# Who last handed a thing over: a stack joins a like one whatever these say, and the newest hand-over wins.
+_HANDOVER = ("given_by", "given_before_by")
+
+
+def _units(e: dict[str, Any]) -> int:
+    c = e["state"].get("count")
+    return 1 if c is None else int(c)
+
+
+def _stack_key(e: dict[str, Any]) -> tuple[str, str, str]:
+    st = {k: v for k, v in e["state"].items() if k != "count" and k not in _HANDOVER and v is not None}
+    return e["type"], (e["name"] or "").lower(), json.dumps(st, sort_keys=True, default=str)
+
+
+def _bulk(e: dict[str, Any]) -> float:
+    """What a thing weighs in a body's hands (village `carry`): its `bulk` a unit (fractions allowed), else 2 for
+    anything with a `capacity` (a skin), else 1; times its count."""
+    st = e["state"]
+    b = st.get("bulk")
+    each = float(b) if b is not None else (2.0 if st.get("capacity") else 1.0)
+    return _num(each * _units(e))
+
+
+def _num(x: float) -> float | int:
+    x = round(float(x), 3)
+    return int(x) if x == int(x) else x
+
+
 # Events that exist for the log, not for listeners.
 _SILENT_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "scheduled", "patched", "linked", "unlinked",
                            "related", "unrelated", "spawned", "destroyed", "left", "moved", "embodied", "released",
-                           "tick", "script_error", "finished", "opinion", "remembered", "intended"})
+                           "tick", "script_error", "finished", "opinion", "remembered", "intended", "merged"})
 # Events only the entity they target (its mind) and authors ever see.
 _PRIVATE_KINDS = frozenset({"remembered", "intended"})
 # Events hidden from the public stream (perceive, act results). Primitive mutations stay in the log.

@@ -847,6 +847,24 @@ class Session:
         raise Rejected(f"{len(hits)} entities are called {ref!r}: " + ", ".join(h["id"] for h in hits),
                        hint="use the id")
 
+    def _resolve_for(self, me: str, ref: str, verb: str, params: dict[str, Any] | None) -> str:
+        """A target for a deed: an id, a unique name, or, when several share the name (stacks of Emberglass, two
+        waterskins), the one in your reach that the verb would take, else the first in your reach, so its refusal
+        says why. Names alone stay ambiguous only when none of them is near you."""
+        w = self.world
+        if w.get(ref):
+            return ref
+        hits = [e for e in w.find(name=ref, limit=200) if e["name"].lower() == ref.lower()]
+        if len(hits) <= 1:
+            return self._resolve(ref)
+        near = [h["id"] for h in hits if w.reachable(me, h["id"])[0]]
+        if not near:
+            return self._resolve(ref)
+        for eid in near:
+            if w.check_action(me, verb, eid, params)[0]:
+                return eid
+        return near[0]
+
     # ---- perception --------------------------------------------------------------
 
     def perceive(self, cursor: int | None = None, from_entity: str | None = None, events: int = 30,
@@ -1254,6 +1272,8 @@ class Session:
     def _card(self, e: dict[str, Any], full: bool = False) -> dict[str, Any]:
         w = self.world
         card = {"id": e["id"], "type": e["type"], "name": e["name"], "state": self._visible_state(e, full)}
+        if e["state"].get("count") is not None:
+            card["count"] = int(e["state"]["count"])  # a stack: Emberglass, 60 of it
         if e["pos"] is not None:
             card["pos"] = e["pos"]
         emb = w.embodied(e["id"])
@@ -1270,9 +1290,9 @@ class Session:
             card["contains"] = len(kids)
         seen = [c for c in kids if not c["state"].get("hidden")]
         if e["state"].get("holds") is not None:
-            card["holding"] = [{"id": c["id"], "name": c["name"]} for c in seen]  # what lies on the rack is in plain sight
+            card["holding"] = [_brief(c) for c in seen]  # what lies on the rack is in plain sight
         elif w.is_a(e["type"], "creature"):
-            bears = [{"id": c["id"], "name": c["name"]} for c in seen if c["state"].get("weapon")]
+            bears = [_brief(c) for c in seen if c["state"].get("weapon")]
             if bears:
                 card["bears"] = bears  # a blade at the hip shows, whatever the description still says
         return card
@@ -1551,7 +1571,7 @@ class Session:
         self._acted()
         p = self._principal()
         since = p["cursor_seq"] if p else self.world.store.next_seq(self.world.id) - 1
-        tid = self._resolve(target) if target else None
+        tid = self._resolve_for(me, target, verb, params) if target else None
         r = self.world.act(me, verb, tid, params, principal_id=self.pid)
         r = self._turn(r)
         w = self.world
@@ -2295,3 +2315,11 @@ def _guard(name: str, fn: Callable[..., Any]) -> Callable[..., Any]:
 
 for _op in OPS:
     setattr(Session, _op, _guard(_op, getattr(Session, _op)))
+
+
+def _brief(e: dict[str, Any]) -> dict[str, Any]:
+    """A thing named in someone else's card: its id and name, and its count when it is a stack."""
+    out = {"id": e["id"], "name": e["name"]}
+    if e["state"].get("count") is not None:
+        out["count"] = int(e["state"]["count"])
+    return out

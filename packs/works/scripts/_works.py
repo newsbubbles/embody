@@ -27,17 +27,14 @@ def spend(ctx, holder, key, n, to):
             if to is None:
                 ctx.destroy(it)
             else:
-                ctx.move(it, to)
+                ctx.transfer(it, to)
             got = got + u
         else:
             k = n - got
-            ctx.patch(it, {"count": u - k})
-            if to is not None:
-                st = {}
-                for key2 in it.state.keys():
-                    st[key2] = it.state.get(key2)
-                st["count"] = k
-                ctx.spawn(it.type, to, name=it.name, state=st)
+            if to is None:
+                ctx.patch(it, {"count": u - k})
+            else:
+                ctx.transfer(it, to, k)
             got = n
     return got
 
