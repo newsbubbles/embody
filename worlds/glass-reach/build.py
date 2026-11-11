@@ -342,6 +342,8 @@ def define(s):
                                   "targets": "thing", "scope": "here", "duration": 120},
                         "free": {"script": "free", "doc": "Cut loose someone here who is tied (a minute at the knots; heard if you fumble)",
                                  "targets": "creature", "scope": "here", "duration": 60},
+                        "consult": {"script": "reckoner_consult", "doc": "Ask a Guild reckoner here a question and pay a shard: params {\"question\": water, moon, convoy or glass}; the answer is the world's own numbers",
+                                    "targets": "creature", "scope": "here", "duration": 5, "params": {"question": "water, moon, convoy or glass"}},
                         "burn": {"script": "burn", "doc": "Burn a paper you hold or that lies here, at a fire: it is gone for good, and only those who read it know what it said",
                                  "targets": "thing", "duration": 3},
                     },
@@ -364,6 +366,28 @@ def define(s):
                     state={"portable": False, "stone": 0},
                     actions={"dress": {"script": "dress", "doc": "Square a block out of the pile (half an hour, loud); "
                                                                  "the wall works take dressed stone", "duration": 1800}})
+    s.define_schema("speaker", extends="thing", doc="A Guild speaker: a slab of dark glass that, woken with ember, stands up a "
+                    "hologram in its sister slabs anywhere in the Reach (scripts/speaker.py).",
+                    state={"portable": True, "line": "", "contacts": [], "inbox": [], "charge": 0, "sent": 0, "primed": [],
+                           "secret": ["inbox", "contacts", "primed", "sent"]},
+                    actions={
+                        "call": {"script": "speaker", "doc": "Call another speaker live: your words and the picture you describe stand up "
+                                 "out of the far slab, where its room sees them; a shard of charge. The far end sees truly which slab "
+                                 "called", "duration": 5,
+                                 "params": {"to": "a line this slab knows (contacts lists them)", "words": "what you say",
+                                            "seen": "what your hologram shows: your face, your look, what is behind you"}},
+                        "send": {"script": "speaker", "doc": "Leave a message on another speaker, picture and all, until someone reads "
+                                 "it; a shard of charge pays for three. Or forward one read here", "duration": 3,
+                                 "params": {"to": "a line", "words": "what you say", "seen": "what your hologram shows",
+                                            "forward": "instead of words: the number read gives a message here"}},
+                        "read": {"script": "speaker", "doc": "Play the messages waiting on this slab, oldest first",
+                                 "params": {"clear": "true to empty the slab after"}},
+                        "contacts": {"script": "speaker", "doc": "The lines this slab knows, its own line and its charge",
+                                     "params": {"add": "a line's name to learn"}},
+                        "charge": {"script": "speaker", "doc": "Burn emberglass you carry into the slab: a shard is a call, or three messages",
+                                   "params": {"count": "how many shards"}},
+                    },
+                    listeners=[{"script": "speaker", "kinds": ["taken", "slab_handed"]}])
     s.define_schema("beast", extends="creature", doc="An animal of the Reach: the d20 blows land on it and it strikes back; it does not drink, talk or carry.",
                     state={"beast": True, "body": 2, "wits": 1, "will": 1, "skills": {}, "vigor": 6, "max_vigor": 6})
     s.define_schema("nest", extends="thing", doc="A swarm's nest. Everyone in its place loses a point of vigor a minute, to one, until it is smoked.",
@@ -1946,6 +1970,97 @@ def keep_corins_file_kit(s, names):
     s.patch(story, {"corin_file_kit": True})
 
 
+# The Guild's speakers and its reckoner come down after the moon (scripts/speaker.py, reckoner_consult.py,
+# reach_speakers.py; notes/the-guild-speakers.md). Before then, what people know of the High Landing, the Guild's
+# platform in orbit (fifty kilometres long, twenty wide: chapter three or four opens it), of the factor coming, and
+# Halvard's scheme to be named the gate's holder by the Guild with glass in the factor's hand (Nate 2026-11-11).
+SPEAKER_KINDS = ["moon_turned", "guild_descends", "guild_recognizes", "given"]
+HIGH_LANDING_KNOWS = {
+    "Ossa the Carrier": [
+        "The High Landing is the Guild's own ground, above everyone's: a platform fifty kilometres keel to tip and twenty "
+        "across the wide deck, on the Guild's road around the world. From here it is the slow star that crosses east to "
+        "west before dawn. The glass we carry north goes up on the lifters at the Master's station and burns in its "
+        "engines and its lamps. That is why the Guild buys every shard the Reach digs, and asks no questions where.",
+        "The Master's letter: a day after the moon a factor comes down on the crawler, Ivo Senn, with a reckoner and the "
+        "Guild's speakers, slabs cut from the mother crystal aboard the High Landing that talk to each other across any "
+        "distance. One for my tally, one for the wardens' post, one for the yard, one for whoever holds Scar Gate. Senn "
+        "names the gate's holder on the tally. Senn once named the Salt Works' last tenant for a strongbox of glass.",
+    ],
+    "Sergeant Edda Marr": [
+        "I served two years aboard the High Landing before the road: the keel gallery runs so long you can walk half a "
+        "day down it and not reach the end, and the windows on the wide deck look down on the whole of the Reach at once. "
+        "The Glass Flats are a burn on a hand from up there. I see it cross before dawn from the cairn, the slow star, "
+        "and I still look up.",
+    ],
+    "Garran Teague": [
+        "I was born aboard the High Landing, fourth ring, the haulers' quarter, where they teach you to drive on the long "
+        "deck before they let you near a road. Fifty kilometres of it. I came down at sixteen and never went back up; the "
+        "air tastes of nothing up there, and I like a road you can smell.",
+    ],
+    "Mira Ost": [
+        "My sister is a reckoner on the High Landing: they took her at nine for the reckoning halls on the third ring, the "
+        "ones whose windows face the planet. Reckoners do not forget a number. When she came down once she told me the "
+        "exact water in my skin by the sound it made. If the Guild sends a reckoner down, the houses will pay anything "
+        "for a true count, and every count will be sold twice.",
+    ],
+    "Dov Ashby": [
+        "The wright says the Guild's speakers are cut in the crystal shops aboard the High Landing, all from one mother "
+        "stone, which is why they hear each other: sisters. Ember in the heart makes them speak. I would give a year's pay "
+        "to see one opened.",
+    ],
+    "Pell Harrow": [
+        "The slow star crosses before dawn, east to west: the High Landing, the Guild's platform. Outriders say if it "
+        "crosses while you are on the glass, the Thresher sleeps. I do not believe it. I look up anyway.",
+    ],
+    "Quill": [
+        "I count the slow star from the cairn before dawn. The sergeant says it is the Guild's High Landing, fifty "
+        "kilometres long, with people born on it who have never touched sand. I am going up one day. I have not told her.",
+    ],
+    "Elder Taan": [
+        "The Keth call the slow star the Glass Eater. It rises full of what is dug out of our ground and never comes down "
+        "again. The Guild says it is a landing in the sky. The Keth say a thing that eats is an animal, whatever it is called.",
+    ],
+    "Captain Ruhl": [
+        "The Guild has a star of its own, the slow one before dawn. Old Varrick used to say the Guild could see the whole "
+        "Reach from it, and to mind what we did on the open glass. I never knew if he was joking.",
+    ],
+}
+WRIGHT_LANDING = ("I was trained in the crystal shops aboard the High Landing before the Master sent me down: the Guild's "
+                  "speakers are cut there, every slab from one mother crystal, which is why they hear each other across "
+                  "any distance. Ember burned in the heart makes them speak. I know how one is made; I have never owned one.")
+HALVARD_SCHEME = (
+    "House letters, burned after reading: the Guild sends a factor down from up the road a day after the moon, Ivo Senn, "
+    "with the Guild's speakers. He comes to name whoever holds Scar Gate on the Guild's tally and set a speaker with them. "
+    "Two days after he comes, he names them. A name on the Guild's tally is worth more than the gate: the Guild carries for "
+    "whoever it names, and the Crown reads the Guild's tallies. Senn once named the Salt Works' last tenant for a strongbox "
+    "of glass. If the riders take the gate, good. If they do not, glass in Senn's hand before he names the holder: ten "
+    "shards at least, and more than the Hold gives him. The riders' paychest, the buried vein on the Flats. Nobody in the "
+    "Hold knows the Guild can be bought this way, and nobody must, until it is done.")
+HALVARD_GOAL = ("Be named the holder of Scar Gate by the Guild when Factor Senn comes down after the moon",
+                "Ten shards or more in his hand, and more than the Hold gives, before he names the holder two days after he comes")
+
+
+def keep_high_landing(s, names):
+    """The rule that brings the Guild down after the moon, and the High Landing lore and Halvard's scheme, once."""
+    root = s.summary()["root"]
+    s.set_rule(root, "reach_speakers", kinds=SPEAKER_KINDS)
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    st = s.world.get(story)["state"]
+    if st.get("high_landing_lore"):
+        return
+    for who, texts in HIGH_LANDING_KNOWS.items():
+        if names.get(who):
+            for text in texts:
+                s.remember(text, entity=names[who])
+    wright = st.get("guild_wright")
+    if wright and s.world.get(wright):
+        s.remember(WRIGHT_LANDING, entity=wright)
+    if names.get("Halvard Dreyer"):
+        s.remember(HALVARD_SCHEME, entity=names["Halvard Dreyer"])
+        s.intend(HALVARD_GOAL[0], why=HALVARD_GOAL[1], entity=names["Halvard Dreyer"])
+    s.patch(story, {"high_landing_lore": True})
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -1999,6 +2114,7 @@ def keep_canon(s):
     keep_lockpicks(s, names_of(s))
     keep_stacks(s)
     keep_corins_file(s, names_of(s))
+    keep_high_landing(s, names_of(s))
     keep_carry(s)
     if st.get("garrison"):
         return

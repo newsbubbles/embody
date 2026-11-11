@@ -1,4 +1,4 @@
-# The Guild's speakers and its reckoner: a design note, not built
+# The Guild's speakers and its reckoner
 
 2026-11-11, from Nate's side conversation. The Carriers' Guild is the Reach's Spacing Guild: it carries for whoever
 holds the gate and takes no side, and it would have tools nobody else has. In embody an object's verbs are tools its
@@ -64,4 +64,23 @@ what a person wrote, and the reckoner's answers are templates over the world's n
 Introduced like everything else: Ossa holds the Landing's speaker and explains it, Marr keeps the post's, the wright
 knows how they are made, and the Hold has heard of them and never held one.
 
-Open for Nate: build it (when, before or after the moon), and whether a shard a call is the right price.
+## Built (2026-11-11)
+
+Nate: build it, after the moon, with the High Landing in people's memories and Dreyer scheming toward the Guild's
+arrival. Scripts: `speaker.py` (the five verbs and the primer), `reckoner_consult.py` (the `consult` verb on the person
+schema), `reach_speakers.py` (the arrival and the naming); the lore in build.py, `keep_high_landing`.
+
+- **The High Landing**: the Guild's platform in orbit, fifty kilometres keel to tip and twenty across the wide deck,
+  seen from the ground as the slow star before dawn. Emberglass goes up to it on the lifters at the Master's station.
+  Ossa, Marr (served aboard), Garran (born aboard), Mira (a reckoner sister), Dov, Pell, Quill, the wright (trained in
+  its crystal shops), Taan (the Keth's Glass Eater) and Ruhl remember it. Chapter three or four opens it.
+- **A day after the moon** the crawler brings Factor Ivo Senn and Reckoner Aurel Quist to the Landing with five slabs:
+  the Landing's (Ossa), the wardens' post's (Marr), the Guild Yard's (the wright, or Mira Ost), the factor's, and Scar
+  Gate's, which Senn carries.
+- **Things explain themselves**: a slab that comes into new hands (the Guild's hand-over, a give, a take) wakes once for
+  that holder with the Guild's primer: what it is, how it works, what it costs, whose it is. Every holder remembers it,
+  and Senn's brief tells him to explain it to anyone he gives one.
+- **Two days after he comes** Senn names the gate's holder on the Guild's tally: the house the moon left at the gate,
+  unless the other house put more glass in his hand, ten shards at least. The gate's slab goes to that house's head.
+  Halvard knows this from house letters and has it as a goal: the riders' paychest or the buried vein, into Senn's hand.
+  The story keeps `guild_recognizes` and `guild_bought` for the next chapter.

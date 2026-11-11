@@ -1329,3 +1329,80 @@ def test_corins_three_carry_skins_a_pouch_and_two_shards_and_know_they_are_going
     assert any("Corin Vass's file with Brannoc Hale and Lute Callow" in n for n in notes) and any("Tobin" in n for n in notes)
     load_world(gm, "glass-reach", upgrade=True)  # once: a reboot hands out nothing more
     assert sum(1 for c in gm.world.children(gm.inspect("Osk Barran")["id"]) if c["name"] == "Varrick waterskin") == 1
+
+
+def memory(gm, name):
+    return [n["text"] for n in gm.world.get(gm.inspect(name)["id"])["state"].get("memory") or []]
+
+
+def test_the_guild_remembers_the_high_landing_and_halvard_schemes_for_the_factor():
+    eng, gm = hosted()
+    assert any("fifty kilometres" in n for n in memory(gm, "Ossa the Carrier"))
+    assert any("keel gallery" in n for n in memory(gm, "Sergeant Edda Marr"))
+    assert any("Glass Eater" in n for n in memory(gm, "Elder Taan"))
+    assert any("Ivo Senn" in n and "ten shards" in n for n in memory(gm, "Halvard Dreyer"))
+    goals = [g["text"] for g in gm.inspect("Halvard Dreyer")["state"]["goals"]]
+    assert any("named the holder of Scar Gate" in g for g in goals)
+    load_world(gm, "glass-reach", upgrade=True)  # once
+    assert sum(1 for n in memory(gm, "Ossa the Carrier") if "fifty kilometres" in n) == 1
+
+
+def guild_down(eng, gm, outcome_jars=9):
+    chapter_one_done(gm)
+    gm.patch(gm.inspect("Story")["id"], {"dreyer_came": True, "guild_came": True})
+    to_next(gm, "dawn")
+    gm.patch("The Keth jars", {"left": outcome_jars})
+    to_next(gm, "moon_turns")
+    assert not gm.find(name="Factor Ivo Senn")  # not before the crawler a day on
+    to_next(gm, "guild_descends")
+    gm.clock(run=False)
+
+
+def holds(gm, who):
+    return {c["name"]: c for c in gm.world.children(gm.inspect(who)["id"])}
+
+
+def test_after_the_moon_the_guild_comes_down_with_speakers_that_carry_a_picture_and_a_reckoner_who_sells_counts():
+    eng, gm = hosted(truce=True)
+    enzo = newcomer(eng, gm, "carrier", "Enzo")
+    gm.patch(gm.inspect("Story")["id"], {"guild_wright": gm.inspect("Enzo")["id"]})
+    guild_down(eng, gm)
+    assert where(gm, "Factor Ivo Senn") == "The Carriers' Landing" and where(gm, "Reckoner Aurel Quist") == "The Carriers' Landing"
+    assert "The Landing's speaker" in holds(gm, "Ossa the Carrier") and "The post's speaker" in holds(gm, "Sergeant Edda Marr")
+    assert {"The factor's speaker", "The gate's speaker"} <= set(holds(gm, "Factor Ivo Senn"))
+    assert "The yard's speaker" in holds(gm, "Enzo")  # the wright's
+    assert any("mother crystal" in n for n in memory(gm, "Enzo"))  # it woke for him with the Guild's primer
+    assert any("mother crystal" in n for n in memory(gm, "Ossa the Carrier"))
+    r = enzo.act("call", "The yard's speaker", {"to": "the Landing", "words": "Hauler Nine is late.",
+                                                 "seen": "a big man in a Guild apron, pitch on his hands, the yard shed behind"})
+    assert gm.inspect("The yard's speaker")["state"]["charge"] == 2
+    landing = scenes(gm.history(kinds=["scene"], limit=20, newest=True))
+    assert any("pitch on his hands" in x and "Hauler Nine is late." in x and "the Guild Yard" in x for x in landing)
+    enzo.act("send", "The yard's speaker", {"to": "post", "words": "Riders?", "seen": "the same big man"})
+    box = gm.world.get(gm.inspect("The post's speaker")["id"])["state"]["inbox"]
+    assert box[0]["from"] == "the Guild Yard" and box[0]["seen"] == "the same big man"
+    with pytest.raises(Rejected, match="This one knows: the Landing"):  # the slab says which lines it knows
+        enzo.act("call", "The yard's speaker", {"to": "the Moon", "words": "hello"})
+    gm.spawn("thing", gm.inspect("Enzo")["id"], "Emberglass", state={"kind": "ember", "portable": True, "count": 2})
+    gm.move("Enzo", "The Carriers' Landing")
+    r = enzo.act("consult", "Reckoner Aurel Quist", {"question": "how much glass does the Guild hold?"})
+    assert "shards" in json.dumps(r) and "Guild's glass" in json.dumps(r)
+    assert any(c["state"].get("kind") == "ember" for c in holds(gm, "Reckoner Aurel Quist").values())
+    enzo.act("charge", "The yard's speaker", {"count": 1})
+    assert gm.inspect("The yard's speaker")["state"]["charge"] == 2
+
+
+def test_dreyer_glass_in_the_factors_hand_buys_the_gate_its_name_on_the_guilds_tally():
+    eng, gm = hosted(truce=True)
+    ash = newcomer(eng, gm, "dreyer", "Ash")
+    guild_down(eng, gm)
+    assert gm.inspect("Story")["state"]["outcome"] == "held"
+    gm.move("Ash", "The Carriers' Landing")
+    gm.spawn("thing", gm.inspect("Ash")["id"], "Emberglass", state={"kind": "ember", "portable": True, "count": 10})
+    ash.act("give", "Factor Ivo Senn", {"item": "Emberglass"})
+    assert gm.world.get(gm.inspect("Factor Ivo Senn")["id"])["state"]["bids"] == {"House Dreyer": 10}
+    to_next(gm, "guild_recognizes")
+    gm.clock(run=False)
+    st = gm.inspect("Story")["state"]
+    assert st["guild_recognizes"] == "House Dreyer" and st["guild_bought"]
+    assert "The gate's speaker" in holds(gm, "Halvard Dreyer")
