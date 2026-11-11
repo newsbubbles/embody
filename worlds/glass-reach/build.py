@@ -1,4 +1,4 @@
-"""The Glass Reach: a desert fief with table-top rules, ten places, seven NPCs and Ruhl's nine, two seats to play.
+"""The Glass Reach: a desert fief with table-top rules, eleven places, seven NPCs and Ruhl's nine, two seats to play.
 
     uv run embody --as gm --author load glass-reach
     uv run embody --as you join glass-reach "Reeve Ansel Varrick"
@@ -60,7 +60,7 @@ POLICY = {
     "fixed": [
         "the rules: d20 + stat + skill against a difficulty, opposed attacks, a ward stops fast blows and the slow blade passes it, "
         "water runs out, the Thresher comes to rhythm on deep sand, the ring holds during a duel; the engine rolls, the narrator tells",
-        "the seven NPCs, Ruhl's nine men, the ten places and the four sides",
+        "the seven NPCs, Ruhl's nine men, the eleven places and the four sides",
         "the Deepwell is hidden until found or shown; Dram Hollis is Dreyer's and calls the reeve out at t=240; the cistern fails at t=600",
         "nobody but a Keth knows the way down to the Deepwell without finding it",
     ],
@@ -181,12 +181,14 @@ TEMPLATES = {
              "state": {"faction": "the Keth", "body": 3, "wits": 3, "will": 2, "skills": {"stealth": 2, "survival": 2, "blade": 1}},
              "brief": "You are Keth. The Deepwell is yours and the Low Well is a grave. You walk the Flats with the broken step and "
                       "the Thresher does not hear you. The Hold has a new reeve; Taan wants to know careful or afraid."},
-    "dreyer": {"type": "person", "place": "The Salt Road", "doc": "a House Dreyer agent come up the Salt Road under another name",
+    "dreyer": {"type": "person", "place": "The Crawler's Lee", "doc": "a House Dreyer agent come up the Salt Road under another name",
                "state": {"faction": "House Dreyer", "secret": ["dialog", "gives", "gave", "faction", "brief", "word_left"],
                          "body": 3, "wits": 3, "will": 3, "skills": {"blade": 1, "stealth": 2, "parley": 2}},
                "brief": "You are Dreyer's, under another name. The house lost the writ, the Hold and the water and means to have "
                         "them back: the Keth kept thirsty, the reeve kept weak, the Flats empty for the taking. Dram Hollis is in the "
-                        "Hold on the same business; he does not know you are coming."},
+                        "Hold on the same business; he does not know you are coming. You start in the lee of the dead crawler off "
+                        "the Salt Road, where a runner of the house waits with the last word; the word that opens him is "
+                        "saltmark."},
 }
 
 STORY_KINDS = ["arrived", "checked", "talked", "agreed", "dram_moves", "downed", "killed", "yielded",
@@ -486,6 +488,7 @@ PLACES = [
     {"entity": "The Deepwell", "at": [4150, 1000, -25], "radius": 20, "floor": -32, "ceiling": -18,
      "note": "a cave in the ridge's foot, water at the bottom"},
     {"entity": "The Bone Field", "at": [2600, -1800, 0], "radius": 300, "note": "south across the flats, where the crawler died"},
+    {"entity": "The Crawler's Lee", "at": [96, 1800, 0], "radius": 10, "note": "the shade of a dead hauler beside the Salt Road"},
     {"entity": "The Low Well", "at": [3950, -250, -6], "radius": 40, "floor": -30,
      "note": "a stone well-head in a hollow at the ridge's south foot, dry and poisoned"},
     {"entity": "The Deep", "at": [3000, -500, -60], "footprint": [[1500, -2500], [4500, -2500], [4500, 1500], [1500, 1500]],
@@ -511,6 +514,7 @@ ROUTES = [
     {"a": "The Glass Flats", "b": "Red Ridge", "route": [[400, 700], [1500, 800], [2800, 1000], [3900, 1100]]},
     {"a": "The Glass Flats", "b": "The Bone Field", "route": [[1800, 400], [2450, -1600]]},
     {"a": "Red Ridge", "b": "The Deepwell", "route": [[4100, 1050, 0], [4150, 1000, -25]]},
+    {"a": "The Salt Road", "b": "The Crawler's Lee", "route": [[80, 1800], [96, 1800, 0]]},
     {"a": "The Glass Flats", "b": "The Low Well", "route": [[2800, 1000], [3600, 100], [3950, -250, -6]]},
     {"a": "Red Ridge", "b": "The Low Well", "route": [[4050, 100, 0], [3950, -250, -6]]},
 ]
@@ -558,6 +562,43 @@ RACK = {"holds": ["weapon"], "room": 8}  # a real blade can hang here beside the
 BOWS = {"portable": False,
         "description": "Six short bows on pegs at the foot of the wall stair, strung, arrows standing in a jar beside them. "
                        "What the Hold has for anything past the gate."}
+
+# The house's runner in the lee of the dead crawler off the Salt Road: a Dreyer newcomer starts beside him, out of
+# earshot of the road, and learns there what became of Hollis. Anyone else gets road talk; only the word in the dreyer
+# brief opens him. Scripted, no mind needed. The lee is shade, so he and his two long skins last the week.
+LEE = ("The lee of a dead hauler beside the Salt Road: a rusted flank that throws the only shade for a mile, sand blown "
+       "smooth against it, a hollow where someone sleeps. The road's wind goes over and leaves it quiet.")
+RUNNER_NAME = "Wick the runner"
+RUNNER_SKIN = {"capacity": 20, "left": 20, "description": "A runner's long skin, sewn double, sweating in the shade.",
+               "description_full": "A runner's long skin, sewn double, sweating in the shade.",
+               "description_empty": "A runner's long skin, slack and dry."}  # about a week of the open road
+RUNNER = {"faction": "House Dreyer", "secret": ["dialog", "gives", "gave", "faction", "word_left"],
+          "body": 2, "wits": 3, "will": 2, "skills": {"stealth": 2, "survival": 2}, "water": 10, "max_water": 10,
+          "description": "A wiry runner in salt-white wraps, sitting in the shade of the dead crawler with two skins and a "
+                         "staff across his knees. Waiting on the crawler south, by the look of him.",
+          "brief": "You run letters for House Dreyer between the south and the Reach. You wait here for whoever the house "
+                   "sends next, and you open only to the word saltmark.",
+          "default_line": "Wick squints up from the shade. 'Waiting on the crawler south. The water's mine; the shade is free.'",
+          "dialog": {
+              "saltmark": "Wick looks at you a long moment, then shifts over in the shade. 'So the house sent another. Sit. "
+                          "Hollis went into the Hold to count the water and the men. He wrote for ten days, then nothing. "
+                          "The Guild at the Landing says the new reeve has him inside the walls, alive, no blade. Whether "
+                          "he talked, nobody knows. The house's word is what it was: keep the Keth thirsty, keep the reeve "
+                          "weak, learn what the Hold has. Do not go near Hollis openly.'",
+              "hollis|dram|clerk": "'Never heard the name.' His eyes say he has.",
+              "hold|reeve|gate|varrick|ruhl": "'Nine men and a captain who counts every draw. The cistern cracked; they live on "
+                                              "what the Keth carry in at dusk and the cask the crawler leaves at dawn.'",
+              "keth|ridge|deepwell|taan": "'The Keth sit up on Red Ridge on the only sweet water in the Reach, and trade it "
+                                          "to the Hold now. That is new.'",
+              "landing|ossa|guild|carrier": "'The Landing is up the road. Ossa keeps the tally. The Guild carries for "
+                                            "whoever holds the gate, and forgets who held it before.'",
+              "crawler|hauler|wreck|dead": "'A Guild hauler, stripped years back. The shade is the only thing left on it "
+                                           "worth having.'"},
+          "gives": {"saltmark": {"type": "thing", "name": "Sealed note for Hollis",
+                                 "state": {"portable": True, "description": "A twist of oiled paper under grey wax with no "
+                                           "mark pressed in it. Whoever reads the house's hand would read: hold, count, "
+                                           "wait for word."},
+                                 "line": "'For Hollis, if you reach him. Not before.'"}}}
 
 GUARD = {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "vigor": 6, "max_vigor": 6}
 # Ruhl's nine, in the order they are filled: a world that already has some of the Hold's men (a guest's guard, the
@@ -607,7 +648,7 @@ NINE = [
 
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
-    bows on the Hold's wall, and Ruhl's nine. Each is made once: the well and the bows by name, the nine by a mark on
+    bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, and Ruhl's nine. Each is made once: the well and the bows by name, the nine by a mark on
     the story, so a guard who dies is not raised again on a reboot. The nine are posted in the Hold, where a body with
     water at hand does not thirst; they drink when the Hold runs dry, like everyone under its roof."""
     names = {e["name"]: e["id"] for e in s.find(limit=500)}
@@ -623,6 +664,14 @@ def keep_canon(s):
         s.patch(story, {"low_well": well})
     if "Bows on the wall" not in names:
         s.spawn("thing", st["hold"], "Bows on the wall", state=BOWS)
+    if "The Crawler's Lee" not in names:
+        names["The Crawler's Lee"] = s.spawn("place", root, "The Crawler's Lee", state={"description": LEE})["id"]
+        s.connect(names["The Salt Road"], names["The Crawler's Lee"])
+    if RUNNER_NAME not in names:
+        lee = names["The Crawler's Lee"]
+        wick = s.spawn("person", lee, RUNNER_NAME, state={**RUNNER, "post": lee})["id"]
+        for _ in range(2):  # the two skins he waits with: his own water, not a well for whoever passes
+            s.spawn("waterskin", wick, "Runner's skin", state=dict(RUNNER_SKIN))
     rack = names.get("Rack of practice blades")
     if rack and s.world.get(rack)["state"].get("holds") is None:
         s.patch(rack, RACK)

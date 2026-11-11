@@ -1,6 +1,7 @@
 """The Glass Reach as a story: seats with stakes, the hidden well and the two ways to it, terms with Taan, Dram in the
 ring, the letter, the end states, the trade at the Landing, the timers, and a safe upgrade."""
 
+import json
 from pathlib import Path
 
 from embody.cli import load_world
@@ -516,7 +517,7 @@ def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_
     m = gm.map(depth=2)
     rows = {e["name"]: e for e in m["entities"]}
     places = [e for e in m["entities"] if e["type"] == "place"]
-    assert len(places) == 10 and all(e["own"] for e in places)
+    assert len(places) == 11 and all(e["own"] for e in places)
     assert rows["The Keth jars"]["own"] and rows["The Hold's ration cask"]["own"]  # spawned by the routines, placed after
     assert len(m["paths"]) >= 7 and all(p["drawn"] for p in m["paths"])
     ridge = gm.measure("Scar Gate, the Hold", "Red Ridge")
@@ -602,3 +603,22 @@ def test_a_blade_hangs_on_the_rack_and_a_card_shows_the_blade_a_body_bears():
     ruhl.join("glass-reach", "Captain Ruhl")
     ruhl.act("take", "Reeve's blade")
     assert gm.inspect("Reeve's blade")["parent"] == gm.inspect("Captain Ruhl")["id"]
+
+
+def test_a_dreyer_newcomer_meets_the_runner_and_only_the_word_opens_him():
+    eng, gm, you = reach()
+    ash = eng.session("ash")
+    b = ash.join("glass-reach", template="dreyer", name="Ash")
+    assert b["here"]["name"] == "The Crawler's Lee" and "saltmark" in gm.inspect("Ash")["state"]["brief"]
+    wick = next(c for c in ash.perceive()["present"] if c["name"] == "Wick the runner")
+    assert "dialog" not in wick.get("state", wick) and "House Dreyer" not in json.dumps(wick)  # nothing shows him Dreyer's
+    me = gm.inspect("Ash")["id"]
+    lines = said(ash.act("talk", "Wick the runner", {"about": "Hollis"}), me)
+    assert lines and "Never heard the name" in lines[0]
+    r = ash.act("talk", "Wick the runner", {"about": "saltmark"})
+    assert any("the new reeve has him" in t for t in said(r, me))
+    assert "Sealed note for Hollis" in [c["name"] for c in gm.inspect("Ash")["contents"]]
+    ash.act("talk", "Wick the runner", {"about": "saltmark"})  # one note, once
+    assert [c["name"] for c in gm.inspect("Ash")["contents"]].count("Sealed note for Hollis") == 1
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot keeps one Wick
+    assert len([e for e in gm.find(name="Wick the runner") if e["name"] == "Wick the runner"]) == 1
