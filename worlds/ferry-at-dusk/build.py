@@ -371,7 +371,7 @@ def upgrade(s):
         if key.startswith("wake|up|inside"):
             s.patch(tam, {"dialog": {key: None}})
     # the chores: the pot and the sacks were improvised in round three, the wheel is new
-    mill_things = {e["name"]: e for e in s.find(limit=500) if e["name"] in ("Mill wheel", "Pot of grease", "Heap of empty sacks")}
+    mill_things = {e["name"]: e for e in s.world.find(limit=None) if e["name"] in ("Mill wheel", "Pot of grease", "Heap of empty sacks")}
     if "Mill wheel" not in mill_things:
         s.spawn("thing", mill, "Mill wheel", state=WHEEL)
     if "Pot of grease" not in mill_things:

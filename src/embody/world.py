@@ -690,7 +690,7 @@ class World:
         return out
 
     def find(self, type: str | None = None, under: str | None = None, parent: str | None = None,
-             name: str | None = None, state: dict[str, Any] | None = None, limit: int = 50) -> list[dict[str, Any]]:
+             name: str | None = None, state: dict[str, Any] | None = None, limit: int | None = 50) -> list[dict[str, Any]]:
         where = ["world_id=?"]
         params: list[Any] = [self.id]
         if parent:

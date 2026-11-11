@@ -1,3 +1,13 @@
+def load(who):
+    # what a body carries, in bulk: a skin or anything with a capacity is 2, the rest 1 unless it says
+    n = 0
+    for c in who.children():
+        n = n + int(c.state.bulk or (2 if c.state.capacity else 1))
+    return n
+
+def bulk(it):
+    return int(it.state.bulk or (2 if it.state.capacity else 1))
+
 def check(ctx):
     if ctx.target.parent.id == ctx.actor.id:
         return "you already hold it"
@@ -7,6 +17,8 @@ def check(ctx):
     if holder.id != ctx.actor.parent.id and not (holder.state.holds is not None and holder.parent is not None
                                                  and holder.parent.id == ctx.actor.parent.id):
         return "it is not here"
+    if ctx.actor.state.carry and load(ctx.actor) + bulk(ctx.target) > int(ctx.actor.state.carry):
+        return "your hands are full (" + str(load(ctx.actor)) + " of " + str(ctx.actor.state.carry) + "): drop, put or give something first"
     return True
 
 def apply(ctx):

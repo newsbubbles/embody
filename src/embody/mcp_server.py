@@ -310,11 +310,13 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def find(type: str | None = None, name: str | None = None, under: str | None = None,
-             parent: str | None = None, state: dict[str, Any] | None = None, limit: int = 30,
+             parent: str | None = None, state: dict[str, Any] | None = None, limit: int = 30, offset: int = 0,
              principal: str | None = None) -> list[dict[str, Any]]:
-        """Structured search. type matches the schema chain, name is a substring, under limits to a subtree,
-        state matches exact key values. Embodied principals search their own place."""
-        return S(principal).find(type=type, name=name, under=under, parent=parent, state=state, limit=limit)
+        """Structured search, one page at a time (limit 1 to 100, oldest first). type matches the schema chain, name
+        is a substring, under limits to a subtree, parent to direct children, state matches exact key values. A full
+        page may have more: call again with offset moved on by limit. Embodied principals search their own place."""
+        return S(principal).find(type=type, name=name, under=under, parent=parent, state=state, limit=limit,
+                                 offset=offset)
 
     @tool()
     @_wrap

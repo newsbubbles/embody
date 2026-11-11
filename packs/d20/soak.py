@@ -51,7 +51,7 @@ def soak(world: str, days: float = 7, seats: str = "held", sets: tuple[str, ...]
             if not seat.get("taken"):
                 eng.session(f"idle-{i}").join(gm.world_id, seat["name"])
                 held.append(seat["name"])
-    rows = gm.find(limit=1000)
+    rows = gm.world.find(limit=None)
     bodies = {r["id"]: r["name"] for r in rows if "water" in r["state"] and "max_water" in r["state"]}
     sources = {r["id"]: r["name"] for r in rows if r["state"].get("water_source") and r["state"].get("left") is not None}
     t0 = gm.world.t

@@ -328,11 +328,11 @@ def test_the_reach_lives_a_week_with_every_seat_held_and_nobody_playing(truce):
 
 def test_upgrade_is_idempotent():
     eng, gm, you = reach()
-    before = {e["id"]: e["state"] for e in gm.find(limit=500)}
+    before = {e["id"]: e["state"] for e in gm.world.find(limit=None)}
     goals = len(gm.recall(entity="Reeve Ansel Varrick")["goals"])
     edges = gm.world.store.count("edge", "world_id=?", (gm.world.id,))
     load_world(gm, "glass-reach", upgrade=True)
-    assert {e["id"]: e["state"] for e in gm.find(limit=500)} == before
+    assert {e["id"]: e["state"] for e in gm.world.find(limit=None)} == before
     assert gm.world.store.count("edge", "world_id=?", (gm.world.id,)) == edges
     assert len(gm.recall(entity="Reeve Ansel Varrick")["goals"]) == goals
     assert len(gm.world.edges(gm.inspect("Reeve Ansel Varrick")["id"], "standing", "out")) == 4
@@ -530,7 +530,7 @@ def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_
 
 def varrick_men(gm):
     st = story(gm)
-    return {e["name"] for e in gm.find(type="person", limit=500) + gm.find(type="fighter", limit=500)
+    return {e["name"] for e in gm.world.find(type="person", limit=None) + gm.world.find(type="fighter", limit=None)
             if gm.world.get(e["id"])["state"].get("faction") == "House Varrick"} - {"Captain Ruhl", "Reeve Ansel Varrick"}
 
 
@@ -575,7 +575,7 @@ def test_a_reach_with_some_of_the_hold_already_gets_only_the_rest_and_only_once(
     load_world(gm, "glass-reach", upgrade=True)
     men = varrick_men(gm)
     assert len(men) == 9 and "Kit" in men and "Garret Cole" not in men  # the guest stands in for the ninth
-    assert len([e for e in gm.find(limit=500) if e["name"] == "The oldest of the nine"]) == 1
+    assert len([e for e in gm.world.find(limit=None) if e["name"] == "The oldest of the nine"]) == 1
     assert [e["name"] for e in gm.find(type="place", limit=50)].count("The Low Well") == 1
     # a man who is gone stays gone: the nine are made once
     gm.destroy("Brannoc Hale")
@@ -721,10 +721,11 @@ def test_a_newcomer_carries_a_skin_and_an_edge_and_a_squall_pins_them_on_their_f
     assert "pinned" in str(ex.value)
     gm.clock(step=7201)
     assert not gm.inspect("Ash")["state"].get("pinned_until")
-    ash.act("go", "The Salt Road")
-    ash.act("go", "The Glass Flats")  # once is enough: the second crossing is clear
-    ash.act("go", "The Salt Road")
-    assert where(gm, "Ash") == "The Salt Road"
+    r = ash.act("go", "The Salt Road")  # the squall is once; the wardens turn a Dreyer man back off their road
+    assert where(gm, "Ash") == "The Glass Flats" and any("Back you go" in t for t in scenes(r["events"]))
+    shard(gm, "Ash")
+    ash.act("go", "The Salt Road")  # a shard buys a day's road
+    assert where(gm, "Ash") == "The Salt Road" and not [c for c in gm.inspect("Ash")["contents"] if c["name"] == "Emberglass"]
 
 
 def test_hidden_things_turn_up_for_the_right_look_and_the_place_says_where_to_look():
@@ -855,10 +856,34 @@ def test_pitch_mends_the_cistern_once_the_wedge_is_out_and_the_mended_cistern_co
     me.act("check", params={"skill": "search", "dc": 15})
     me.act("take", "Bronze wedge")
     r = me.act("check", params={"skill": "lore", "dc": 13})
-    assert any("trickling" in t for t in scenes(r["events"]))
+    assert any("wants the night to set" in t for t in scenes(r["events"])) and not gm.inspect("Story")["state"].get("cistern_mended")
+    to_next(gm, "pitch_sets")
     assert gm.inspect("Story")["state"]["cistern_mended"] and gm.inspect("The cistern")["state"]["left"] >= 6
+    assert any("trickling" in t for t in scenes(gm.history(kinds=["scene"], limit=20, newest=True)))
     to_next(gm, "moon_turns")
     assert gm.inspect("Story")["state"]["reckoning"]["cistern"]
+
+
+def test_a_knife_in_the_soft_pitch_undoes_the_mend():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    me = newcomer(eng, gm, "guard", "Bram")
+    spy = newcomer(eng, gm, "dreyer", "Vey")
+    gm.patch("Bram", {"skills": {"lore": 30}})
+    gm.patch("Vey", {"skills": {"stealth": 30}})
+    gm.move("Bram", "Scar Gate, the Hold")
+    gm.move("Vey", "Scar Gate, the Hold")
+    gm.move("Bronze wedge", "The Gate Yard")
+    gm.patch("Bronze wedge", {"hidden": False})
+    pot = next(e["id"] for e in gm.find(name="Pot of Guild pitch") if e["name"] == "Pot of Guild pitch")
+    gm.move(pot, "Bram")
+    me.act("check", params={"skill": "lore", "dc": 13})
+    assert gm.inspect("Story")["state"].get("pitch_curing")
+    spy.act("check", params={"skill": "stealth", "dc": 12})
+    to_next(gm, "pitch_sets")
+    st = gm.inspect("Story")["state"]
+    assert not st.get("cistern_mended") and not st.get("pitch_curing")
+    assert any("pried it out" in t for t in scenes(gm.history(kinds=["scene"], limit=20, newest=True)))
 
 
 def test_proof_for_the_keth_puts_bows_on_the_wall_and_the_convoy_goes_to_who_pays():
@@ -869,6 +894,8 @@ def test_proof_for_the_keth_puts_bows_on_the_wall_and_the_convoy_goes_to_who_pay
     gm.spawn("thing", gm.inspect("Sen")["id"], name="Empty phial", state={"portable": True})
     gm.move("Sen", "The Deepwell")
     keth.act("give", "Elder Taan", params={"item": "Empty phial"})
+    assert not gm.inspect("Story")["state"].get("keth_proof")  # the council sits on it first
+    to_next(gm, "keth_council")
     assert gm.inspect("Story")["state"]["keth_proof"] == "Empty phial"
     car = newcomer(eng, gm, "carrier", "Enzo")
     shard(gm, "Enzo")
@@ -880,6 +907,8 @@ def test_proof_for_the_keth_puts_bows_on_the_wall_and_the_convoy_goes_to_who_pay
         shard(gm, "Enzo")
     for _ in range(3):
         car.act("give", "Bellan Rook", params={"item": "Emberglass"})
+    assert not gm.inspect("Story")["state"].get("convoy_to")  # paid in full: Rook takes bids for a day
+    to_next(gm, "convoy_closes")
     assert gm.inspect("Story")["state"]["convoy_to"] == "House Varrick"
     assert gm.inspect("The Hold's ration cask")["state"]["left"] == before + 8
     to_next(gm, "moon_turns")
@@ -899,3 +928,75 @@ def test_the_writ_in_the_heralds_hand_yields_the_gate_at_the_moon():
     assert gm.inspect("Story")["state"]["writ_given"]
     to_next(gm, "moon_turns")
     assert gm.inspect("Story")["state"]["outcome"] == "yielded"
+
+
+def test_a_side_outbid_in_the_day_gets_its_glass_back():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    to_next(gm, "rook_arrives")
+    hold = newcomer(eng, gm, "guard", "Bram")
+    spy = newcomer(eng, gm, "dreyer", "Vey")
+    for who in ["Bram", "Vey"]:
+        gm.move(who, "The Carriers' Landing")
+        gm.patch(who, {"water": 40, "max_water": 40})
+    for _ in range(3):
+        shard(gm, "Bram")
+    for _ in range(4):
+        shard(gm, "Vey")
+    for _ in range(3):
+        hold.act("give", "Bellan Rook", params={"item": "Emberglass"})
+    for _ in range(4):
+        spy.act("give", "Bellan Rook", params={"item": "Emberglass"})
+    to_next(gm, "convoy_closes")
+    assert gm.inspect("Story")["state"]["convoy_to"] == "House Dreyer"
+    assert len([c for c in gm.inspect("Bram")["contents"] if c["name"] == "Emberglass"]) == 3
+
+
+def test_the_road_wardens_hold_strangers_turn_back_dreyer_and_take_a_shard_toll():
+    eng, gm = hosted()
+    assert len([e for e in gm.find(type="fighter") if gm.inspect(e["id"])["state"].get("warden")]) == 5
+    keth = newcomer(eng, gm, "keth", "Sen")
+    gm.move("Sen", "The Glass Flats")
+    gm.patch("Sen", {"squalled": True, "water": 40, "max_water": 40})
+    for _ in range(2):
+        shard(gm, "Sen")
+    r = keth.act("go", "The Salt Road")
+    texts = scenes(r["events"])
+    assert any("New face" in t for t in texts) and any("Glass that leaves the Flats" in t for t in texts)
+    assert len([c for c in gm.inspect("Sen")["contents"] if c["name"] == "Emberglass"]) == 1
+    with pytest.raises(Rejected) as ex:
+        keth.act("go", "The Gate Yard")
+    assert "road wardens" in str(ex.value)
+    keth.act("talk", "Sergeant Edda Marr", {"about": "my name is Sen, Keth, going to the Hold"})
+    keth.act("go", "The Gate Yard")
+    assert where(gm, "Sen") == "The Gate Yard"
+    keth.act("go", "The Salt Road")  # known now: no second hold
+    assert where(gm, "Sen") == "The Salt Road" and not gm.inspect("Sen")["state"].get("pinned_until")
+    spy = newcomer(eng, gm, "dreyer", "Vey")
+    gm.move("Vey", "The Glass Flats")
+    gm.patch("Vey", {"squalled": True, "skills": {"stealth": 40}, "water": 40, "max_water": 40})
+    spy.act("creep", "The Salt Road")  # the broken step past the bows
+    assert where(gm, "Vey") == "The Salt Road"
+
+
+def test_hands_hold_what_they_hold():
+    eng, gm = hosted()
+    me = newcomer(eng, gm, "carrier", "Enzo")
+    assert gm.inspect("Enzo")["state"]["carry"] == 8  # a skin (2) and a knife (1) in
+    for i in range(5):
+        gm.spawn("thing", gm.inspect("Enzo")["parent"], name="Pebble " + str(i), state={"portable": True})
+    for i in range(5):
+        me.act("take", "Pebble " + str(i))
+    pot = next(e["id"] for e in gm.find(name="Pot of Guild pitch") if e["name"] == "Pot of Guild pitch")
+    with pytest.raises(Rejected) as ex:
+        me.act("take", pot)
+    assert "hands are full" in str(ex.value)
+
+
+def test_each_dawn_the_hold_hears_how_the_moon_leans():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    to_next(gm, "dawn")
+    st = gm.inspect("Story")["state"]
+    assert st["lean"] in ["held", "siege", "fallen"]
+    assert any("to the moon" in t and "Ruhl counts the wall" in t for t in scenes(gm.history(kinds=["scene"], limit=40, newest=True)))

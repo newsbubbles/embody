@@ -8,6 +8,8 @@ own, so a world may replace any of them with a file of the same name in its scri
 
 - go: to a connected place; via a door-like entity when the connection has one (locked doors refuse).
 - take, drop: portable things here or held; give: something you hold to someone here (`gives` tables can answer).
+- carrying: a body whose state has `carry` holds at most that much bulk; take, give (to it) and harvest refuse past
+  it. A thing's bulk is its `bulk`, else 2 for anything with a `capacity` (a skin), else 1. No `carry`, no limit.
 - put: `params {"item": thing you hold}` onto or into a holder here: a thing whose `state.holds` lists what it takes
   (["any"], or state flags such as ["weapon"]) and, optionally, `room` (how many). What lies on a holder is
   within reach of everyone in its place, and `take` takes it back down.

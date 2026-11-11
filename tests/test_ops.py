@@ -186,3 +186,18 @@ def test_grid_space_and_turn_based_pocket():
     # perceive explains the turn rule through the affordance reasons
     aff = {x["verb"]: x for x in bone.perceive()["affordances"] if x["verb"] == "step"}
     assert aff["step"]["ok"] is False and "not your turn" in aff["step"]["reason"]
+
+
+def test_find_pages_and_refuses_a_limit_it_cannot_meet():
+    eng, w, i = engine_with_two_rooms()
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    gm.use("two-rooms")
+    for n in range(120):
+        gm.spawn("thing", "Hall", name=f"Pebble {n:03d}")
+    with pytest.raises(Rejected) as r:
+        gm.find(name="Pebble", limit=500)
+    assert "offset" in r.value.hint
+    first = gm.find(name="Pebble", limit=100)
+    rest = gm.find(name="Pebble", limit=100, offset=100)
+    assert len(first) == 100 and len(rest) == 20
+    assert [e["name"] for e in first + rest] == [f"Pebble {n:03d}" for n in range(120)]

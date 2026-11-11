@@ -5,7 +5,16 @@ def check(ctx):
         return "this vein is picked clean"
     if ctx.actor.state.down:
         return "you are down"
+    if ctx.actor.state.carry and load(ctx.actor) + 1 > int(ctx.actor.state.carry):
+        return "your hands are full: drop or give something before you dig"
     return True
+
+def load(who):
+    # the same count take uses: a skin or anything with a capacity is 2, the rest 1 unless it says
+    n = 0
+    for c in who.children():
+        n = n + int(c.state.bulk or (2 if c.state.capacity else 1))
+    return n
 
 def apply(ctx):
     ctx.emit("harvesting", target=ctx.target, reach=1, by=ctx.actor.id)

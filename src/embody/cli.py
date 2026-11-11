@@ -357,6 +357,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--name")
     c.add_argument("--under")
     c.add_argument("--limit", type=int, default=30)
+    c.add_argument("--offset", type=int, default=0)
     c = sub.add_parser("history", help="events")
     c.add_argument("--since", type=int, default=0)
     c.add_argument("--kinds", nargs="*")
@@ -499,7 +500,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "inspect":
             emit(args, s.inspect(args.entity))
         elif args.cmd == "find":
-            r = s.find(type=args.type, name=args.name, under=args.under, limit=args.limit)
+            r = s.find(type=args.type, name=args.name, under=args.under, limit=args.limit, offset=args.offset)
             emit(args, r, "\n".join(f"{c['id']:6} {c['type']:12} {c['name']}" for c in r) or "nothing")
         elif args.cmd == "history":
             r = s.history(since=args.since, kinds=args.kinds, touching=args.touching, limit=args.limit)

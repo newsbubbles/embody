@@ -167,7 +167,8 @@ BRIEFING = (
     "in veins on the Flats, and digging it loud wakes the Thresher under the sand. Four sides, one road, one week of water. "
     "The rules are on the table (d20 plus stat plus skill against a difficulty; a ward stops the fast blade and the slow one "
     "passes it; the ring in the yard holds by old law). The Reach keeps things hidden: where something looks off, a "
-    "check with search, survival or lore may turn it up. The engine rolls; you decide; your agent tells it.")
+    "check with search, survival or lore may turn it up. You carry what your hands hold (a skin counts two). The Guild's "
+    "wardens keep a post on the Salt Road and take their toll on glass. The engine rolls; you decide; your agent tells it.")
 
 # What a newcomer carries in (the template's kit): a skin of their own and an edge. No house marks on a Dreyer man's.
 KNIFE = {"weapon": True, "damage": 1, "bonus": 0, "portable": True, "description": "A plain short knife, the edge kept."}
@@ -178,26 +179,26 @@ VARRICK_BLADE = {"weapon": True, "damage": 2, "bonus": 0, "portable": True,
 
 TEMPLATES = {
     "carrier": {"type": "person", "place": "The Carriers' Landing", "doc": "a Guild carrier off the last convoy, at the Landing",
-                "state": {"faction": "the Carriers", "body": 3, "wits": 3, "will": 2, "skills": {"parley": 1, "survival": 1, "lore": 1}},
+                "state": {"faction": "the Carriers", "body": 3, "wits": 3, "will": 2, "skills": {"parley": 1, "survival": 1, "lore": 1}, "carry": 8},
                 "kit": [{"type": "waterskin", "name": "Guild waterskin", "state": {"capacity": 4, "left": 4}},
                         {"type": "thing", "name": "Carrier's knife", "state": KNIFE}],
                 "brief": "You came in with the water convoy and stayed when it left. The Guild carries for whoever holds the gate; "
                          "Ossa keeps the tally. Water is a skin for a shard. Whatever else you are here for is yours to decide."},
     "guard": {"type": "person", "place": "The Gate Yard", "doc": "one of Ruhl's nine, in the Gate Yard",
-              "state": {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "vigor": 6, "max_vigor": 6},
+              "state": {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "vigor": 6, "max_vigor": 6, "carry": 8},
               "kit": [{"type": "waterskin", "name": "Varrick waterskin", "state": {"capacity": 4, "left": 4}},
                       {"type": "thing", "name": "Varrick blade", "state": VARRICK_BLADE}],
               "brief": "You hold a blade for House Varrick under Captain Ruhl: nine men for a wall that wants twenty, a new reeve, "
                        "a week of water, and a clerk who watches the drill like a man counting."},
     "keth": {"type": "person", "place": "Red Ridge", "doc": "a Keth of Taan's camp, on Red Ridge",
-             "state": {"faction": "the Keth", "body": 3, "wits": 3, "will": 2, "skills": {"stealth": 2, "survival": 2, "blade": 1}},
+             "state": {"faction": "the Keth", "body": 3, "wits": 3, "will": 2, "skills": {"stealth": 2, "survival": 2, "blade": 1}, "carry": 8},
              "kit": [{"type": "waterskin", "name": "Keth skin", "state": {"capacity": 4, "left": 4}},
                      {"type": "thing", "name": "Keth knife", "state": KETH_KNIFE}],
              "brief": "You are Keth. The Deepwell is yours and the Low Well is a grave. You walk the Flats with the broken step and "
                       "the Thresher does not hear you. The Hold has a new reeve; Taan wants to know careful or afraid."},
     "dreyer": {"type": "person", "place": "The Dry Camp", "doc": "a House Dreyer man, come in at the house's hidden camp south of the Bone Field",
                "state": {"faction": "House Dreyer", "secret": ["dialog", "gives", "gave", "faction", "brief", "word_left"],
-                         "body": 3, "wits": 3, "will": 3, "skills": {"blade": 1, "stealth": 2, "parley": 2}},
+                         "body": 3, "wits": 3, "will": 3, "skills": {"blade": 1, "stealth": 2, "parley": 2}, "carry": 8},
                "kit": [{"type": "waterskin", "name": "Plain waterskin", "state": {"capacity": 4, "left": 4}},
                        {"type": "thing", "name": "Short knife", "state": KNIFE}],
                "brief": "You are Dreyer's, under another name. The house lost the writ, the Hold and the water and means to have "
@@ -231,7 +232,10 @@ ROUTINE_KINDS = ["keth_run", "crawler"]
 # Chapter two (scripts/reach_chapter.py): the dawn that starts it, what strains the truce, the moon.
 CHAPTER_KINDS = ["dawn", "harvested", "downed", "killed", "given", "moon_turns", "chapter_two_begins"]
 # Chapter two's middle (scripts/reach_moon.py): the beats on the calendar and the four contests the moon counts.
-MOON_KINDS = ["convoy_word", "rook_arrives", "riders_fires", "herald_comes", "given", "talked", "checked"]
+MOON_KINDS = ["convoy_word", "rook_arrives", "riders_fires", "herald_comes", "given", "talked", "checked", "dawn",
+              "keth_council", "convoy_closes", "pitch_sets"]
+# The Guild's road wardens on the Salt Road (scripts/reach_wardens.py).
+WARDEN_KINDS = ["arrived", "talked", "given", "dawn", "dusk"]
 # What is hidden until someone looks (scripts/reach_finds.py) and what the road does to a newcomer (scripts/reach_road.py).
 FIND_KINDS = ["checked"]
 ROAD_KINDS = ["arrived", "squall", "squall_passes"]
@@ -288,7 +292,7 @@ def seed_reach(s, by_name):
         for text, why in goals:
             if text not in have:
                 s.intend(text, why=why, entity=eid)
-    factions = {f["name"]: f["id"] for f in s.find(type="faction", limit=20)}
+    factions = {f["name"]: f["id"] for f in s.world.find(type="faction", limit=20)}
     for who, table in STANDINGS.items():
         eid = by_name[who]
         existing = {e["target"] for e in s.world.edges(eid, "standing", "out")}
@@ -439,6 +443,7 @@ def populate(s):
     s.set_rule(root, "reach_finds", kinds=FIND_KINDS)
     s.set_rule(root, "reach_road", kinds=ROAD_KINDS)
     s.set_rule(root, "reach_moon", kinds=MOON_KINDS)
+    s.set_rule(root, "reach_wardens", kinds=WARDEN_KINDS)
     by_name = {"Reeve Ansel Varrick": ansel, "Sefa of the Keth": sefa, "Captain Ruhl": ruhl, "Dram Hollis": dram,
                "Ossa the Carrier": ossa, "Elder Taan": taan, "Nico": nico}
     seed_reach(s, by_name)
@@ -474,7 +479,7 @@ def nail_notice(s, hold):
 
 def upgrade(s):
     """Bring a world built from an older version of this file up to this one. Checks before every write."""
-    names = {e["name"]: e["id"] for e in s.find(limit=500)}
+    names = {e["name"]: e["id"] for e in s.world.find(limit=None)}
     if "Notice by the cistern" not in names and "Scar Gate, the Hold" in names:
         nail_notice(s, names["Scar Gate, the Hold"])
     need = ["Reeve Ansel Varrick", "Sefa of the Keth", "Captain Ruhl", "Dram Hollis", "Ossa the Carrier", "Elder Taan", "Nico"]
@@ -488,7 +493,7 @@ def upgrade(s):
             want = {k: table[k] for k in ("playable", "brief", "secret") if k in table and st.get(k) != table[k]}
             if want:
                 s.patch(names[who], want)
-    for e in s.find(type="person", limit=500):
+    for e in s.world.find(type="person", limit=None):
         sec = list(s.world.get(e["id"])["state"].get("secret") or [])  # inspect hides the secret list itself
         if "word_left" not in sec:
             s.patch(e["id"], {"secret": sec + ["word_left"]})
@@ -499,6 +504,7 @@ def upgrade(s):
     s.set_rule(root, "reach_finds", kinds=FIND_KINDS)
     s.set_rule(root, "reach_road", kinds=ROAD_KINDS)
     s.set_rule(root, "reach_moon", kinds=MOON_KINDS)
+    s.set_rule(root, "reach_wardens", kinds=WARDEN_KINDS)
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
     keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
     keep_canon(s)
@@ -564,7 +570,7 @@ def lay_out(s):
     they are. Only what exists is placed. Returns the layout op's warnings."""
     w = s.world
     root = s.summary()["root"]
-    ids = {e["name"]: e["id"] for e in s.find(limit=500)}
+    ids = {e["name"]: e["id"] for e in s.world.find(limit=None)}
     places = [p for p in PLACES if p["entity"] in ids and not w.get(ids[p["entity"]])["state"].get("layout")]
     routes = [r for r in ROUTES if r["a"] in ids and r["b"] in ids
               and not any(ed["target"] == ids[r["b"]] and ed["data"].get("route") for ed in w.edges(ids[r["a"]], "connects_to", "out"))]
@@ -843,7 +849,56 @@ DRIFTERS = [
     ("Dunmore", "A road-worn man who flinches at loud noise and was a soldier once, somewhere.",
      "Dunmore nods without looking up. 'I have stood on walls. They fall.'"),
 ]
-PITCH = {"portable": True, "description": "A clay pot of Guild crawler pitch, black and sticky, for sealing tanks."}
+PITCH = {"portable": True, "bulk": 2, "description": "A clay pot of Guild crawler pitch, black and sticky, for sealing tanks."}
+
+# The Guild's road wardens (scripts/reach_wardens.py): a post on the Salt Road where every road in the Reach meets.
+# Three spears and two bows, fighters who strike back when struck, under a sergeant who keeps the ledger.
+WARDEN = {"faction": "the Carriers", "warden": True, "body": 3, "wits": 3, "will": 3, "skills": {"blade": 3, "resolve": 2},
+          "vigor": 8, "max_vigor": 8, "water": 20, "max_water": 20, "secret": ["dialog", "word_left"]}
+SPEAR = {"weapon": True, "damage": 2, "bonus": 1, "portable": True,
+         "description": "A Guild warden's spear, ash shaft gone grey, the head bound on with wire."}
+BOW = {"weapon": True, "damage": 2, "bonus": 1, "portable": True,
+       "description": "A Guild warden's short bow of horn and glue, strung, a quiver of reed arrows with it."}
+WARDEN_WORK = {"road|post|pass|toll|warden|guild": "'The road is the Guild's. Carriers pass. The Hold's coats pass. New faces "
+                                                  "give a name. Glass off the Flats pays one at the post. A shard buys a "
+                                                  "day's road for anyone, no questions.'",
+               "dreyer|house|south|riders": "'Nobody honest comes up off the south glass. Anyone who does goes back down "
+                                            "it, unless they pay.'",
+               "keth|iska|yoke": "'The yoke walks this road at dusk. Nobody here stops the yoke.'"}
+WARDENS = [
+    ("Sergeant Edda Marr", "spear", "A square grey woman in a Guild coat with the sleeves cut off, a ledger on her knee and "
+     "a spear across it. She has kept this post through two reeves and does not expect to see a third.",
+     "Marr looks up from the ledger. 'Name, and your business on the Guild's road.'"),
+    ("Kell Daro", "spear", "A tall warden with a broken nose and a patient way of standing in the middle of the road.",
+     "Kell Daro does not move out of the way. 'Sergeant asked you something.'"),
+    ("Tavish Orme", "spear", "Young for a warden, sunburnt, with his spear butt grounded and his eyes on the Flats.",
+     "Tavish nods at the glass. 'Thresher's been loud this week. Walk soft.'"),
+    ("Nell Saye", "bow", "A narrow woman on the cairn above the post with a short bow across her knees and nothing to say.",
+     "Nell Saye watches the road past you."),
+    ("Quill", "bow", "A boy-faced bowman with a quiver of reed arrows he fletches himself while he watches.",
+     "Quill holds up an arrow to the light. 'Straight. You walking south?'"),
+]
+
+
+def keep_wardens(s, names):
+    """The wardens' post on the Salt Road: five fighters, each with a spear or a bow. Made once, by name."""
+    road = names.get("The Salt Road")
+    if road is None:
+        return
+    for name, arm, look, line in WARDENS:
+        if name in names:
+            continue
+        w = s.spawn("fighter", road, name, state={**WARDEN, "description": look, "default_line": line,
+                                                    "dialog": dict(WARDEN_WORK), "post": road})["id"]
+        s.spawn("thing", w, "Warden's spear" if arm == "spear" else "Warden's bow", state=dict(SPEAR if arm == "spear" else BOW))
+
+
+def keep_carry(s):
+    """Newcomers who came in before carrying had a limit get the template's 8."""
+    for e in s.world.find(type="person", limit=None):
+        st = s.world.get(e["id"])["state"]
+        if st.get("template") and st.get("carry") is None:
+            s.patch(e["id"], {"carry": 8})
 
 
 def keep_salt_works(s, names):
@@ -857,7 +912,7 @@ def keep_salt_works(s, names):
         for name, look, line in DRIFTERS:
             s.spawn("person", works, name, state={**DRIFTER, "description": look, "default_line": line,
                                                    "dialog": dict(DRIFTER_WORK), "post": works, "water": 10, "max_water": 10})
-        story = s.find(type="story", limit=1)[0]["id"]
+        story = s.world.find(type="story", limit=1)[0]["id"]
         s.patch(story, {"salt_works": works})
     if "Pot of Guild pitch" not in names and "The Carriers' Landing" in names:
         for _ in range(2):
@@ -899,8 +954,8 @@ def keep_canon(s):
     hidden Dry Camp past the Bone Field (Halvard Dreyer, Mother Sallow, Brisk, the house's tank), and Ruhl's nine. Each is made once: the well and the bows by name, the nine by a mark on
     the story, so a guard who dies is not raised again on a reboot. The nine are posted in the Hold, where a body with
     water at hand does not thirst; they drink when the Hold runs dry, like everyone under its roof."""
-    names = {e["name"]: e["id"] for e in s.find(limit=500)}
-    story = s.find(type="story", limit=1)[0]["id"]
+    names = {e["name"]: e["id"] for e in s.world.find(limit=None)}
+    story = s.world.find(type="story", limit=1)[0]["id"]
     st = s.world.get(story)["state"]
     root = s.summary()["root"]
     if "The Low Well" not in names:
@@ -931,12 +986,14 @@ def keep_canon(s):
     rack = names.get("Rack of practice blades")
     if rack and s.world.get(rack)["state"].get("holds") is None:
         s.patch(rack, RACK)
-    keep_finds(s, {e["name"]: e["id"] for e in s.find(limit=1000)})
-    keep_salt_works(s, {e["name"]: e["id"] for e in s.find(limit=1000)})
+    keep_finds(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
+    keep_salt_works(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
+    keep_wardens(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
+    keep_carry(s)
     if st.get("garrison"):
         return
     hold, ruhl = st["hold"], st["ruhl"]
-    bodies = s.find(type="person", limit=500) + s.find(type="fighter", limit=500)
+    bodies = s.world.find(type="person", limit=100000) + s.world.find(type="fighter", limit=None)
     have = len({e["id"] for e in bodies if s.world.get(e["id"])["state"].get("faction") == "House Varrick"} - {ruhl, st["ansel"]})
     for name, spec in NINE:
         if have >= 9:
@@ -958,8 +1015,8 @@ def keep_canon(s):
 def keep_routines(s, root):
     """What the routines need (Iska at the Deepwell, the Keth jars and the Guild's ration cask in the Hold), the rule
     that runs them, and one daily timer each, on the hour of the spine event it starts with. Checks before every write."""
-    names = {e["name"]: e["id"] for e in s.find(limit=500)}
-    story = s.find(type="story", limit=1)[0]["id"]
+    names = {e["name"]: e["id"] for e in s.world.find(limit=None)}
+    story = s.world.find(type="story", limit=1)[0]["id"]
     st = s.world.get(story)["state"]
     if "Iska of the Keth" not in names:
         names["Iska of the Keth"] = s.spawn("person", st["deepwell"], "Iska of the Keth", state=BEARER)["id"]

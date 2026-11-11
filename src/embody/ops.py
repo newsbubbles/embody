@@ -230,6 +230,8 @@ class Engine:
         return 200, (g.get("page") or "").replace(HOST_MARK, base)
 
 
+FIND_PAGE = 100  # the most find returns at once; offset pages through the rest
+
 class Session:
     """One principal's view of the engine. The role decides which ops answer (grants.ROLE_OPS, checked on every
     op); the capability list is the single-player shorthand for it (`author` means owner of this database). The
@@ -1332,7 +1334,15 @@ class Session:
         return card
 
     def find(self, type: str | None = None, name: str | None = None, under: str | None = None,
-             parent: str | None = None, state: dict[str, Any] | None = None, limit: int = 30) -> list[dict[str, Any]]:
+             parent: str | None = None, state: dict[str, Any] | None = None, limit: int = 30,
+             offset: int = 0) -> list[dict[str, Any]]:
+        """One page of matches, oldest first: at most FIND_PAGE. A full page may have more after it: ask again with
+        offset moved on by the page. A limit past the page is refused, never cut short in silence."""
+        if limit > FIND_PAGE or limit < 1 or offset < 0:
+            raise Rejected(f"find returns 1 to {FIND_PAGE} a page (asked for limit={limit}, offset={offset})",
+                           hint=f"find(..., limit={FIND_PAGE}, offset={max(0, offset)}), then offset={max(0, offset) + FIND_PAGE} "
+                                "for the next page while a page comes back full; or narrow it with type=, name=, under=, "
+                                "parent= or state=")
         self._tick()
         w = self.world
         if not self._privileged():
@@ -1341,8 +1351,9 @@ class Session:
             scope = w.need(me)["parent_id"] or me
             under = under or scope
         rows = w.find(type=type, name=name, under=self._resolve(under) if under else None,
-                      parent=self._resolve(parent) if parent else None, state=state, limit=min(limit, 100))
-        return [self._card(r) for r in rows if self._privileged() or not r["state"].get("hidden")]
+                      parent=self._resolve(parent) if parent else None, state=state, limit=None)
+        rows = [r for r in rows if self._privileged() or not r["state"].get("hidden")]
+        return [self._card(r) for r in rows[offset:offset + limit]]
 
     def history(self, since: int = 0, until: int | None = None, kinds: list[str] | None = None,
                 touching: str | None = None, limit: int = 50, newest: bool = False) -> list[dict[str, Any]]:
