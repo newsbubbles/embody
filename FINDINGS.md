@@ -4,6 +4,30 @@ Ways the system surprised us in play: what we saw, why it happened, and what it 
 work (worlds, minds) and the engine work add here. A finding is something the design did not predict, good or bad; a
 plain bug goes in its fix's commit.
 
+## 2026-11-11: A body that drank once walked back into its thirst
+
+**Seen.** When idle bodies first walked more than one step to water, a soak showed one on the Flats going to the Old
+Salt Works, drinking once (water 0 to 4), walking two steps back to its post, and arriving thirsty again. It went back
+and forth for the whole run.
+
+**Why.** Quench drank one draw when water fell to 3 and turned for home as soon as it was above 3. With one step that
+was enough. With a longer, dry road the walk back cost the drink.
+
+**Taught.** A rule tuned for one step does not hold for a journey. A body away from its post for water now drinks its
+fill (to within a draw of full) before the walk back. Any routine that leaves home for a need has to take enough for
+the road back.
+
+## 2026-11-11: A verb that did nothing became a tactic
+
+**Seen.** `drink` at full water spent a draw and added nothing. Players used it on purpose to empty the Keth jars before
+the dusk pour, so water was poured away while the log said it was drunk.
+
+**Why.** The verb had a cost (the draw) and no check that it did anything. A cost with no effect is a free way to
+destroy something, and players find those.
+
+**Taught.** A verb that would do nothing must refuse, and say why, before it spends anything. Pouring water away, if a
+world wants it, is a verb of its own with its own name in the log.
+
 ## 2026-11-11: The host's note became a mystery
 
 **Seen.** On the ninth the host nailed a "Notice by the cistern" in the Hold: a patch note written to the agents
