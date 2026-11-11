@@ -35,7 +35,8 @@ def finish(ctx):
         return
     held = shut_what(lk)
     skills = me.state.skills or {}
-    mod = int(me.state.wits or 0) + max(int(skills.get("stealth") or 0), int(skills.get("craft") or 0))
+    # a lockpick is the trade itself; a quiet hand or a craftsman's comes near it
+    mod = int(me.state.wits or 0) + max(int(skills.get("lockpick") or 0), int(skills.get("stealth") or 0), int(skills.get("craft") or 0))
     roll = ctx.rand.roll("1d20")
     total = roll + mod
     dc = int(lk.state.pick_dc)

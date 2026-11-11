@@ -11,7 +11,8 @@ with its own verbs (go, take, talk) and spawns the people. `worlds/glass-reach` 
 The numbers, so a narrator can explain a roll:
 
 - A creature has three stats, `body`, `wits`, `will` (0 to 5), and `skills` (0 to 3 each). Every skill
-  leans on one stat: blade, brawl, climb on body; stealth, survival, lore on wits; parley, resolve on will.
+  leans on one stat: blade, brawl, climb on body; stealth, survival, lore, lockpick on wits; parley, resolve on will.
+  lockpick is the locks pack's: `pick` adds the best of lockpick, stealth or craft.
 - A check is d20 + stat + skill against a difficulty (`dc`, default 12). Wounded costs 2, thirsty costs 2.
 - An attack is opposed: d20 + body + blade (+ the weapon's bonus) against the defender's d20 + body + blade
   (+3 if braced). Ties go to the defender. A hit does the weapon's `damage` (bare hands 1) to `vigor`.
@@ -66,7 +67,7 @@ COMBATANT_STATE = {"body": 1, "wits": 1, "will": 1, "skills": {}, "vigor": 6, "m
 
 COMBATANT_ACTIONS = {
     "check": {"script": "check", "doc": "Try something against a difficulty: d20 + stat + skill vs dc (default 12)",
-              "params": {"skill": "blade, brawl, climb, stealth, survival, lore, parley, resolve", "dc": "difficulty, default 12"}},
+              "params": {"skill": "blade, brawl, climb, stealth, survival, lore, lockpick, parley, resolve", "dc": "difficulty, default 12"}},
     "attack": {"script": "attack", "doc": "Strike someone here: opposed roll, a ward stops fast blows, slow passes it at -2",
                "targets": "creature", "scope": "here", "duration": 3, "params": {"slow": "true for the slow blade"}},
     "brace": {"script": "brace", "doc": "Guard yourself: +3 to defence until your next deed", "duration": 3},

@@ -1,4 +1,4 @@
-SKILLS = {"blade": "body", "brawl": "body", "climb": "body", "stealth": "wits", "survival": "wits", "lore": "wits",
+SKILLS = {"blade": "body", "brawl": "body", "climb": "body", "stealth": "wits", "survival": "wits", "lore": "wits", "lockpick": "wits",
           "parley": "will", "resolve": "will"}
 
 def stat_for(skill):

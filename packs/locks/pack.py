@@ -20,7 +20,7 @@ from outside a place), and it never comes away (`portable: False`).
 Verbs, done to the lock:
 - `unlock`, `lock`: with its key in your hand, or `params {"code": ...}`. A wrong code is refused before anything
   happens and spends nothing. A broken lock never locks again.
-- `pick` (ten world minutes): d20 + wits + the better of stealth or craft (skills), against `pick_dc`, rolled when the
+- `pick` (ten world minutes): d20 + wits + the best of lockpick, stealth or craft (skills), against `pick_dc`, rolled when the
   time is out and only if you are still there. Quiet while it works; a fail is heard (`pick_failed` and a scene).
 - `break` (two world minutes): d20 + body against `break_dc`, loud from the first blow (heard two levels up). It
   leaves the lock open and broken for good.

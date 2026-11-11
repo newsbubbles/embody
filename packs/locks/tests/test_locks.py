@@ -163,3 +163,12 @@ def test_a_locked_door_refuses_the_way_through_from_either_side(guild):
         bel.act("go", "Hall")
     with pytest.raises(Rejected):
         ada.act("go", "Yard")
+
+
+def test_a_lockpick_counts_before_stealth_or_craft(guild):
+    eng, gm, ada, bel = guild
+    gm.patch("Bel", {"wits": 1, "skills": {"lockpick": 3, "stealth": 1}})
+    gm.patch("Box lock", {"pick_dc": 2})
+    bel.act("pick", "Box lock")  # d20 + wits 1 + lockpick 3: the trade beats a quiet hand
+    wait(gm, 660)
+    assert kinds(eng, "lock_picked")[0]["mod"] == 4
