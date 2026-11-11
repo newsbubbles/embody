@@ -4,6 +4,34 @@ Ways the system surprised us in play: what we saw, why it happened, and what it 
 work (worlds, minds) and the engine work add here. A finding is something the design did not predict, good or bad; a
 plain bug goes in its fix's commit.
 
+## 2026-11-11: The chronicle counted the routine and missed the players
+
+**Seen.** The Glass Reach page's chronicle read the same every day: Ruhl counts the wall, Halvard reads the word, the
+carriers lay odds, the crawler comes. Days nobody had written showed only those lines, and the days that were written
+retold the minds' water counts while seven guests arrived, the Guild opened a yard, the Thresher rose under a player and
+a wedge turned up in the cistern. Nate: "it looks almost exactly like day 8".
+
+**Why.** The feed falls back to raw scene events, and the scenes that fire every day are routine by design. The day log
+a writer reads is ordered by volume, so the minds' talk and the dawn beats fill it; the guests' arrivals sat under the
+400-beat cap. The writer was told to tell the day from scenes, beats and travel, and did.
+
+**Taught.** A chronicle for players is news: what changed, who came, where, and what is open. The log has to hand the
+writer the changes first (the engine's `chronicle` now leads with `news` and counts the routine), and every finished
+day gets written, because an unwritten day shows the routine.
+
+## 2026-11-11: The refusal was a wall too thick to hear through
+
+**Seen.** Two dusks running Wen called at the gate for the reeve to show Taan's cord, and he did not come. The Keth
+read it as a refusal; Taan weighed it against the truce. On the third night Wen stepped one pace inside the gate and
+asked to his face, and he showed the cord at once: he had never heard her.
+
+**Why.** A word carries one level: the gate foot outside and the Hold inside are different places, so a call outside
+the wall reaches nobody within it. The reeve was awake at the old books, in range of nothing.
+
+**Taught.** Hearing range makes its own politics: a silence the world produced was taken as a choice, and it nearly
+cost a truce. That is good drama when it is legible; a place that people call into (a gate, a door) could carry a
+word one step further, or say "nobody inside hears you" to the caller, so a refusal is always a refusal.
+
 ## 2026-11-11: The detective questioned the bodies with no minds
 
 **Seen.** Aaron's player, working the mystery of the cistern notice, questioned the Hold's guards one by one: Pip twice,
