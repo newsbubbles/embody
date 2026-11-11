@@ -1,33 +1,38 @@
 use("common")
 def walk(ctx, me, place, back):
-    # one step, for water or back to the post; quiet, so the story takes no first sight from it
+    # one step, toward water or back toward the post; quiet, so the story takes no first sight from it
     here = me.parent
     if not back and not me.state.post and here is not None:
         ctx.patch(me, {"post": here.id})
     ctx.move(me, place)
     ctx.emit("arrived", target=place, reach=1, who=me.id, place=place.id, quiet=True, for_water=not back)
-    if back:
+    if back and me.state.post == place.id:
         ctx.patch(me, {"post": None})
 
 def tick(ctx):
     # Thirsty and water within reach: drink. A skin in hand first, then a source here (and fill the skin while at
-    # it). Thirsty, nothing here, water one known step away and on my feet: walk there; watered, walk back to the
-    # post. A body that is down drinks what is put in its hand. Not an always behavior: while someone embodies this
-    # body they choose when to drink and where to go.
+    # it). Thirsty, nothing here and on my feet: a step toward the nearest water I know the way to, one step a look;
+    # there, a draw a look until full or near it, then a step a look back toward the post. A body that is down drinks what is put in its hand. Not an always
+    # behavior: while someone embodies this body they choose when to drink and where to go.
     me = ctx.self
     st = me.state
     if st.dead:
         return
     here = me.parent
     water = int(st.water if st.water is not None else 10)
-    if water > 3:
-        post = ctx.get(st.post) if st.post else None
-        if post is not None and here is not None and post.id != here.id and not st.down:
-            walk(ctx, me, post, True)
-        return
     mx = int(st.max_water or 10)
+    post = ctx.get(st.post) if st.post else None
+    away = post is not None and here is not None and post.id != here.id
+    # away from the post for water, drink your fill at the source before the walk back
+    topping = away and water <= mx - 4 and water_here(ctx, here) is not None
+    if water > 3 and not topping:
+        if away and not st.down:
+            step = first_step(ctx, me, here, post.id, 8)
+            if step is not None:
+                walk(ctx, me, step, True)
+        return
     skin = None
-    for it in me.children():
+    for it in ([] if topping else me.children()):  # at the source the skin is for the road back
         if it.state.capacity is not None and int(it.state.left or 0) > 0:
             skin = it
             break

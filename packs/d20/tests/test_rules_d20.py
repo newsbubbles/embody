@@ -374,6 +374,23 @@ def test_a_body_nobody_embodies_drinks_when_it_is_thirsty_and_water_is_in_reach(
     assert state(gm, "Reeve Ansel Varrick")["water"] == 1 and state(gm, "Waterskin")["left"] == 2
 
 
+def test_a_thirsty_body_two_steps_from_water_walks_there_drinks_its_fill_and_walks_back():
+    # Arlo's case: left on the Flats with nothing to drink, two steps from the Old Salt Works. A step a look toward
+    # the nearest water it knows, a draw a look until near full, then a step a look back to where it was posted.
+    eng, gm, you = reach()
+    gm.spawn("person", "The Glass Flats", "Walker", state={"faction": "House Varrick", "water": 2, "max_water": 10})
+    trail = []
+    for _ in range(6):
+        gm.clock(step=60)
+        e = gm.inspect("Walker")
+        trail.append((gm.world.get(e["parent"])["name"], e["state"]["water"]))
+    names = [n for n, _ in trail]
+    assert names[:2] == ["The Salt Road", "The Old Salt Works"]
+    assert max(w for n, w in trail if n == "The Old Salt Works") >= 7  # drank its fill before the road back
+    assert names[-1] == "The Glass Flats" and not state(gm, "Walker").get("post")
+    assert all(not gm.world.get(gm.inspect(n)["id"])["state"].get("hidden") for n in names)
+
+
 def test_the_tremor_settles_after_two_quiet_minutes():
     eng, gm, you = reach()
     for place in ["The Gate Yard", "The Salt Road", "The Glass Flats"]:
@@ -518,6 +535,8 @@ def test_a_thirsty_body_walks_to_water_one_known_step_away_and_back_to_its_post(
     gm.clock(step=60)
     ruhl = state(gm, "Captain Ruhl")
     assert ruhl["water"] == 6 and ruhl["thirsty"] is False and state(gm, "The cistern")["left"] == 11
+    gm.clock(step=60)  # away from his post for water, he drinks his fill before the walk back
+    assert state(gm, "Captain Ruhl")["water"] == 10 and state(gm, "The cistern")["left"] == 10
     gm.clock(step=60)
     assert gm.inspect("Captain Ruhl")["parent"] == yard and state(gm, "Captain Ruhl").get("post") is None
     ruhl_id = gm.inspect("Captain Ruhl")["id"]
@@ -531,6 +550,8 @@ def test_a_thirsty_body_walks_to_water_one_known_step_away_and_back_to_its_post(
     assert gm.inspect("Sefa of the Keth")["parent"] == well
     gm.clock(step=60)
     assert state(gm, "Sefa's skin")["left"] == 3 and state(gm, "Sefa of the Keth")["water"] == 5
+    gm.clock(step=60)
+    assert state(gm, "Sefa of the Keth")["water"] == 9 and state(gm, "Sefa's skin")["left"] == 3  # her fill from the well
     gm.clock(step=60)
     assert gm.inspect("Sefa of the Keth")["parent"] == ridge
     assert not gm.find(type="story")[0]["state"].get("seen_ridge")  # her quiet return is no first sight of the ridge

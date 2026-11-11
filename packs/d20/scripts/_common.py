@@ -37,17 +37,40 @@ def water_here(ctx, place):
             return p
     return None
 
-def water_near(ctx, who, here):
-    # a connected place with water, one step away, that this body knows the way to
-    for e in ctx.edges(here, "connects_to", "out"):
-        t = ctx.get(e["target"])
-        if t is None:
-            continue
-        if t.state.hidden and t.state.known_to != who.state.faction:
-            continue
-        if water_here(ctx, t) is not None:
-            return t
+def known_way(who, place):
+    # a hidden place is on a body's map only if it is its own side's
+    return not (place.state.hidden and place.state.known_to != who.state.faction)
+
+def first_step(ctx, who, here, goal, limit):
+    # breadth-first over connects_to: the first step on the shortest way this body knows to `goal` (a place id), or,
+    # with goal None, to the nearest place with water in it. None when there is none within `limit` steps.
+    seen = {here.id: True}
+    frontier = [[here.id, None]]
+    for depth in range(limit):
+        nxt = []
+        for item in frontier:
+            for e in ctx.edges(item[0], "connects_to", "out"):
+                tid = e["target"]
+                if tid in seen:
+                    continue
+                seen[tid] = True
+                t = ctx.get(tid)
+                if t is None:
+                    continue
+                first = item[1] if item[1] is not None else tid
+                if tid == goal:
+                    return ctx.get(first)
+                if not known_way(who, t):
+                    continue
+                if goal is None and water_here(ctx, t) is not None:
+                    return ctx.get(first)
+                nxt.append([tid, first])
+        frontier = nxt
     return None
+
+def water_near(ctx, who, here):
+    # the first step toward the nearest water this body knows the way to (six steps at most)
+    return first_step(ctx, who, here, None, 6)
 
 def revive(ctx, who, water):
     # a body thirst put down gets up when it has drunk; a blade's work stays done until someone sees to it

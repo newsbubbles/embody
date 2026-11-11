@@ -31,10 +31,11 @@ The numbers, so a narrator can explain a roll:
   turn-based story; a hosted world sets its own with `set_pace` (the Reach: one point every 2.4 world hours).
   At 3 you are thirsty; at 0 you lose vigor instead, down to 0 and no further: thirst puts a body down
   (`downed_by: thirst`), it never kills, and a drink brings it back up (`rose`). `drink` from a waterskin (+4; a
-  full body refuses, so no draw is poured away), `fill` one at a source. A body nobody embodies looks after itself (the `quench` behavior): thirsty, it drinks
-  from a skin in hand, else from a source here, filling its skin while it is there; with nothing here it walks
-  one step to a connected place with water that it knows the way to (hidden places only for their own
-  faction), drinks, and walks back to its `post`. The walks arrive `quiet`. A body that is down drinks what is
+  full body refuses, so no draw is poured away), `fill` one at a source. A body nobody embodies looks after
+  itself (the `quench` behavior): thirsty, it drinks from a skin in hand, else from a source here, filling its
+  skin while it is there; with nothing here it walks toward the nearest water it knows the way to (up to six
+  steps, one step a look; hidden places only for their own faction), drinks its fill there (a draw a look until
+  it is within a draw of full), and walks back to its `post` the same way. The walks arrive `quiet`. A body that is down drinks what is
   put in its hand. An embodied seat decides for itself while it is in use; quench is an `idle` behavior, so a
   seat that has done nothing for the world's `idle_after` (a mind on a watcher, a player asleep) drinks the same
   way. `python packs/d20/soak.py <world> --days N` runs a world that long with nobody playing and says who
