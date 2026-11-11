@@ -480,6 +480,19 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
+    def introduce(type: str, parent: str, name: str, how: str, known_by: dict[str, str],
+                  state: dict[str, Any] | None = None, scene: str | None = None, by: str | None = None,
+                  remembers: list[str] | None = None, pos: list[float] | None = None) -> dict[str, Any]:
+        """(author) Bring something new into the world with a past, in one call; prefer it to spawn for anything a
+        player or mind could meet. how: always_there (no sound; it was here all along), arrived, delivered (by=),
+        built (by=) or appeared; every way but always_there needs the scene the room sees. known_by {entity: note}
+        is who already knows it and what they know, written to their memory ({} = nobody). remembers: for a
+        person, what it knows itself."""
+        return s.introduce(type, parent, name, how, known_by, state=state, scene=scene, by=by, remembers=remembers,
+                           pos=pos)
+
+    @tool()
+    @_wrap
     def patch(entity: str, changes: dict[str, Any], replace: bool = False) -> dict[str, Any]:
         """(author) Change state keys. A dict value merges into the existing dict (add one dialog topic without
         resending the rest); replace=True sets each key whole; a None value deletes the key."""

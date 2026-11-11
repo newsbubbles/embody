@@ -201,3 +201,42 @@ def test_find_pages_and_refuses_a_limit_it_cannot_meet():
     rest = gm.find(name="Pebble", limit=100, offset=100)
     assert len(first) == 100 and len(rest) == 20
     assert [e["name"] for e in first + rest] == [f"Pebble {n:03d}" for n in range(120)]
+
+
+def test_introduce_brings_a_thing_in_with_a_past():
+    eng, w, i = engine_with_two_rooms()
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    gm.use("two-rooms")
+    # always there: no sound in the room, and the one who would know it remembers it
+    shelf = gm.introduce("thing", "Cell", "Old shelf", how="always_there",
+                         known_by={"Prisoner": "The shelf by the door has been there since before I came."})
+    ev = w.store.query("event", "world_id=? AND kind='spawned' AND target_id=?", (w.id, shelf["id"]))[0]
+    assert ev["path"] == [shelf["id"]]
+    assert "since before I came" in w.get(i["Prisoner"])["state"]["memory"][-1]["text"]
+    assert w.get(shelf["id"])["state"]["provenance"]["how"] == "always_there"
+    # a stranger arrives: the room sees the scene, nobody knows him, he knows the road he came by
+    gm.introduce("person", "Hall", "Rider", how="arrived", known_by={}, scene="A rider comes in off the salt.",
+                 remembers=["I came up the north road. I know nobody here."])
+    scene = w.store.query("event", "world_id=? AND kind='scene'", (w.id,))[-1]
+    assert scene["payload"]["text"].startswith("A rider") and i["Hall"] in scene["path"]
+    assert "north road" in w.get(w.find(name="Rider")[0]["id"])["state"]["memory"][0]["text"]
+    # one the Guard knows: a knows link as well as the note
+    kin = gm.introduce("person", "Hall", "Cousin", how="arrived", scene="The Guard's cousin walks in.",
+                       known_by={"Guard": "My cousin, owes me money."})
+    assert any(e["target"] == kin["id"] for e in w.edges(i["Guard"], "knows", "out"))
+
+
+def test_introduce_asks_how_and_what_the_room_saw():
+    eng, w, i = engine_with_two_rooms()
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    gm.use("two-rooms")
+    with pytest.raises(Rejected) as r:
+        gm.introduce("thing", "Cell", "Crate", how="spawned", known_by={})
+    assert "always_there" in r.value.alternatives
+    with pytest.raises(Rejected):
+        gm.introduce("thing", "Cell", "Crate", how="appeared", known_by={})  # no scene
+    with pytest.raises(Rejected):
+        gm.introduce("thing", "Cell", "Crate", how="delivered", known_by={}, scene="A crate is set down.")  # no by
+    with pytest.raises(Rejected):
+        gm.introduce("thing", "Cell", "Crate", how="always_there", known_by={"Nobody at all": "x"})
+    assert not w.find(name="Crate")

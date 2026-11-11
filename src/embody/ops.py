@@ -323,7 +323,7 @@ class Session:
             hit = [x for x in (w.subtree_ids(eid) if op == "destroy" else [eid]) if (w.get(x) or {}).get("state", {}).get("canon")]
             if hit:
                 raise Rejected(f"{w.need(hit[0])['name']} is canon: the owner's to change", hint="build beside it, or ask the owner")
-        if "canon" in ((args.get("changes") if op == "patch" else args.get("state") if op == "spawn" else None) or {}):
+        if "canon" in ((args.get("changes") if op == "patch" else args.get("state") if op in ("spawn", "introduce") else None) or {}):
             raise Rejected("canon is the owner's mark", hint="only the world's owner sets or lifts canon")
         lim = self.limits
         if not lim:
@@ -344,7 +344,12 @@ class Session:
             raise Rejected(f"{op} reaches the whole world; your grant is limited", hint="ask the owner")
         if op == "clock" and any(args.get(k) is not None for k in ("run", "rate", "step", "turn")):
             raise Rejected("the clock is the whole world's; your grant is limited", hint="clock() with no arguments reads it")
-        if op == "spawn":
+        if op == "introduce":
+            need(args["parent"], *(args.get("known_by") or {}))
+            if not w.may_spawn(args["type"], lim):
+                raise Rejected(f"your grant may not make a {args['type']}", hint="a type its limits list, or a schema of yours",
+                               alternatives=list(lim.get("types") or []))
+        elif op == "spawn":
             need(args["parent"])
             if not w.may_spawn(args["type"], lim):
                 raise Rejected(f"your grant may not make a {args['type']}", hint="a type its limits list, or a schema of yours",
@@ -1963,6 +1968,47 @@ class Session:
         eid = self.world.spawn(type, self._resolve(parent), name=name, state=state, pos=pos, actor=self._actor_or_none())
         return self._card(self.world.need(eid), full=True)
 
+    def introduce(self, type: str, parent: str, name: str, how: str, known_by: dict[str, str],
+                  state: dict[str, Any] | None = None, scene: str | None = None, by: str | None = None,
+                  remembers: list[str] | None = None, pos: list[float] | None = None) -> dict[str, Any]:
+        """Bring something new into the world the way the world would have it, in one call: where it is, how it
+        came (INTRODUCE_HOW), who already knows it and what they know, and for a person what it knows itself.
+        always_there arrives without a sound; every other way shows the room a scene. known_by {entity: note} writes
+        each note into that one's memory (and, for a person, a `knows` link); {} says nobody knows it."""
+        self._need(AUTHOR)
+        w = self.world
+        if how not in INTRODUCE_HOW:
+            raise Rejected(f"how must say how it came: one of {', '.join(INTRODUCE_HOW)}",
+                           hint="; ".join(f"{k}: {v}" for k, v in INTRODUCE_HOW.items()), alternatives=list(INTRODUCE_HOW))
+        if how != "always_there" and not scene:
+            raise Rejected(f"something that {how.replace('_', ' ')} is seen: give the scene the room sees",
+                           hint="scene='A rider comes in off the salt, dust to the eyes.' or how='always_there' if it was")
+        if how in ("delivered", "built") and not by:
+            raise Rejected(f"{how} by whom?", hint="by='<who brought or made it>'")
+        if not isinstance(known_by, dict):
+            raise Rejected("known_by is {entity: what they know of it}", hint="known_by={} if nobody knows it")
+        where = self._resolve(parent)
+        knowers = {self._resolve(k): str(note) for k, note in known_by.items()}  # every name resolves before a write
+        maker = self._resolve(by) if by else None
+        self._record("introduce", type=type, parent=parent, name=name, how=how, known_by=known_by, state=state,
+                     scene=scene, by=by, remembers=remembers, pos=pos)
+        st = dict(state or {})
+        st["provenance"] = {"how": how, "by": maker, "t": w.t}
+        eid = w.spawn(type, where, name=name, state=st, pos=pos, actor=self._actor_or_none(),
+                      announce=how != "always_there")
+        person = w.is_a(type, "person")
+        for k, note in knowers.items():
+            w.remember(k, note, actor=k)
+            if person and k != eid:
+                w.link(k, eid, "knows", {"standing": 0, "note": note, "met_t": w.t, "count": 0})
+        for note in remembers or []:
+            w.remember(eid, str(note), actor=eid)
+        if scene:
+            w.emit("scene", target=where, reach=1, payload={"text": scene, "introduced": eid, "how": how})
+        out = self._card(w.need(eid), full=True)
+        out.update(how=how, known_by=sorted(knowers), remembers=len(remembers or []))
+        return out
+
     def patch(self, entity: str, changes: dict[str, Any], replace: bool = False) -> dict[str, Any]:
         """Dict values merge into existing dicts (add one dialog topic without resending the rest);
         replace=True sets each key whole; a None value deletes the key."""
@@ -2168,14 +2214,23 @@ def _until_script(until: str) -> Script:
     return sc
 
 
+# How something new comes into the world (introduce): never from nowhere unless the game says so.
+INTRODUCE_HOW = {
+    "always_there": "it has been here all along and nobody remarks on it now; arrives without a sound",
+    "arrived": "it came in on its own feet or wheels; the room sees it come",
+    "delivered": "someone (by=) brought it; the room sees it handed over or set down",
+    "built": "someone (by=) made it here; the room sees it finished",
+    "appeared": "it came from nowhere, because the game says things do; the room sees that",
+}
+
 OPS = [
     "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats",
     "invite", "grants", "revoke", "evict", "requests", "chronicle", "publish_chronicle",
     "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
     "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
-    "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map", "measure",
-    "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
+    "spawn", "introduce", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
+    "measure", "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
 ]
 
 
@@ -2194,7 +2249,7 @@ def allowed_ops(role: str) -> frozenset[str]:
 
 
 # Ops that write where canon and a grant's limits are checked before they run (Session._hold).
-_HELD = frozenset({"spawn", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "schedule", "layout",
+_HELD = frozenset({"spawn", "introduce", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "schedule", "layout",
                    "unschedule", "act_as", "say_as", "remember", "intend", "set_rule", "clear_rule", "define_script",
                    "define_schema", "clock", "create_world", "fork_world", "save", "restore", "mirror"})
 

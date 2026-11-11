@@ -26,7 +26,7 @@ _PLAY = {"join", "perceive", "inspect", "find", "history", "act", "act_many", "s
          "timers", "reclaim", "away"}
 _WATCH = {"perceive", "inspect", "find", "history", "recall", "timers", "schemas", "scripts", "script_source", "wait",
           "map", "measure"}
-_NARRATE = {"act_as", "say_as", "timers", "spawn", "patch", "move", "destroy", "link", "connect", "unlink", "layout",
+_NARRATE = {"act_as", "say_as", "timers", "spawn", "introduce", "patch", "move", "destroy", "link", "connect", "unlink", "layout",
             "relate", "unrelate", "schedule", "unschedule", "remember", "intend", "recall"}
 _AUTHOR = _NARRATE | _WATCH | {"create_world", "fork_world", "save", "restore", "define_schema", "define_script",
                                "set_rule", "clear_rule", "mirror", "chronicle", "publish_chronicle"}

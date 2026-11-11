@@ -802,7 +802,10 @@ class World:
     # ---- graph mutations (each one logs a primitive event) -----------------------
 
     def spawn(self, type: str, parent: str | None, name: str = "", state: dict[str, Any] | None = None,
-              pos: Any = None, actor: str | None = None, caused_by: int | None = None, id: str | None = None) -> str:
+              pos: Any = None, actor: str | None = None, caused_by: int | None = None, id: str | None = None,
+              announce: bool = True) -> str:
+        """announce=False: the spawn is logged on the new entity alone, so the room does not hear a thing appear
+        (something that was always there, brought in by `introduce`)."""
         self.schema(type)
         if parent is not None:
             self.need(parent)
@@ -815,7 +818,7 @@ class World:
         seq = self.store.next_seq(self.id)
         self.store.put("entity", {"world_id": self.id, "id": eid, "type": type, "parent_id": parent, "name": name,
                                   "state": st, "pos": pos, "version": 1, "created_seq": seq, "updated_seq": seq})
-        self.emit("spawned", actor=actor, target=eid, reach=1, caused_by=caused_by,
+        self.emit("spawned", actor=actor, target=eid, reach=1 if announce else 0, caused_by=caused_by,
                   payload={"type": type, "name": name, "parent": parent})
         pace = self._row["meta"].get("pace") or {}
         for b in self.schema_components(type, "behaviors"):
