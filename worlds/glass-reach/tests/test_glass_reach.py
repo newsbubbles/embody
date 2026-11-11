@@ -1000,3 +1000,24 @@ def test_each_dawn_the_hold_hears_how_the_moon_leans():
     st = gm.inspect("Story")["state"]
     assert st["lean"] in ["held", "siege", "fallen"]
     assert any("to the moon" in t and "Ruhl counts the wall" in t for t in scenes(gm.history(kinds=["scene"], limit=40, newest=True)))
+
+
+def test_west_of_the_scar_is_only_rumour_and_torn_pages():
+    eng, gm = hosted()
+    hold = gm.inspect("Scar Gate, the Hold")["id"]
+    held = [c["name"] for c in gm.inspect(hold)["contents"]]
+    for name in ["The sealed back gate", "The hall map", "The Hold's shelf", "The Hold's daybook",
+                 "A Crown surveyor's account of the Scar", "The Guild's route book, Reach leg"]:
+        assert name in held
+    assert gm.inspect("The old count")["parent"] == gm.inspect("Elder Taan")["id"]
+    me = newcomer(eng, gm, "guard", "Bram")
+    gm.move("Bram", hold)
+    r = me.act("read", "The Hold's daybook")
+    assert any("torn out" in str(e["payload"]) for e in r["events"])
+    with pytest.raises(Rejected):
+        me.act("take", "The Hold's daybook")
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot writes nothing twice
+    assert len(gm.find(name="The Hold's daybook")) == 1
+    taan = gm.world.get(gm.inspect("Elder Taan")["id"])["state"]["memory"]
+    assert len([n for n in taan if "old count" in n["text"]]) == 1
+    assert "west|scar|seep|brine|gate" in gm.world.get(gm.inspect("Cass the Salter")["id"])["state"]["dialog"]

@@ -948,6 +948,103 @@ def keep_finds(s, names):
             s.patch(sallow, {"gives": SALLOW_SALVE, "dialog": {k: SALLOW["dialog"][k] for k in SALLOW["dialog"]}})
 
 
+# West of the Scar: nobody knows (settled with Nate 2026-11-11, notes/west-of-the-scar.md). The back gate has been
+# sealed since before anyone living was born; the world holds a few books, a scraped map, the Keth's old count and one
+# rumour each, and they partly disagree. The daybook's torn pages are not in the world: finding them starts the quest
+# that opens the seal. What lies behind it is not decided.
+BACK_GATE = {"portable": False, "sealed": True,
+             "description": "A doorway in the Hold's west wall, as wide as a cart, filled with fitted stone and lime. The "
+                            "Crown's seal is pressed into the mortar at head height, a crown over a closed eye, worn soft. "
+                            "Nobody has hung anything on this wall."}
+SHELF = {"portable": False,
+         "description": "A plank shelf on two pegs by the hall map, with three books on it that nobody has dusted in a "
+                        "long while."}
+BOOKS = [
+    ("The Hold's daybook",
+     "A thick book in many hands, kept by every reeve and captain since the Hold was raised.",
+     "The early hands are hard to read. The Hold was raised by the Crown's masons 'in the year the wall went up behind "
+     "it'. Water counts, convoy days, deaths, a reeve's name every few years. Then an entry headed OF THE BACK GATE, in "
+     "a careful clerk's hand: 'By the Crown's word the back gate is closed this day, and no reeve is to open it, nor to "
+     "ask why, nor to let it be asked.' After that line a run of pages has been torn out close to the spine. The stubs "
+     "show writing on every one. The next whole page is in another hand, years later, counting water as if nothing had "
+     "happened. Dreyer's eleven years come near the end: tidy, and they never mention the gate."),
+    ("A Crown surveyor's account of the Scar",
+     "A thin book in Crown binding, the spine cracked.",
+     "A long, dry report. The Scar runs unbroken from the salt in the north to the dunes in the south, more than forty "
+     "miles, and nowhere lower than a tall man standing on another's shoulders. There is one gap. 'West of the gap the "
+     "defile runs a mile and a half between walls so close a laden mule must be backed out, and comes out upon' and the "
+     "rest of the page is gone. The next page begins on the salt pans, as if the surveyor had been told to start again."),
+    ("The Guild's route book, Reach leg",
+     "A greasy ledger of Guild prices with a red first page.",
+     "Prices, crawler weights, the Landing's tally rules. On the first page, in red: 'Standing order, renewed with every "
+     "charter: no crawler, carrier or beast of the Guild is to be taken through the Scar. The Guild does not carry "
+     "west.' In the margin, in pencil, someone has written: 'older than the Guild. ask who wrote it.'"),
+]
+HALL_MAP = {"portable": False,
+            "description": "A big map on hide, nailed up in the hall. Nobody trusts it.",
+            "text": "The Reach is drawn well: the road, the Landing, the ridge, the Flats. West of the Scar the ink has "
+                    "been scraped away down to bare hide, carefully, all of it. At the scraped edge, where the gap would "
+                    "come out, a few strokes were missed: the end of one word, '...ashe', and part of a line that might "
+                    "be a river."}
+OLD_COUNT = {"portable": True,
+             "description": "A stick of black wood worn smooth by hands, notched along its length.",
+             "text": "Read by touch, the notches tell an old count: nine hands of Keth walked west through the gap in the "
+                     "time of the grandmothers' grandmothers, when there was no wall. Then the stone closed behind them. "
+                     "The last notches are cut deeper than the rest. The Keth keep the count for them, because they "
+                     "never came back to keep it themselves."}
+# what each has heard, never what is true; Taan keeps the old count and lets only someone she trusts touch it
+RUMOURS = {
+    "Ossa the Carrier": "What I know of the west: the Guild's charter forbids carrying through the Scar, and the clause "
+                        "is older than the Guild. Carriers who ask why get no new contract. I stopped asking.",
+    "Captain Ruhl": "Soldiers' talk I put down: on still nights a man on the wall stair hears wind behind the sealed "
+                    "back gate, 'as if there's a lot of air back there'. Nonsense. I move that man to another watch.",
+    "Dram Hollis": "In Dreyer's years a house man was caught at the back gate with a pry bar. He was sent away the next "
+                   "morning, and the house paid the Crown a fine nobody would name. I kept the books; I never saw the sum.",
+    "Elder Taan": "I keep the old count: the stick of the nine hands of Keth who walked west through the gap before the "
+                  "wall, and never came back. I speak of it only to one who has kept faith with the Keth, never at the "
+                  "Hold, and I let only such a one touch the stick.",
+    "Sergeant Edda Marr": "Drifters say a light shows on top of the Scar some nights, on the west side, where nobody "
+                          "could climb. I have not seen it. I have not looked hard.",
+    "Halvard Dreyer": "An old house story: Dreyer wanted Scar Gate for what lies behind it, not for the glass. I think "
+                      "my grandfather told it to make a dry posting sound grand.",
+    "Cass the Salter": "The brine seep under the works runs from the west, under the Scar, and it tastes of something "
+                       "that is not the Reach.",
+}
+CASS_WEST = ("'The seep comes from the west, under the Scar. Taste it if you like. It isn't Reach salt.' She goes back "
+             "to the trough.")
+
+
+def keep_lore(s, names):
+    """West of the Scar (notes/west-of-the-scar.md): the sealed back gate, the hall map and the shelf of three books in
+    the Hold, the old count in Elder Taan's keeping, and one rumour each in memory. Things are made once by name; the
+    rumours once, by a mark on the story, so a forgotten or traded-away note is not written again on a reboot."""
+    hold = names.get("Scar Gate, the Hold")
+    if hold is None:
+        return
+    if "The sealed back gate" not in names:
+        s.spawn("thing", hold, "The sealed back gate", state=dict(BACK_GATE))
+    if "The hall map" not in names:
+        s.spawn("letter", hold, "The hall map", state=dict(HALL_MAP))
+    if "The Hold's shelf" not in names:
+        s.spawn("thing", hold, "The Hold's shelf", state=dict(SHELF))
+    for name, look, text in BOOKS:
+        if name not in names:
+            s.spawn("letter", hold, name, state={"portable": False, "description": look, "text": text})
+    if "The old count" not in names and "Elder Taan" in names:
+        s.spawn("letter", names["Elder Taan"], "The old count", state=dict(OLD_COUNT))
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    if s.world.get(story)["state"].get("west_rumours"):
+        return
+    for who, text in RUMOURS.items():
+        if who in names:
+            s.remember(text, entity=names[who])
+    if "Cass the Salter" in names:
+        dialog = dict(s.world.get(names["Cass the Salter"])["state"].get("dialog") or {})
+        dialog["west|scar|seep|brine|gate"] = CASS_WEST
+        s.patch(names["Cass the Salter"], {"dialog": dialog})
+    s.patch(story, {"west_rumours": True})
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -989,6 +1086,7 @@ def keep_canon(s):
     keep_finds(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
     keep_salt_works(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
     keep_wardens(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
+    keep_lore(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
     keep_carry(s)
     if st.get("garrison"):
         return
