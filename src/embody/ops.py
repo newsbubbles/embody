@@ -1262,6 +1262,10 @@ class Session:
             if w.idle(e["id"]):
                 card["idle"] = True  # the seat has done nothing for a while; standing_orders in its state say what holds
         kids = w.children(e["id"])
+        if w.locked_by(e["id"]) is not None:
+            card["locked"] = True
+            if e["state"].get("holds") is not None and not full:
+                kids = [c for c in kids if c["state"].get("attached")]  # a locked box shows its lock, not what is in it
         if kids and not full:
             card["contains"] = len(kids)
         seen = [c for c in kids if not c["state"].get("hidden")]
@@ -1296,6 +1300,10 @@ class Session:
                 x["via_name"] = v["name"]
                 x["open"] = v["state"].get("open")
                 x["locked"] = v["state"].get("locked")
+                if not x["locked"] and w.locked_by(via):
+                    x["locked"] = True
+            if w.locked_by(e["target"]):
+                x["locked"] = True  # a lock on the place itself shuts the way in
             out.append(x)
         return out
 

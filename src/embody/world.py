@@ -213,7 +213,7 @@ class Ctx(ScriptObject):
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
-        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "embodied", "remember",
+        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "embodied", "locked", "remember",
     )
 
     def __init__(self, world: "World", *, actor: str | None, target: str | None, owner: str | None,
@@ -324,6 +324,11 @@ class Ctx(ScriptObject):
     def embodied(self, id: Any) -> bool:
         """Someone (a mind, a player) holds this body: it acts for itself, so a rule should not drive it."""
         return self._w.embodied(_ev(self._w, id)) is not None
+
+    def locked(self, id: Any) -> EntityView | None:
+        """What keeps a box, a door or a place shut (its own `locked`, or a lock attached to it), or None."""
+        e = self._w.locked_by(_ev(self._w, id))
+        return EntityView(self._w, e["id"]) if e else None
 
     # -- mutations
     def patch(self, id: Any, changes: dict[str, Any] | None = None, **kw: Any) -> None:
@@ -1192,10 +1197,16 @@ class World:
             if target["state"].get("hidden"):
                 return False, f"{target_id} is hidden"
             return True, ""
+        if target["state"].get("attached") and target["parent_id"]:
+            return self.reachable(actor_id, target["parent_id"])  # a lock on a box, a door or a place: in reach where it is
         holder = self.get(target["parent_id"]) if target["parent_id"] else None
         if (holder is not None and holder["state"].get("holds") is not None and actor["parent_id"] is not None
                 and holder["parent_id"] == actor["parent_id"] and not holder["state"].get("hidden")
                 and not target["state"].get("hidden")):
+            lk = self.locked_by(holder["id"])
+            if lk is not None:
+                return False, (f"{holder['name']} is locked: unlock "
+                               + (f"{lk['name']} " if lk["id"] != holder["id"] else "it ") + "first, with its key or its code, or pick it")
             return True, ""  # what lies on a rack or in an open chest here is within reach
         if actor["parent_id"]:
             for e in self.edges(actor["parent_id"], "connects_to", "out"):
@@ -1205,6 +1216,19 @@ class World:
         if target["parent_id"] == actor["parent_id"] is None:
             return True, ""
         return False, f"{target_id} ({target['name'] or target['type']}) is not within reach of {actor_id}"
+
+    def locked_by(self, id: str) -> dict[str, Any] | None:
+        """What keeps a box, a door or a place shut: the entity itself when its state says `locked`, or a lock
+        attached to it (a child whose state has `attached` and `locked`). None when nothing does."""
+        e = self.get(id)
+        if e is None:
+            return None
+        if e["state"].get("locked"):
+            return e
+        for c in self.children(id):
+            if c["state"].get("attached") and c["state"].get("locked"):
+                return c
+        return None
 
     def check_action(self, actor_id: str, verb: str, target_id: str | None = None,
                      params: dict[str, Any] | None = None) -> tuple[bool, str | None]:
@@ -1313,6 +1337,10 @@ class World:
                                   and not c["state"].get("hidden"))
                 candidates.extend(self.neighbors(actor["parent_id"], "connects_to"))
             candidates.extend(c["id"] for c in self.children(actor_id))
+            for cid in list(candidates):  # what is attached to a thing or a place in reach (a lock) is in reach too
+                ent = self.get(cid)
+                if cid != actor_id and cid != actor["parent_id"] and ent and not self.is_a(ent["type"], "creature"):
+                    candidates.extend(c["id"] for c in self.children(cid) if c["state"].get("attached"))
         out: list[dict[str, Any]] = []
         seen: set[tuple[str, str | None]] = set()
 

@@ -6,14 +6,16 @@ A world names it in its manifest (`"requires": ["village"]`) and the loader defi
 own, so a world may replace any of them with a file of the same name in its scripts/ (the Glass Reach has its own
 `go` for deep sand). The pack defines no schemas: a world's `person` schema binds the verbs it wants.
 
-- go: to a connected place; via a door-like entity when the connection has one (locked doors refuse).
+- go: to a connected place; via a door-like entity when the connection has one. A shut door, a locked door and a locked
+  place refuse, and say what opens them (`ctx.locked`: the locks pack, or a door's own `locked`).
 - take, drop: portable things here or held; give: something you hold to someone here (`gives` tables can answer).
 - carrying: a body whose state has `carry` holds at most that much bulk; take, give (to it) and harvest refuse past
   it, and d20's search takes only what fits. A thing's bulk is its `bulk`, else 2 for anything with a `capacity`
   (a skin), else 1. No `carry`, no limit.
 - put: `params {"item": thing you hold}` onto or into a holder here: a thing whose `state.holds` lists what it takes
   (["any"], or state flags such as ["weapon"]) and, optionally, `room` (how many). What lies on a holder is
-  within reach of everyone in its place, and `take` takes it back down.
+  within reach of everyone in its place, and `take` takes it back down. A locked holder refuses `put`, and nothing in it is
+  in reach until it is unlocked; an attached lock does not count against `room`.
 - show: something you hold to someone here; they get a `shown` event with its `text` (or description), it stays yours.
 - talk: `params {"about": topic}`; the person answers from `dialog` through person_on, or with `default_line`.
 - leave_word: `params {"for": who, "word": message}` with someone here, for someone who is not: the keeper stores it

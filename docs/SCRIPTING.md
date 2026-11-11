@@ -81,6 +81,7 @@ Queries (ids or views both work as arguments):
 - `ctx.linked(x, relation, direction="out")` returns views; `ctx.relations(x, relation=None)` the n-ary ones
 - `ctx.distance(a, b)` within one container's space, None when not comparable
 - `ctx.embodied(x)` True while a mind or a player holds that body (a rule that drives workers or guards leaves those alone)
+- `ctx.locked(x)` what keeps a box, a door or a place shut (its own `locked` state, or an `attached` child whose state says `locked`, such as a locks-pack lock), else None. The engine keeps everything in a locked holder out of reach of every verb; a thing whose state has `attached` is in reach wherever its parent is
 
 Mutations (each one is logged as an event):
 

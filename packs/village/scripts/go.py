@@ -1,10 +1,21 @@
+def shut(ctx, x):
+    # a door or a place a lock keeps shut, with the way to open it
+    lk = ctx.locked(x)
+    if lk is None:
+        return None
+    return x.name + " is locked: unlock " + ("it" if lk.id == x.id else lk.name) + " first, with its key or its code, or pick it"
+
 def check(ctx):
     here = ctx.actor.parent
     for e in ctx.edges(here, "connects_to", "out"):
         if e["target"] == ctx.target.id:
             via = e["data"].get("via")
+            if via and shut(ctx, ctx.get(via)):
+                return shut(ctx, ctx.get(via))
             if via and not ctx.get(via).state.open:
                 return "the way is shut"
+            if shut(ctx, ctx.target):
+                return shut(ctx, ctx.target)
             return True
     return "there is no way there from here"
 

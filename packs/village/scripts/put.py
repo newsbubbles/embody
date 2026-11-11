@@ -22,10 +22,13 @@ def check(ctx):
         return "it holds nothing; drop the thing here instead, or find a rack, a shelf or a chest"
     if ctx.target.parent is None or ctx.target.parent.id != ctx.actor.parent.id:
         return "it is not here"
+    lk = ctx.locked(ctx.target)
+    if lk is not None:
+        return ctx.target.name + " is locked: unlock " + ("it" if lk.id == ctx.target.id else lk.name) + " first, with its key or its code, or pick it"
     if not fits(ctx.target, it):
         return "it does not take that: it holds " + ", ".join(ctx.target.state.holds)
     room = ctx.target.state.room
-    if room is not None and len(ctx.target.children()) >= int(room):
+    if room is not None and len([c for c in ctx.target.children() if not c.state.attached]) >= int(room):
         return "it is full"
     return True
 
