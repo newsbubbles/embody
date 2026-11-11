@@ -1128,6 +1128,7 @@ def test_the_guild_yard_keeps_its_counting_house_fills_its_tank_and_its_hauler_d
     # a Keth stranger walks into the counting house and the yard turns them back
     me = newcomer(eng, gm, "keth", "Tam")
     gm.move("Tam", yard)
+    gm.patch(gm.inspect("The counting house lock")["id"], {"locked": False})  # Mira's door stands open; the four still watch it
     me.act("go", "The Counting House")
     assert gm.inspect("Tam")["parent"] == yard and kinds("turned_away") == 1
     # one of the Guild walks in
@@ -1152,3 +1153,27 @@ def test_the_guild_yard_keeps_its_counting_house_fills_its_tank_and_its_hauler_d
     assert not errs, errs[:2]
     load_world(gm, "glass-reach", upgrade=True)  # a reboot builds no second yard
     assert len([e for e in gm.find(name="Mira Ost") if e["name"] == "Mira Ost"]) == 1
+
+
+def test_the_strongbox_opens_to_its_key_or_the_code_and_the_counting_house_to_miras_key():
+    eng, gm = hosted()
+    gm.patch(gm.inspect("Story")["id"], {"guild_wright": gm.inspect("Ossa the Carrier")["id"]})
+    me = newcomer(eng, gm, "keth", "Tam")
+    yard = gm.inspect("The Guild Yard")["id"]
+    gm.move("Tam", yard)
+    with pytest.raises(Rejected, match="locked"):
+        me.act("go", "The Counting House")  # Mira's key keeps the door
+    gm.move(gm.inspect("The counting house key")["id"], "Tam")
+    me.act("unlock", "The counting house lock")
+    gm.move("Tam", "The Counting House")  # past the four; the yard's rule is its own test
+    with pytest.raises(Rejected):
+        me.act("take", "The yard book")  # the strongbox is shut
+    with pytest.raises(Rejected):
+        me.act("unlock", "The strongbox lock", params={"code": "WRONG"})
+    me.act("unlock", "The strongbox lock", params={"code": "AMORY"})
+    me.act("take", "The yard book")
+    notes = [n["text"] for n in gm.world.get(gm.inspect("Ossa the Carrier")["id"])["state"]["memory"]]
+    assert any("AMORY" in n for n in notes)
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot makes no second lock and no second key
+    assert len([e for e in gm.find(name="The strongbox key") if e["name"] == "The strongbox key"]) == 1
+

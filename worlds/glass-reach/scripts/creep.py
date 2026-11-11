@@ -1,3 +1,10 @@
+def shut(ctx, x):
+    # a door or a place a lock keeps shut (the locks pack), with the way to open it
+    lk = ctx.locked(x)
+    if lk is None:
+        return None
+    return x.name + " is locked: unlock " + ("it" if lk.id == x.id else lk.name) + " first, with its key or its code, or pick it"
+
 def check(ctx):
     here = ctx.actor.parent
     if ctx.actor.state.down:
@@ -11,6 +18,11 @@ def check(ctx):
         if e["target"] == ctx.target.id:
             if ctx.target.state.hidden and ctx.target.state.known_to != ctx.actor.state.faction:
                 return "you do not know the way"
+            via = e["data"].get("via")
+            if via and shut(ctx, ctx.get(via)):
+                return shut(ctx, ctx.get(via))
+            if shut(ctx, ctx.target):
+                return shut(ctx, ctx.target)
             return True
     return "there is no way there from here"
 

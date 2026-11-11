@@ -26,8 +26,9 @@ plays a Guild man and runs four of the Guild's minds from his own agents.
   spear.
 - **The Counting House**, off the yard. The strongbox holds the Reach leg's glass for the convoy north at the moon:
   sixty shards, and the yard book. Anyone not of the Guild who walks in while one of the four stands in the yard or
-  at the door is turned back; a creep past them takes stealth against 15. The strongbox lock and the door lock come
-  from the locks pack (asked of the engine session the same day).
+  at the door is turned back; a creep past them takes stealth against 15. Both are locked (the locks pack): the
+  counting house door opens to Mira's key (pick 16, break 18); the strongbox to its one key, which the wright carries,
+  or to Ossa's code, the name of hauler fourteen's driver (pick 18, break 20).
 - **Hauler Nine**, a crawler in the yard's shed and a place you climb into. `drive` its wheel to a stop: the Guild
   Yard, the Salt Road post, the Gate Yard, the Crawler's Lee or the Old Salt Works. It takes a quarter hour, it is
   loud, and whoever is aboard rides along. It refuses the glass.

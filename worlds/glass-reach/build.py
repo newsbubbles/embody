@@ -51,7 +51,7 @@ WORLD = {
     "name": "The Glass Reach",
     "seed": 23,
     "description": "A desert fief, a cracked cistern, a people with the water, a blade left behind. Rules on the table.",
-    "requires": ["d20", "village", "works"],
+    "requires": ["d20", "village", "works", "locks"],
 }
 
 # ---- what there is ---------------------------------------------------------------------
@@ -1410,6 +1410,41 @@ def keep_guild(s, names):
         s.remember(CREW_KNOWS, entity=names[name])
 
 
+# The Guild's locks (the locks pack): the strongbox opens to its one key, which the wright set over the yard carries,
+# or to the factor's code, which Ossa keeps (the name of hauler fourteen's driver); the counting house door opens to
+# Mira Ost's key. Both are Guild work: hard to pick and harder to break. What the wright is, the story keeps
+# (guild_wright), since a guest's body can change its name.
+STRONGBOX_LOCK = {"key": "The strongbox key", "code": "AMORY", "pick_dc": 18, "break_dc": 20,
+                  "description": "A Guild box lock, black iron, the wheel stamped on the plate, with a keyhole and a "
+                                 "ring of five lettered tumblers beside it."}
+STRONGBOX_KEY = {"portable": True, "key": True,
+                 "description": "A heavy iron key on a leather thong, the Carriers' wheel cut into the bow."}
+DOOR_LOCK = {"key": "The counting house key", "pick_dc": 16, "break_dc": 18,
+             "description": "An iron box lock bolted to the counting house door, as old as the yard and oiled."}
+DOOR_KEY = {"portable": True, "key": True, "description": "A long iron key, worn bright at the bit."}
+OSSA_KNOWS_CODE = ("The strongbox in the Guild Yard opens to its key, which the wright carries, or to the factor's "
+                   "code on its tumblers: AMORY, the name of hauler fourteen's driver. Nobody else is to have it.")
+
+
+def keep_guild_locks(s, names):
+    """The strongbox's lock and key, the counting house door's lock and key, and Ossa's memory of the code. Each made
+    once, by name; a key already stolen or given stays where it went."""
+    if "The Guild strongbox" in names and "The strongbox lock" not in names:
+        s.spawn("lock", names["The Guild strongbox"], "The strongbox lock", state=dict(STRONGBOX_LOCK))
+        story = s.world.find(type="story", limit=1)[0]["id"]
+        wright = s.world.get(story)["state"].get("guild_wright")
+        holder = wright if wright and s.world.get(wright) else names.get("Ossa the Carrier")
+        if holder:
+            s.spawn("thing", holder, "The strongbox key", state=dict(STRONGBOX_KEY))
+        if "Ossa the Carrier" in names:
+            s.remember(OSSA_KNOWS_CODE, entity=names["Ossa the Carrier"])
+    if "The Counting House" in names and "The counting house lock" not in names:
+        s.spawn("lock", names["The Counting House"], "The counting house lock", state=dict(DOOR_LOCK))
+        holder = names.get("Mira Ost") or names.get("Ossa the Carrier")
+        if holder:
+            s.spawn("thing", holder, "The counting house key", state=dict(DOOR_KEY))
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -1456,6 +1491,7 @@ def keep_canon(s):
     keep_host(s, names_of(s))
     keep_burn(s, names_of(s))
     keep_guild(s, names_of(s))
+    keep_guild_locks(s, names_of(s))
     keep_carry(s)
     if st.get("garrison"):
         return
