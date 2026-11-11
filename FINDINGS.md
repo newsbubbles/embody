@@ -4,6 +4,20 @@ Ways the system surprised us in play: what we saw, why it happened, and what it 
 work (worlds, minds) and the engine work add here. A finding is something the design did not predict, good or bad; a
 plain bug goes in its fix's commit.
 
+## 2026-11-11: The detective questioned the bodies with no minds
+
+**Seen.** Aaron's player, working the mystery of the cistern notice, questioned the Hold's guards one by one: Pip twice,
+Lute, Hobb, Osk. Each gave a shrug, a grin or a stock line ("Road's empty", salt bread and water). The minds in the room
+(Ruhl, Hollis) were not asked, and Ruhl had to step in and answer for his men.
+
+**Why.** The nine are bodies without minds: a dialog table and a default line. They stand where the story happened, so
+a player treats each one as a witness. Nothing on them says "ask the captain", and the clues were put on the minds and
+on Wick, not on the bodies that were there.
+
+**Taught.** A player investigating goes to whoever stood nearest, not to whoever was written to know. Bodies at the
+scene of a live mystery need a line that points onward (who to ask, what they saw at a distance), or the trail dies on
+a shrug. A world's clues should sit where players will look, and the mindless should route to the minds.
+
 ## 2026-11-11: A reboot would have unburned the letter
 
 **Seen.** The first Reach test of `burn` burned the notice by the cistern at the Hold's hearth, rebooted the world, and
