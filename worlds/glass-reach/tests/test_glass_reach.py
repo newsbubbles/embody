@@ -1068,3 +1068,25 @@ def test_the_wall_works_raise_a_course_and_the_moon_counts_it():
                 standing += -1 if s.get("turncoat") else 1
     bows = 3 if st.get("keth_proof") and st.get("truce") else 0
     assert st["reckoning"]["wall"] == standing + bows + 1  # the course stands as a man
+
+
+def test_the_notice_by_the_cistern_was_the_hosts_and_a_flask_on_the_ridge_says_so():
+    eng, gm = hosted()
+    flask = gm.inspect("A Crown flask")
+    assert flask["parent"] == gm.inspect("Red Ridge")["id"] and flask["state"]["hidden"]
+    assert "pewter" in gm.inspect("Red Ridge")["state"]["description"]
+    me = newcomer(eng, gm, "keth", "Tam")
+    seen = lambda: {c["name"] for c in me.perceive()["present"]}
+    assert "A Crown flask" not in seen()
+    gm.patch("Tam", {"wits": 30})
+    me.act("check", params={"skill": "search", "dc": 13})
+    assert "A Crown flask" in seen()
+    me.act("take", "A Crown flask")
+    r = me.act("read", "A Crown flask")
+    assert any("The Host" in str(e["payload"]) for e in r["events"])
+    wick = gm.world.get(gm.inspect("Wick the runner")["id"])["state"]["dialog"]
+    assert any("host" in k.split("|") for k in wick)
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot hides no second flask and tells nobody twice
+    assert len([e for e in gm.find(name="A Crown flask") if e["name"] == "A Crown flask"]) == 1
+    notes = [n["text"] for n in gm.world.get(gm.inspect("Dram Hollis")["id"])["state"]["memory"]]
+    assert len([n for n in notes if "to the Host" in n]) == 1

@@ -1148,6 +1148,60 @@ def keep_works(s, names):
     s.patch(story, {"mason_sent": True})
 
 
+# Who nailed the notice by the cistern (Nate 2026-11-11: explained in the world, and discoverable). The Host: the Crown's
+# sworn water-wardens, who ride the Reach by night under the closed-eye seal (the seal on the back gate) and keep the
+# water law without showing themselves. On the ninth they raised the three the thirst put down (Ruhl in the yard, Nico
+# and Sefa on the ridge), filled their skins, and nailed the ration notice in their own cant. Four clues, none of them
+# the whole: a Crown flask with the Host's tag in the scree on Red Ridge (a hidden find), what Wick saw on the road that
+# night, the fine in Dreyer's books entered "to the Host", and the Guild charter's clause; Taan knows the old name.
+HOST_FLASK_NAME = "A Crown flask"
+HOST_FLASK = {"portable": True, "hidden": True, "find_dc": 13, "find_skills": ["search", "survival", "lore", "track"],
+              "find_text": "Wedged in the scree where the two Keth went down on the ninth: a flask of Crown pewter, empty, "
+                           "its cap on a cord, and a paper tag tied to the cord.",
+              "description": "An empty flask of Crown pewter, stamped with a crown over a closed eye. A paper tag is tied to "
+                             "its cord.",
+              "text": "The tag is written in a careful, slanting clerk's hand, the same hand as the notice by the cistern: "
+                      "'Ninth night. Three down of thirst: the captain in the yard, two of the Keth on the ridge. Raised, "
+                      "and their skins filled. The ration is set and posted at the cistern for the gate. The Host.'"}
+HOST_HINT = "Something pewter catches the light in the scree below the lookout rock."
+WICK_HOST = ("'A rider came up the road the night of the ninth. No lamp, and a crown over a shut eye on the saddle "
+             "cloth. Went up to the Hold and came back down before the light. Didn't stop for me, and I didn't ask him "
+             "to.'")
+HOST_KNOWS = {
+    "Elder Taan": "The Keth have an old name for the Crown's night riders who keep the water law: the Host. They come "
+                  "without lamps and leave no track a Keth can read. In the grandmothers' time they were seen raising "
+                  "those the thirst had put down, and nailing the Crown's word where the water is kept. I speak of them "
+                  "only to one who has kept faith with the Keth.",
+    "Dram Hollis": "In Dreyer's books, the fine the house paid the Crown for the man caught at the back gate was entered "
+                   "'to the Host'. Not to the Crown, not to the reeve: to the Host. I never learned who that is.",
+    "Ossa the Carrier": "The Guild's charter has a clause no carrier reads aloud: water rights in the Reach are held "
+                        "'under the Host of the Crown'. I have never met anyone who says they are the Host.",
+}
+
+
+def keep_host(s, names):
+    """The Host's flask hidden on Red Ridge with the hint in the ridge's description, Wick's line about the rider, and
+    what Taan, Hollis and Ossa know of the Host. The flask by name; the rest once, by a mark on the story."""
+    ridge = names.get("Red Ridge")
+    if ridge and HOST_FLASK_NAME not in names:
+        s.introduce("letter", ridge, HOST_FLASK_NAME, how="always_there", state=dict(HOST_FLASK), known_by={})
+    if ridge:
+        d = s.world.get(ridge)["state"].get("description") or ""
+        if HOST_HINT not in d:
+            s.patch(ridge, {"description": (d + " " + HOST_HINT).strip()})
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    if s.world.get(story)["state"].get("host_lore"):
+        return
+    if RUNNER_NAME in names:
+        dialog = dict(s.world.get(names[RUNNER_NAME])["state"].get("dialog") or {})
+        dialog["rider|ninth|night|lamp|host|notice|eye"] = WICK_HOST
+        s.patch(names[RUNNER_NAME], {"dialog": dialog})
+    for who, text in HOST_KNOWS.items():
+        if who in names:
+            s.remember(text, entity=names[who])
+    s.patch(story, {"host_lore": True})
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -1191,6 +1245,7 @@ def keep_canon(s):
     keep_wardens(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
     keep_lore(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
     keep_works(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
+    keep_host(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
     keep_carry(s)
     if st.get("garrison"):
         return
