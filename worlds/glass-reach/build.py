@@ -1,4 +1,4 @@
-"""The Glass Reach: a desert fief with table-top rules, eleven places, seven NPCs and Ruhl's nine, two seats to play.
+"""The Glass Reach: a desert fief with table-top rules, twelve places, seven NPCs and Ruhl's nine, two seats to play.
 
     uv run embody --as gm --author load glass-reach
     uv run embody --as you join glass-reach "Reeve Ansel Varrick"
@@ -40,7 +40,7 @@ not. What keeps the Reach alive with nobody at the keyboard is its routines (scr
 water run at dusk while the truce holds, the Guild crawler at dawn while Ossa keeps the tally, and every body whose
 seat has done nothing for a quarter hour of real time seeing to its own water. Players can get in their way.
 
-Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on, reach_story and reach_routines; take, drop, give, talk,
+Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on, reach_story, reach_chapter and reach_routines; take, drop, give, talk,
 read and person_on come from packs/village, the rules from packs/d20), define(s), populate(s), upgrade(s).
 """
 
@@ -60,7 +60,7 @@ POLICY = {
     "fixed": [
         "the rules: d20 + stat + skill against a difficulty, opposed attacks, a ward stops fast blows and the slow blade passes it, "
         "water runs out, the Thresher comes to rhythm on deep sand, the ring holds during a duel; the engine rolls, the narrator tells",
-        "the seven NPCs, Ruhl's nine men, the eleven places and the four sides",
+        "the seven NPCs, Ruhl's nine men, the twelve places and the four sides",
         "the Deepwell is hidden until found or shown; Dram Hollis is Dreyer's and calls the reeve out at t=240; the cistern fails at t=600",
         "nobody but a Keth knows the way down to the Deepwell without finding it",
     ],
@@ -181,14 +181,16 @@ TEMPLATES = {
              "state": {"faction": "the Keth", "body": 3, "wits": 3, "will": 2, "skills": {"stealth": 2, "survival": 2, "blade": 1}},
              "brief": "You are Keth. The Deepwell is yours and the Low Well is a grave. You walk the Flats with the broken step and "
                       "the Thresher does not hear you. The Hold has a new reeve; Taan wants to know careful or afraid."},
-    "dreyer": {"type": "person", "place": "The Crawler's Lee", "doc": "a House Dreyer agent come up the Salt Road under another name",
+    "dreyer": {"type": "person", "place": "The Dry Camp", "doc": "a House Dreyer man, come in at the house's hidden camp south of the Bone Field",
                "state": {"faction": "House Dreyer", "secret": ["dialog", "gives", "gave", "faction", "brief", "word_left"],
                          "body": 3, "wits": 3, "will": 3, "skills": {"blade": 1, "stealth": 2, "parley": 2}},
                "brief": "You are Dreyer's, under another name. The house lost the writ, the Hold and the water and means to have "
                         "them back: the Keth kept thirsty, the reeve kept weak, the Flats empty for the taking. Dram Hollis is in the "
-                        "Hold on the same business; he does not know you are coming. You start in the lee of the dead crawler off "
-                        "the Salt Road, where a runner of the house waits with the last word; the word that opens him is "
-                        "saltmark."},
+                        "Hold on the same business; he does not know you are coming. You come in at the Dry Camp, the house's "
+                        "hidden camp in the south dunes past the Bone Field, where Halvard Dreyer waits for the moon with the "
+                        "house's riders and gives the house's orders. Nobody but Dreyer's own knows the way there. On the "
+                        "Salt Road, in the lee of the dead crawler, Wick the runner carries the house's letters; the word "
+                        "that opens him is saltmark. Walk the sand with the broken step (creep), or the Thresher hears you."},
 }
 
 STORY_KINDS = ["arrived", "checked", "talked", "agreed", "dram_moves", "downed", "killed", "yielded",
@@ -199,7 +201,7 @@ HOSTED = {"rate": 4, "claim_lapse": 3600,
           # a seat that has not acted or spoken for an hour of the world (a quarter hour real) is idle: its body drinks
           "idle_after": 3600,
           # what everyone in the Reach knows is coming: timers() tells a player or a mind the next of each
-          "public_timers": ["heat", "dusk", "night", "dawn"],
+          "public_timers": ["heat", "dusk", "night", "dawn", "moon_turns"],
           # a body's water in the hosted day: one point every 2.4 world hours (36 real minutes of play at 4x), a look for
           # water every ten world minutes; a point of vigor mended every six world hours (a wound closes in a day or
           # two, a body a wound put down gets up in half a day); the turn-based story keeps the pack's beats
@@ -210,6 +212,8 @@ HOSTED = {"rate": 4, "claim_lapse": 3600,
           "routines": [("keth_run", "dusk"), ("crawler", "dawn")]}
 
 ROUTINE_KINDS = ["keth_run", "crawler"]
+# Chapter two (scripts/reach_chapter.py): the dawn that starts it, what strains the truce, the moon.
+CHAPTER_KINDS = ["dawn", "harvested", "downed", "killed", "given", "moon_turns"]
 
 BEARER = {"faction": "the Keth", "body": 3, "wits": 2, "will": 3, "skills": {"survival": 3, "climb": 1}, "post": None,
           "description": "Iska of the Keth, the water-bearer: a yoke across the shoulders worn pale where the jars hang.",
@@ -410,6 +414,7 @@ def populate(s):
                                            "nico": nico, "worm": worm, "keth": factions["the Keth"], "varrick": factions["House Varrick"]})
     install_rules(s, root)
     s.set_rule(root, "reach_story", kinds=STORY_KINDS)
+    s.set_rule(root, "reach_chapter", kinds=CHAPTER_KINDS)
     by_name = {"Reeve Ansel Varrick": ansel, "Sefa of the Keth": sefa, "Captain Ruhl": ruhl, "Dram Hollis": dram,
                "Ossa the Carrier": ossa, "Elder Taan": taan, "Nico": nico}
     seed_reach(s, by_name)
@@ -466,6 +471,7 @@ def upgrade(s):
     root = s.summary()["root"]
     install_rules(s, root)
     s.set_rule(root, "reach_story", kinds=STORY_KINDS)
+    s.set_rule(root, "reach_chapter", kinds=CHAPTER_KINDS)
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
     keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
     keep_canon(s)
@@ -488,6 +494,8 @@ PLACES = [
     {"entity": "The Deepwell", "at": [4150, 1000, -25], "radius": 20, "floor": -32, "ceiling": -18,
      "note": "a cave in the ridge's foot, water at the bottom"},
     {"entity": "The Bone Field", "at": [2600, -1800, 0], "radius": 300, "note": "south across the flats, where the crawler died"},
+    {"entity": "The Dry Camp", "at": [2500, -3300, -4], "radius": 90, "note": "a hollow in the south dunes behind a rib of black rock"},
+    {"entity": "The house's tank", "at": [2480, -3310, -4], "radius": 1.5},
     {"entity": "The Crawler's Lee", "at": [96, 1800, 0], "radius": 10, "note": "the shade of a dead hauler beside the Salt Road"},
     {"entity": "The Low Well", "at": [3950, -250, -6], "radius": 40, "floor": -30,
      "note": "a stone well-head in a hollow at the ridge's south foot, dry and poisoned"},
@@ -514,6 +522,7 @@ ROUTES = [
     {"a": "The Glass Flats", "b": "Red Ridge", "route": [[400, 700], [1500, 800], [2800, 1000], [3900, 1100]]},
     {"a": "The Glass Flats", "b": "The Bone Field", "route": [[1800, 400], [2450, -1600]]},
     {"a": "Red Ridge", "b": "The Deepwell", "route": [[4100, 1050, 0], [4150, 1000, -25]]},
+    {"a": "The Bone Field", "b": "The Dry Camp", "route": [[2600, -2100], [2550, -2900], [2500, -3300, -4]]},
     {"a": "The Salt Road", "b": "The Crawler's Lee", "route": [[80, 1800], [96, 1800, 0]]},
     {"a": "The Glass Flats", "b": "The Low Well", "route": [[2800, 1000], [3600, 100], [3950, -250, -6]]},
     {"a": "Red Ridge", "b": "The Low Well", "route": [[4050, 100, 0], [3950, -250, -6]]},
@@ -600,6 +609,66 @@ RUNNER = {"faction": "House Dreyer", "secret": ["dialog", "gives", "gave", "fact
                                            "wait for word."},
                                  "line": "'For Hollis, if you reach him. Not before.'"}}}
 
+# House Dreyer's hidden camp in the south dunes past the Bone Field: where a Dreyer newcomer comes in, Halvard Dreyer
+# waits for the moon with the house's riders, and the house keeps the water it hauled up from the south. Hidden like
+# the Deepwell, known only to Dreyer's own. Halvard is meant for a mind; the two camp hands answer from their tables.
+DRY_CAMP = ("A hollow in the south dunes behind a rib of black rock: three low tents the colour of the sand, picket lines with "
+            "no horses on them yet, a fire pit kept small. A squat iron tank sits half buried in the shade, and a pennant "
+            "with a well and a bar across it hangs furled on a spear. Everyone here speaks quietly.")
+HOUSE_TANK = {"portable": False, "water_source": True,
+              "description": "A squat iron tank half buried in the shade, hauled up from the south on a crawler that did not "
+                             "make the trip back. House Dreyer's own water, rationed by Mother Sallow."}
+CAMP_SECRET = ["dialog", "gives", "gave", "faction", "word_left"]
+HALVARD = {"faction": "House Dreyer", "secret": CAMP_SECRET,
+           "body": 3, "wits": 4, "will": 4, "skills": {"blade": 2, "parley": 2, "lore": 1}, "vigor": 7, "max_vigor": 7,
+           "description": "A lean man in a dust-grey coat cut like a rider's, close-cropped, a scar through one eyebrow. A "
+                          "house cousin by the cut of him, and he listens longer than he talks.",
+           "brief": "You are Halvard Dreyer, cousin to the house, and you hold the Dry Camp for the moon's turn. The Crown "
+                    "gave the writ to Varrick; the house means to have Scar Gate back before the season ends, and the "
+                    "riders come up from the south at the moon's turn. Your work until then: the Hold weak when they come "
+                    "(its water short, its wall thin, its reeve doubted), the Keth thirsty and the truce broken, and Dram "
+                    "Hollis freed or silenced, because he knows the house's hand and his letter said too much. Every "
+                    "Dreyer man who comes in here is yours to brief and to use, and you choose with each what suits him: "
+                    "a false name inside the Hold, a word in the Keth's ear, the glass, the road, or a message carried to "
+                    "Hollis. You never go near the Hold yourself before the moon.",
+           "default_line": "Halvard looks you over. 'Sit. Drink. Then tell me who you are going to be out there.'",
+           "dialog": {"orders|house|task|work": "'The Hold weak when the riders come. Thirsty, thin on the wall, its reeve "
+                                                "doubted. Pick a piece of that and bring it to me done.'",
+                      "hollis|dram": "'Hollis yielded in his own ring. Whether he talked is the question. Find out.'",
+                      "moon|riders|convoy": "'At the moon's turn the riders come up from the south. Until then we are "
+                                            "not here.'"}}
+SALLOW = {"faction": "House Dreyer", "secret": CAMP_SECRET,
+          "body": 2, "wits": 3, "will": 3, "skills": {"survival": 2, "lore": 1},
+          "description": "A broad grey woman with a ladle on a cord at her belt and a ledger of scratch marks on a slate. "
+                         "Nobody drinks from the tank without her nod.",
+          "brief": "You keep the house's water at the Dry Camp. Every draw is counted. You remember the Low Well.",
+          "default_line": "Mother Sallow taps the slate. 'A draw a day, and you say your name when you take it.'",
+          "dialog": {"water|tank|drink|draw|skin": "'Hauled up from the house's own wells in the south. A draw a day. The "
+                                                   "Hold has a cracked cistern and the Keth's charity. We have this.'",
+                     "well|poison|keth": "'The Keth say the house poisoned the Low Well. The house says the well went bad. "
+                                         "I was there. Ask me again when you are older.'",
+                     "hollis|dram": "'Dram drank here before he went in. One draw, and left the rest for the boys. Good "
+                                    "manners. Bad luck.'",
+                     "halvard|cousin": "'He waits better than any of them. That is why the house sent him.'"},
+          "gives": {"water|tank|drink|draw|skin": {"type": "waterskin", "name": "House waterskin", "state": {"left": 3},
+                                                   "line": "'One skin, full. Bring it back empty, not lost.'"}}}
+BRISK = {"faction": "House Dreyer", "secret": CAMP_SECRET,
+         "body": 3, "wits": 3, "will": 2, "skills": {"stealth": 3, "survival": 2},
+         "description": "A thin rider in sand-coloured wraps with a long glass on a strap, forever looking north.",
+         "brief": "You scout the Flats for the house. You have watched the Hold for a week from the dunes.",
+         "default_line": "Brisk lowers the long glass. 'North is the Bone Field, then the Flats, then their gate. Walk it quiet.'",
+         "dialog": {"thresher|sand|quiet|step|creep": "'Walk the deep sand loud and the thing under it comes. Walk it with a "
+                                                     "broken step, odd beats, and it does not. Slower. Alive.'",
+                    "hold|gate|wall|reeve": "'Nine men on that wall and a captain who counts every draw. A new reeve who "
+                                            "stood in the ring with no blade and walked out. The Keth carry water up at dusk.'",
+                    "keth|ridge|deepwell": "'The Keth sit on Red Ridge. They have water somewhere under it; I have never "
+                                           "seen where. They hate us, and they are not wrong to.'",
+                    "glass|vein|ember": "'Somebody dug the big vein on the Flats a few days back. Loud. A Hold man, by the "
+                                        "coat. The Keth saw it too.'",
+                    "road|salt|wick|landing": "'The Salt Road runs north from their gate past the Landing. Wick sits in the "
+                                              "lee of the dead crawler and carries our letters. The Guild sells to anyone.'"}}
+CAMP_PEOPLE = (("Halvard Dreyer", HALVARD), ("Mother Sallow", SALLOW), ("Brisk", BRISK))
+
 GUARD = {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "vigor": 6, "max_vigor": 6}
 # Ruhl's nine, in the order they are filled: a world that already has some of the Hold's men (a guest's guard, the
 # old man lent to the Keth) gets only the rest. Six of them can hold a blade; the old man, the boy and the cook cannot.
@@ -648,7 +717,8 @@ NINE = [
 
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
-    bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, and Ruhl's nine. Each is made once: the well and the bows by name, the nine by a mark on
+    bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
+    hidden Dry Camp past the Bone Field (Halvard Dreyer, Mother Sallow, Brisk, the house's tank), and Ruhl's nine. Each is made once: the well and the bows by name, the nine by a mark on
     the story, so a guard who dies is not raised again on a reboot. The nine are posted in the Hold, where a body with
     water at hand does not thirst; they drink when the Hold runs dry, like everyone under its roof."""
     names = {e["name"]: e["id"] for e in s.find(limit=500)}
@@ -667,6 +737,14 @@ def keep_canon(s):
     if "The Crawler's Lee" not in names:
         names["The Crawler's Lee"] = s.spawn("place", root, "The Crawler's Lee", state={"description": LEE})["id"]
         s.connect(names["The Salt Road"], names["The Crawler's Lee"])
+    if "The Dry Camp" not in names:
+        camp = s.spawn("place", root, "The Dry Camp", state={"description": DRY_CAMP, "hidden": True, "known_to": "House Dreyer"})["id"]
+        names["The Dry Camp"] = camp
+        s.connect(names["The Bone Field"], camp)
+        s.spawn("thing", camp, "The house's tank", state=HOUSE_TANK)
+        for name, table in CAMP_PEOPLE:
+            s.spawn("person", camp, name, state={**table, "post": camp, "water": 10, "max_water": 10})
+        s.patch(story, {"dry_camp": camp})
     if RUNNER_NAME not in names:
         lee = names["The Crawler's Lee"]
         wick = s.spawn("person", lee, RUNNER_NAME, state={**RUNNER, "post": lee})["id"]

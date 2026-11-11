@@ -517,7 +517,7 @@ def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_
     m = gm.map(depth=2)
     rows = {e["name"]: e for e in m["entities"]}
     places = [e for e in m["entities"] if e["type"] == "place"]
-    assert len(places) == 11 and all(e["own"] for e in places)
+    assert len(places) == 12 and all(e["own"] for e in places)
     assert rows["The Keth jars"]["own"] and rows["The Hold's ration cask"]["own"]  # spawned by the routines, placed after
     assert len(m["paths"]) >= 7 and all(p["drawn"] for p in m["paths"])
     ridge = gm.measure("Scar Gate, the Hold", "Red Ridge")
@@ -605,11 +605,31 @@ def test_a_blade_hangs_on_the_rack_and_a_card_shows_the_blade_a_body_bears():
     assert gm.inspect("Reeve's blade")["parent"] == gm.inspect("Captain Ruhl")["id"]
 
 
-def test_a_dreyer_newcomer_meets_the_runner_and_only_the_word_opens_him():
+def test_a_dreyer_newcomer_comes_in_at_the_hidden_camp_that_only_dreyer_knows():
     eng, gm, you = reach()
     ash = eng.session("ash")
     b = ash.join("glass-reach", template="dreyer", name="Ash")
-    assert b["here"]["name"] == "The Crawler's Lee" and "saltmark" in gm.inspect("Ash")["state"]["brief"]
+    assert b["here"]["name"] == "The Dry Camp"
+    assert {"Halvard Dreyer", "Mother Sallow", "Brisk", "The house's tank"} <= {c["name"] for c in b["present"]}
+    me = gm.inspect("Ash")["id"]
+    lines = said(ash.act("talk", "Mother Sallow", {"about": "water"}), me)
+    assert any("A draw a day" in x for x in lines) and "House waterskin" in [c["name"] for c in gm.inspect("Ash")["contents"]]
+    ash.act("go", "The Bone Field")
+    assert "The Dry Camp" in [x["name"] for x in ash.perceive()["exits"]]
+    # the reeve, standing in the Bone Field, finds no way south
+    gm.move("Reeve Ansel Varrick", "The Bone Field")
+    with pytest.raises(Rejected):
+        you.act("go", "The Dry Camp")
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot keeps one camp and one Halvard
+    assert len([e for e in gm.find(name="Halvard Dreyer") if e["name"] == "Halvard Dreyer"]) == 1
+
+
+def test_a_dreyer_newcomer_meets_the_runner_and_only_the_word_opens_him():
+    eng, gm, you = reach()
+    ash = eng.session("ash")
+    ash.join("glass-reach", template="dreyer", name="Ash")
+    assert "saltmark" in gm.inspect("Ash")["state"]["brief"]
+    gm.move("Ash", "The Crawler's Lee")
     wick = next(c for c in ash.perceive()["present"] if c["name"] == "Wick the runner")
     assert "dialog" not in wick.get("state", wick) and "House Dreyer" not in json.dumps(wick)  # nothing shows him Dreyer's
     me = gm.inspect("Ash")["id"]
@@ -622,3 +642,68 @@ def test_a_dreyer_newcomer_meets_the_runner_and_only_the_word_opens_him():
     assert [c["name"] for c in gm.inspect("Ash")["contents"]].count("Sealed note for Hollis") == 1
     load_world(gm, "glass-reach", upgrade=True)  # a reboot keeps one Wick
     assert len([e for e in gm.find(name="Wick the runner") if e["name"] == "Wick the runner"]) == 1
+
+
+def chapter_one_done(gm):
+    gm.patch(gm.inspect("Story")["id"], {"truce": True, "dram_done": True, "done": True})
+
+
+def to_next(gm, kind, past=1):
+    gm.clock(step={x["kind"]: x for x in gm.timers()}[kind]["in"] + past)
+
+
+def newcomer(eng, gm, template, name):
+    s = eng.session_for_token(gm.invite("player", template=template, label=name)["token"])
+    s.join(template=template, name=name)
+    return s
+
+
+def test_chapter_two_waits_for_a_dreyer_man_and_a_carrier_then_starts_at_dawn():
+    eng, gm = hosted()
+    chapter_one_done(gm)
+    story = lambda: gm.inspect("Story")["state"]
+    newcomer(eng, gm, "carrier", "Enzo")
+    to_next(gm, "dawn")
+    assert not story().get("chapter") and story()["guild_came"] and not story().get("dreyer_came")  # a carrier alone
+    newcomer(eng, gm, "dreyer", "Ash")
+    assert not story().get("chapter")  # it waits for the dawn crawler
+    to_next(gm, "dawn")
+    assert story()["chapter"] == 2 and gm.inspect(gm.summary()["root"])["state"]["story"].startswith("chapter two")
+    moon = {x["kind"]: x for x in gm.timers()}["moon_turns"]
+    assert moon["in"] == pytest.approx(226800 - 1, abs=5)
+    assert "Dreyer riders" in gm.inspect("Notice by the cistern")["state"]["text"]
+    texts = scenes(gm.history(kinds=["scene"], limit=40, newest=True))
+    assert any("three days out" in x for x in texts) and any("Halvard Dreyer" in x for x in texts)
+
+
+def test_the_moon_turns_on_a_held_wall_or_a_broken_truce():
+    eng, gm = hosted()
+    chapter_one_done(gm)
+    gm.patch(gm.inspect("Story")["id"], {"dreyer_came": True, "guild_came": True})
+    to_next(gm, "dawn")
+    kit = newcomer(eng, gm, "guard", "Kit")
+    gm.move("Kit", "The Glass Flats")
+    for _ in range(2):  # a Hold man digging glass twice under the truce breaks it
+        kit.act("harvest", "Red vein")
+        gm.clock(step=120)
+    st = gm.inspect("Story")["state"]
+    assert not st["truce"] and st["truce_broken"] == "glass dug on the Flats"
+    assert gm.world.edges(gm.inspect("Elder Taan")["id"], "truce") == [] or not gm.world.relations(gm.inspect("Elder Taan")["id"], "truce")
+    gm.patch("The Keth jars", {"left": 9})
+    gm.patch("The Hold's ration cask", {"left": 8})
+    to_next(gm, "moon_turns")
+    st = gm.inspect("Story")["state"]
+    assert st["moon_turned"] and st["outcome"] == "siege" and st["reckoning"]["hollis"] == "held"  # broken, but watered and manned
+    assert st["reckoning"]["wall"] >= 9
+
+
+def test_with_the_truce_whole_the_wall_manned_and_water_in_the_jars_the_riders_turn_back():
+    eng, gm = hosted()
+    chapter_one_done(gm)
+    gm.patch(gm.inspect("Story")["id"], {"dreyer_came": True, "guild_came": True})
+    to_next(gm, "dawn")
+    gm.patch("The Keth jars", {"left": 9})
+    to_next(gm, "moon_turns")
+    st = gm.inspect("Story")["state"]
+    assert st["outcome"] == "held", st["reckoning"]
+    assert any("Not this moon" in x for x in scenes(gm.history(kinds=["scene"], limit=40, newest=True)))

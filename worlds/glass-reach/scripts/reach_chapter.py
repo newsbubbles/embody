@@ -1,0 +1,182 @@
+# Chapter two: the moon turns. It begins at the first dawn after chapter one is done and both a Dreyer newcomer and a
+# Guild newcomer are in the world (a template body is only ever made by someone joining); the dawn crawler brings the news, and the moon turns at nightfall of the
+# third day. Until then the truce can strain and break, Hollis's letter can reach Taan, Wick's note can reach Hollis,
+# and the Thresher can die. When the moon turns the world reckons from facts, not from a stage: the truce, the men on
+# the Hold's wall, the Hold's water, and where Hollis is.
+MOON_AFTER = 226800  # from that dawn to nightfall of the third day: two days and fifteen hours of world time
+WALL = 9  # men on their feet in the Hold and the yard that the riders count as a held wall
+DRY = 4  # draws in the Keth jars and the ration cask together, below which the Hold is called thirsty
+
+def scene(ctx, place, text):
+    if place is not None:
+        ctx.emit("scene", target=place, reach=1, text=text)
+
+def story_of(ctx):
+    return ctx.find(type="story", limit=1)[0]
+
+def by_name(ctx, name):
+    got = ctx.find(name=name, limit=5)
+    for e in got:
+        if e.name == name:
+            return e
+    return None
+
+def begin(ctx, story):
+    st = story.state
+    ctx.patch(story, {"chapter": 2, "moon_due": ctx.t + MOON_AFTER, "strain": 0})
+    ctx.patch(ctx.root(), {"story": "chapter two: the moon turns", "chapter": 2})
+    ctx.schedule(MOON_AFTER, "moon_turns", target=ctx.root())
+    scene(ctx, st.landing, "The dawn crawler comes in with its dust and its driver talking before the engine stops. Riders on the "
+                           "south road, three days out, under a pennant with a well and a bar across it. Dreyer. 'And the "
+                           "convoy goes south at the moon's turn, same as the tally says. Whoever wants carrying had better "
+                           "say so before.'")
+    scene(ctx, st.hold, "The crawler's driver says it twice at the gate, so nobody can say they did not hear: Dreyer riders on "
+                        "the south road. The moon turns in three nights.")
+    scene(ctx, st.deepwell, "Word comes down the broken step with the morning: riders under Dreyer's pennant in the south dunes. "
+                            "The cups on their cords go still while the camp listens.")
+    scene(ctx, st.dry_camp, "A rider comes in off the south road at first light and kneels to Halvard Dreyer. The house's riders "
+                            "are three nights out. The moon turns, and they come up.")
+    notice = by_name(ctx, "Notice by the cistern")
+    if notice is not None:
+        ctx.patch(notice, {"text": "BY ORDER OF THE REEVE. Dreyer riders are on the south road and will be at the Reach when "
+                                   "the moon turns, in three nights. Every man to the wall at the moon. Water is drawn by "
+                                   "the captain's count. The truce with the Keth holds: no man of the Hold digs glass or "
+                                   "draws steel on a Keth. Anyone who knows Dreyer's business in the Reach brings it to the "
+                                   "reeve."})
+    ctx.emit("chapter_two", target=ctx.root(), reach=-1, moon_due=ctx.t + MOON_AFTER)
+
+def break_truce(ctx, story, why):
+    st = story.state
+    ctx.patch(story, {"truce": False, "truce_broken": why, "truce_broken_t": ctx.t})
+    keth = ctx.get(st.keth)
+    if keth is not None:
+        for r in ctx.relations(keth, "truce"):
+            ctx.unrelate(r["id"])
+    taan = ctx.get(st.taan)
+    if taan is not None:
+        ctx.patch(taan, {"dialog": {"water|well|truce": "'There were terms. The Hold broke them. Go home and drink sand.'"}})
+    scene(ctx, st.deepwell, "Taan takes the Hold's cup off its cord and pours it out on the stone. 'The terms are broken. No "
+                            "water goes up the road at dusk.'")
+    ctx.emit("truce_broken", target=ctx.root(), reach=-1, why=why)
+
+def strain(ctx, story, why):
+    st = story.state
+    if not st.truce:
+        return
+    n = int(st.strain or 0) + 1
+    ctx.patch(story, {"strain": n})
+    if n >= 2:
+        break_truce(ctx, story, why)
+    else:
+        scene(ctx, st.deepwell, "Taan hears what was done on the Flats and says nothing for a long time. 'Once,' she says.")
+        ctx.emit("truce_strained", target=ctx.root(), reach=-1, why=why, strain=n)
+
+def wall_and_water(ctx, st):
+    men = 0
+    for pid in [st.hold, st.yard]:
+        for b in ctx.children(pid):
+            bs = b.state
+            if bs.faction == "House Varrick" and not bs.dead and not bs.down:
+                men = men + 1
+    water = 0
+    for wid in [st.keth_jars, st.hold_ration]:
+        w = ctx.get(wid) if wid else None
+        if w is not None:
+            water = water + int(w.state.left or 0)
+    return men, water
+
+def reckon(ctx, story):
+    st = story.state
+    men, water = wall_and_water(ctx, st)
+    dram = ctx.get(st.dram)
+    where = "gone"
+    if dram is not None and dram.state.dead:
+        where = "dead"
+    elif dram is not None and dram.parent is not None and dram.parent.id in [st.hold, st.yard]:
+        where = "held"
+    if st.truce and men >= WALL and water >= DRY:
+        outcome = "held"
+    elif not st.truce and (men < WALL or water < DRY):
+        outcome = "fallen"
+    else:
+        outcome = "siege"
+    ctx.patch(story, {"moon_turned": True, "outcome": outcome,
+                      "reckoning": {"truce": bool(st.truce), "wall": men, "water": water, "hollis": where}})
+    ctx.patch(ctx.root(), {"story": "chapter two: " + outcome})
+    if outcome == "held":
+        scene(ctx, st.hold, "The moon turns. Dreyer's riders come up out of the south dunes in the last light and stop at the "
+                            "edge of the Flats. They count the men on the wall, and the Keth fires on Red Ridge, and they "
+                            "count again. Then they turn back into the dark.")
+        scene(ctx, st.dry_camp, "Halvard Dreyer watches the riders turn and says only, 'Not this moon.'")
+    elif outcome == "fallen":
+        scene(ctx, st.hold, "The moon turns. Dreyer's riders come up the south dunes in the dark, and there are not men enough "
+                            "on the wall, nor water enough behind it. By morning a pennant with a well and a bar across it "
+                            "hangs from Scar Gate.")
+        scene(ctx, st.deepwell, "Taan hears the riders go by above and puts out the cookfire. 'Dreyer again. We drink in the dark.'")
+    else:
+        scene(ctx, st.hold, "The moon turns. Dreyer's riders come up out of the south dunes and do not charge the gate: they make "
+                            "camp in the Bone Field, in plain sight, and light their fires. A siege, then.")
+        scene(ctx, st.dry_camp, "Halvard Dreyer rides out to meet the house's riders at the Bone Field. 'We wait,' he says. "
+                                "'They are thirstier than we are.'")
+    ctx.emit("moon_turned", target=ctx.root(), reach=-1, outcome=outcome, wall=men, water=water, hollis=where)
+
+def newcomers(ctx, story):
+    # who has come in from the templates so far: a Dreyer man, a Guild carrier
+    st = story.state
+    changes = {}
+    for b in ctx.find(type="person", limit=500):
+        kind = b.state.template
+        if kind == "dreyer" and not st.dreyer_came:
+            changes["dreyer_came"] = b.id
+        elif kind == "carrier" and not st.guild_came:
+            changes["guild_came"] = b.id
+    if changes:
+        ctx.patch(story, changes)
+
+def on(ctx, event):
+    story = story_of(ctx)
+    st = story.state
+    k = event.kind
+    p = event.payload
+    if k == "dawn":
+        if st.chapter or not st.done or st.reeve_dead:
+            return
+        newcomers(ctx, story)
+        story = story_of(ctx)
+        if story.state.dreyer_came and story.state.guild_came:
+            begin(ctx, story)
+        return
+    if st.chapter != 2 or st.moon_turned:
+        return
+    if k == "moon_turns":
+        reckon(ctx, story)
+    elif k == "harvested":
+        digger = ctx.get(p.get("by"))
+        if digger is not None and digger.state.faction != "the Keth":
+            strain(ctx, story, "glass dug on the Flats")
+    elif k in ["downed", "killed"]:
+        hurt = ctx.get(event.target)
+        if event.target == st.worm and k == "killed" and not st.thresher_dead:
+            ctx.patch(story, {"thresher_dead": True})
+            scene(ctx, st.flats, "The sand goes still in a way it has not been still in anyone's life. Somewhere under the "
+                                 "Flats, nothing is listening any more.")
+            return
+        if hurt is None or hurt.state.faction != "the Keth":
+            return
+        by = ctx.get(p.get("by")) if p.get("by") else None
+        if by is None or by.state.faction == "the Keth":
+            return
+        if k == "killed":
+            break_truce(ctx, story, "a Keth killed by " + str(by.state.faction))
+        else:
+            strain(ctx, story, "a Keth cut down by " + str(by.state.faction))
+    elif k == "given":
+        it = ctx.get(p.get("item"))
+        if it is None:
+            return
+        if it.name == "Sealed note for Hollis" and event.target == st.dram and not st.note_delivered:
+            ctx.patch(story, {"note_delivered": True})
+        elif it.name == "Sealed letter" and event.target == st.taan and not st.letter_shown:
+            ctx.patch(story, {"letter_shown": True, "strain": 0})
+            scene(ctx, st.deepwell, "Taan holds the letter close to the fire and reads the house's hand twice. 'Keep the Keth "
+                                    "thirsty,' she says aloud, and the whole cave hears it. 'So. Now we know who wanted us dry.'")
