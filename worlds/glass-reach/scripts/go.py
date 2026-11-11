@@ -2,6 +2,8 @@ def check(ctx):
     here = ctx.actor.parent
     if ctx.actor.state.down:
         return "you are down: crawl"
+    if ctx.actor.state.pinned_until and ctx.t < ctx.actor.state.pinned_until:
+        return str(ctx.actor.state.pinned_by or "the weather") + " has you pinned: nobody walks in it; wait it out (about " + str(int((ctx.actor.state.pinned_until - ctx.t) / 60) + 1) + " world minutes)"
     for e in ctx.edges(here, "connects_to", "out"):
         if e["target"] == ctx.target.id:
             if ctx.target.state.hidden and ctx.target.state.known_to != ctx.actor.state.faction:

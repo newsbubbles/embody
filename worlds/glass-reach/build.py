@@ -40,7 +40,7 @@ not. What keeps the Reach alive with nobody at the keyboard is its routines (scr
 water run at dusk while the truce holds, the Guild crawler at dawn while Ossa keeps the tally, and every body whose
 seat has done nothing for a quarter hour of real time seeing to its own water. Players can get in their way.
 
-Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on, reach_story, reach_chapter and reach_routines; take, drop, give, talk,
+Split like the ferry: scripts/ (this world's go, creep, ward_toggle, ossa_on, reach_story, reach_chapter, reach_finds, reach_road and reach_routines; take, drop, give, talk,
 read and person_on come from packs/village, the rules from packs/d20), define(s), populate(s), upgrade(s).
 """
 
@@ -166,24 +166,40 @@ BRIEFING = (
     "with the Hold since House Dreyer poisoned a well. The Carriers' Guild sells water at the Landing for emberglass, which lies "
     "in veins on the Flats, and digging it loud wakes the Thresher under the sand. Four sides, one road, one week of water. "
     "The rules are on the table (d20 plus stat plus skill against a difficulty; a ward stops the fast blade and the slow one "
-    "passes it; the ring in the yard holds by old law). The engine rolls; you decide; your agent tells it.")
+    "passes it; the ring in the yard holds by old law). The Reach keeps things hidden: where something looks off, a "
+    "check with search, survival or lore may turn it up. The engine rolls; you decide; your agent tells it.")
+
+# What a newcomer carries in (the template's kit): a skin of their own and an edge. No house marks on a Dreyer man's.
+KNIFE = {"weapon": True, "damage": 1, "bonus": 0, "portable": True, "description": "A plain short knife, the edge kept."}
+KETH_KNIFE = {"weapon": True, "damage": 1, "bonus": 1, "portable": True,
+              "description": "A Keth knife of black glass set in bone, lighter than it looks."}
+VARRICK_BLADE = {"weapon": True, "damage": 2, "bonus": 0, "portable": True,
+                 "description": "A plain House Varrick blade, the grip rewrapped in cord."}
 
 TEMPLATES = {
     "carrier": {"type": "person", "place": "The Carriers' Landing", "doc": "a Guild carrier off the last convoy, at the Landing",
                 "state": {"faction": "the Carriers", "body": 3, "wits": 3, "will": 2, "skills": {"parley": 1, "survival": 1, "lore": 1}},
+                "kit": [{"type": "waterskin", "name": "Guild waterskin", "state": {"capacity": 4, "left": 4}},
+                        {"type": "thing", "name": "Carrier's knife", "state": KNIFE}],
                 "brief": "You came in with the water convoy and stayed when it left. The Guild carries for whoever holds the gate; "
                          "Ossa keeps the tally. Water is a skin for a shard. Whatever else you are here for is yours to decide."},
     "guard": {"type": "person", "place": "The Gate Yard", "doc": "one of Ruhl's nine, in the Gate Yard",
               "state": {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "vigor": 6, "max_vigor": 6},
+              "kit": [{"type": "waterskin", "name": "Varrick waterskin", "state": {"capacity": 4, "left": 4}},
+                      {"type": "thing", "name": "Varrick blade", "state": VARRICK_BLADE}],
               "brief": "You hold a blade for House Varrick under Captain Ruhl: nine men for a wall that wants twenty, a new reeve, "
                        "a week of water, and a clerk who watches the drill like a man counting."},
     "keth": {"type": "person", "place": "Red Ridge", "doc": "a Keth of Taan's camp, on Red Ridge",
              "state": {"faction": "the Keth", "body": 3, "wits": 3, "will": 2, "skills": {"stealth": 2, "survival": 2, "blade": 1}},
+             "kit": [{"type": "waterskin", "name": "Keth skin", "state": {"capacity": 4, "left": 4}},
+                     {"type": "thing", "name": "Keth knife", "state": KETH_KNIFE}],
              "brief": "You are Keth. The Deepwell is yours and the Low Well is a grave. You walk the Flats with the broken step and "
                       "the Thresher does not hear you. The Hold has a new reeve; Taan wants to know careful or afraid."},
     "dreyer": {"type": "person", "place": "The Dry Camp", "doc": "a House Dreyer man, come in at the house's hidden camp south of the Bone Field",
                "state": {"faction": "House Dreyer", "secret": ["dialog", "gives", "gave", "faction", "brief", "word_left"],
                          "body": 3, "wits": 3, "will": 3, "skills": {"blade": 1, "stealth": 2, "parley": 2}},
+               "kit": [{"type": "waterskin", "name": "Plain waterskin", "state": {"capacity": 4, "left": 4}},
+                       {"type": "thing", "name": "Short knife", "state": KNIFE}],
                "brief": "You are Dreyer's, under another name. The house lost the writ, the Hold and the water and means to have "
                         "them back: the Keth kept thirsty, the reeve kept weak, the Flats empty for the taking. Dram Hollis is in the "
                         "Hold on the same business; he does not know you are coming. You come in at the Dry Camp, the house's "
@@ -214,6 +230,9 @@ HOSTED = {"rate": 4, "claim_lapse": 3600,
 ROUTINE_KINDS = ["keth_run", "crawler"]
 # Chapter two (scripts/reach_chapter.py): the dawn that starts it, what strains the truce, the moon.
 CHAPTER_KINDS = ["dawn", "harvested", "downed", "killed", "given", "moon_turns"]
+# What is hidden until someone looks (scripts/reach_finds.py) and what the road does to a newcomer (scripts/reach_road.py).
+FIND_KINDS = ["checked"]
+ROAD_KINDS = ["arrived", "squall", "squall_passes"]
 
 BEARER = {"faction": "the Keth", "body": 3, "wits": 2, "will": 3, "skills": {"survival": 3, "climb": 1}, "post": None,
           "description": "Iska of the Keth, the water-bearer: a yoke across the shoulders worn pale where the jars hang.",
@@ -415,6 +434,8 @@ def populate(s):
     install_rules(s, root)
     s.set_rule(root, "reach_story", kinds=STORY_KINDS)
     s.set_rule(root, "reach_chapter", kinds=CHAPTER_KINDS)
+    s.set_rule(root, "reach_finds", kinds=FIND_KINDS)
+    s.set_rule(root, "reach_road", kinds=ROAD_KINDS)
     by_name = {"Reeve Ansel Varrick": ansel, "Sefa of the Keth": sefa, "Captain Ruhl": ruhl, "Dram Hollis": dram,
                "Ossa the Carrier": ossa, "Elder Taan": taan, "Nico": nico}
     seed_reach(s, by_name)
@@ -472,6 +493,8 @@ def upgrade(s):
     install_rules(s, root)
     s.set_rule(root, "reach_story", kinds=STORY_KINDS)
     s.set_rule(root, "reach_chapter", kinds=CHAPTER_KINDS)
+    s.set_rule(root, "reach_finds", kinds=FIND_KINDS)
+    s.set_rule(root, "reach_road", kinds=ROAD_KINDS)
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
     keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
     keep_canon(s)
@@ -668,6 +691,19 @@ BRISK = {"faction": "House Dreyer", "secret": CAMP_SECRET,
                     "road|salt|wick|landing": "'The Salt Road runs north from their gate past the Landing. Wick sits in the "
                                               "lee of the dead crawler and carries our letters. The Guild sells to anyone.'"}}
 CAMP_PEOPLE = (("Halvard Dreyer", HALVARD), ("Mother Sallow", SALLOW), ("Brisk", BRISK))
+# The camp keeps itself: the tank never runs dry (no level), the chest holds the house's salve, and Sallow hands a
+# pouch to each of the house's own who comes to her hurt.
+HOUSE_SALVE = {"doses": 3, "heals": 3, "description": "A house pouch of honey-and-ash salve, sealed with plain wax.",
+               "description_empty": "An empty house pouch, sticky inside."}
+MEDICINE_CHEST = {"portable": False, "holds": ["medicine"], "room": 8,
+                  "description": "A brass-cornered chest in the shade of the tank, the house's salve packed in it in rows. "
+                                 "Mother Sallow keeps the key on the cord with her ladle, and leaves it open in the camp."}
+SALLOW_SALVE = {"wound|hurt|salve|medicine|heal|bleed|sick": {
+    "type": "medicine", "name": "Pouch of house salve", "state": HOUSE_SALVE,
+    "line": "'Sit. Show me.' She binds it, and presses a pouch into your hand. 'For the next one. There is always a next one.'"}}
+SALLOW["dialog"]["wound|hurt|salve|medicine|heal|bleed|sick"] = ("'The chest by the tank has the house's salve. Take what "
+                                                                  "you need and tell me, so I can count it.'")
+SALLOW["gives"].update(SALLOW_SALVE)
 
 GUARD = {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "vigor": 6, "max_vigor": 6}
 # Ruhl's nine, in the order they are filled: a world that already has some of the Hold's men (a guest's guard, the
@@ -715,6 +751,95 @@ NINE = [
 ]
 
 
+# Hidden until someone looks (scripts/reach_finds.py): each find is a thing with `hidden`, the dc and skills of the check
+# that turns it up, and what the finder sees. The place carries a hint (`hint` appended to `hint_on`'s description), so
+# there is a reason to look. Each is made once, by name.
+LOOK = ["search", "survival", "lore", "track"]
+FINDS = [
+    {"at": "The Bone Field", "type": "letter", "name": "Dreyer manifest", "dc": 14, "skills": LOOK,
+     "hint_on": "The Bone Field", "hint": "The crawler's strongbox is still bolted under the sand side of the cab.",
+     "state": {"portable": True,
+               "description": "A stiff fold of oiled cloth from a crawler's strongbox, in a clerk's hand under a well-and-bar seal.",
+               "text": "Crawler of House Dreyer, the south road. Carried: one iron tank, to the camp behind the rib of black "
+                       "rock past the Bone Field. Six casks of well-black, for the Low Well, by night. Two riders' kit."},
+     "found": "Down in the drift where the cab went under, a strongbox has burst its hasp. Inside, dry in oiled cloth, is a "
+              "crawler's manifest under Dreyer's seal."},
+    {"at": "The Crawler's Lee", "type": "letter", "name": "Hauler's log", "dc": 13, "skills": LOOK,
+     "hint_on": "The Crawler's Lee", "hint": "Under the hauler's dash a lockbox is still bolted on, its lid rusted down.",
+     "state": {"portable": True, "description": "A Guild log book swollen with old damp. The last pages can still be read.",
+               "text": "Guild hauler fourteen, Ossa's tally. Last entry: riders off the south dunes under the well and the "
+                       "bar. They took the casks and the driver's skin and left us the shade. I told them the Guild carries "
+                       "for whoever holds the gate. They said they would hold it."},
+     "found": "The lockbox under the dash gives on the third try in a puff of rust. Inside is a Guild log book, the last "
+              "page written in a hurry."},
+    {"at": "The Gate Yard", "type": "letter", "name": "Hollis's count", "dc": 14, "skills": ["search", "lore", "stealth"],
+     "hint_on": "The Gate Yard", "hint": "One stone low in the wall by the ring sits a finger proud of the rest.",
+     "state": {"portable": True, "description": "A slip of paper folded small, in a neat hand that is not a soldier's.",
+               "text": "Men on the wall: nine, two of them boys. Bows: six, strung. Water: the cistern cracked, the Keth "
+                       "carry at dusk, the Guild cask at dawn. The reeve walks the wall at night alone. The captain sleeps "
+                       "in the yard. Wait for the moon."},
+     "found": "The proud stone comes out with a little work. Behind it, folded small and dry, is a slip of paper in a "
+              "careful hand."},
+    {"at": "Scar Gate, the Hold", "type": "thing", "name": "Bronze wedge", "dc": 15, "skills": ["search", "lore"],
+     "hint_on": "The cistern", "hint": "Deep in the crack, past where fingers reach, something catches the light that is not stone.",
+     "state": {"portable": True,
+               "description": "A bronze wedge the length of a thumb, driven into the cistern's crack from the inside and "
+                              "hammered home. A well with a bar across it is stamped on its head."},
+     "found": "Worked at with a bent nail, it comes loose: a bronze wedge, driven into the crack from the inside. Stamped "
+              "on its head is a well with a bar across it."},
+    {"at": "The Glass Flats", "type": "vein", "name": "Buried vein", "dc": 15, "skills": ["survival", "lore", "track", "search"],
+     "hint_on": "The Glass Flats", "hint": "Out past the worked veins the dunes have pulled back further, and at noon the sand there has a red cast.",
+     "state": {"ember": 5, "description": "A wide seam of bright red glass under a skin of sand, the richest on the Flats. "
+                                          "The sand over it is deep."},
+     "found": "Where the dune has pulled back furthest, a hand of sand brushed aside shows red glass, wide as a door and "
+              "bright. Nobody has dug here."},
+    {"at": "The Salt Road", "type": "waterskin", "name": "Guild cache skin", "dc": 12, "skills": ["survival", "search", "lore"],
+     "hint_on": "Salt-block cairn", "hint": "",
+     "state": {"capacity": 6, "left": 6, "description": "A Guild skin, full, buried a hand deep under the cairn and cool from the sand.",
+               "description_full": "A Guild skin, full, buried a hand deep under the cairn and cool from the sand."},
+     "found": "Under the cairn, a hand deep and wrapped in sacking, is a Guild skin, full and cool. Carriers leave water "
+              "where the road is longest."},
+    {"at": "The Low Well", "type": "thing", "name": "Empty phial", "dc": 13, "skills": LOOK,
+     "hint_on": "Four cairns", "hint": "One stone in the smallest has been lifted and put back wrong.",
+     "state": {"portable": True,
+               "description": "A clay phial the length of a finger, stoppered and empty, the wax on it pressed with a well "
+                              "and a bar. It smells of iron and something worse, like the well."},
+     "found": "The wrong-set stone lifts. Under it, where someone hid it in a hurry and never came back, is an empty clay "
+              "phial sealed with Dreyer's wax."},
+]
+CAIRN = {"portable": False, "description": "Three blocks of salt stacked at the road's edge, the top one marked with a Guild "
+                                           "chalk ring. Carriers leave these where they leave something."}
+
+
+def keep_finds(s, names):
+    """The hidden finds, the cairn on the Salt Road that marks one, the hint on each place, and the camp's stores (the
+    medicine chest with four pouches of the house's salve, Sallow's pouch for the hurt). Checks before every write."""
+    if "Salt-block cairn" not in names and "The Salt Road" in names:
+        names["Salt-block cairn"] = s.spawn("thing", names["The Salt Road"], "Salt-block cairn", state=CAIRN)["id"]
+    for f in FINDS:
+        if f["at"] not in names:
+            continue
+        if f["name"] not in names:
+            names[f["name"]] = s.spawn(f["type"], names[f["at"]], f["name"], state={
+                **f["state"], "hidden": True, "find_dc": f["dc"], "find_skills": f["skills"], "find_text": f["found"]})["id"]
+        on = names.get(f["hint_on"])
+        if on and f["hint"]:
+            d = s.world.get(on)["state"].get("description") or ""
+            if f["hint"] not in d:
+                s.patch(on, {"description": (d + " " + f["hint"]).strip()})
+    camp = names.get("The Dry Camp")
+    if camp and "The house's medicine chest" not in names:
+        chest = s.spawn("thing", camp, "The house's medicine chest", state=MEDICINE_CHEST)["id"]
+        names["The house's medicine chest"] = chest
+        for _ in range(4):
+            s.spawn("medicine", chest, "Pouch of house salve", state=dict(HOUSE_SALVE))
+    sallow = names.get("Mother Sallow")
+    if sallow:
+        st = s.world.get(sallow)["state"]
+        if "wound|hurt|salve|medicine|heal|bleed|sick" not in (st.get("gives") or {}):
+            s.patch(sallow, {"gives": SALLOW_SALVE, "dialog": {k: SALLOW["dialog"][k] for k in SALLOW["dialog"]}})
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -753,6 +878,7 @@ def keep_canon(s):
     rack = names.get("Rack of practice blades")
     if rack and s.world.get(rack)["state"].get("holds") is None:
         s.patch(rack, RACK)
+    keep_finds(s, {e["name"]: e["id"] for e in s.find(limit=1000)})
     if st.get("garrison"):
         return
     hold, ruhl = st["hold"], st["ruhl"]

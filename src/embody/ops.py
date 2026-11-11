@@ -650,7 +650,10 @@ class Session:
         if description:  # the newcomer's own word on how they look, over the template's
             state["description"] = description
         parent = self._resolve(t["place"]) if t.get("place") else w.root_id
-        return w.spawn(t.get("type", "creature"), parent, name=name, state=state)
+        eid = w.spawn(t.get("type", "creature"), parent, name=name, state=state)
+        for item in t.get("kit") or []:  # what a newcomer of this kind carries in: a skin, a blade, whatever the world says
+            w.spawn(item.get("type", "thing"), eid, name=item["name"], state=dict(item.get("state") or {}))
+        return eid
 
     def _briefing(self, eid: str) -> dict[str, Any]:
         """What join hands a newcomer: the world's own paragraph, who they are, the pace, and how to begin."""

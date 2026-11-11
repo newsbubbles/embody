@@ -176,6 +176,21 @@ def test_a_newcomer_says_once_at_join_how_they_look():
     assert "template" in r.value.hint
     assert w.get(i["Prisoner"])["state"].get("description") != "A king in rags."
 
+def test_a_newcomer_carries_in_the_kit_their_template_names():
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.patch(w.root_id, {"templates": {"newcomer": {"type": "person", "place": "Hall", "kit": [
+        {"type": "thing", "name": "Road knife", "state": {"portable": True, "weapon": True}},
+        {"name": "Skin of water", "state": {"portable": True, "left": 4}}]}}})
+    a = eng.session_for_token(gm.invite("player", label="a")["token"]).join(template="newcomer", name="Ada")
+    b = eng.session_for_token(gm.invite("player", label="b")["token"]).join(template="newcomer", name="Bo")
+    for who in (a, b):  # each gets their own, not one shared
+        held = {c["name"]: c for c in w.children(who["you"]["id"])}
+        assert set(held) == {"Road knife", "Skin of water"} and held["Skin of water"]["state"]["left"] == 4
+    w.patch(next(c["id"] for c in w.children(a["you"]["id"]) if c["name"] == "Skin of water"), {"left": 0})
+    assert next(c for c in w.children(b["you"]["id"]) if c["name"] == "Skin of water")["state"]["left"] == 4
+
+
 def test_mind_grant_holds_only_its_npcs():
     eng, w, i = engine_with_two_rooms()
     gm = owner(eng)

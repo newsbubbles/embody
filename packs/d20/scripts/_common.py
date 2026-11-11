@@ -22,6 +22,10 @@ def held(who, flag):
             return it
     return None
 
+def endless(thing):
+    # a source with no level never runs dry
+    return bool(thing.state.water_source) and thing.state.left is None
+
 def water_here(ctx, place):
     # the place itself if it is a source, else a thing here that is one and has something left
     if place is None:

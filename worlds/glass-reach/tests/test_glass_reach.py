@@ -539,7 +539,7 @@ def test_the_low_well_and_ruhls_nine_are_in_the_world():
     # the Keth's grave is a place off the Flats and the ridge: a dry, poisoned well-head nobody drinks from
     well = gm.inspect("The Low Well")
     assert well["type"] == "place" and not well["state"].get("hidden")
-    assert {c["name"] for c in well["contents"]} == {"The Low Well's head", "Four cairns"}
+    assert {c["name"] for c in well["contents"]} - {"Empty phial"} == {"The Low Well's head", "Four cairns"}  # the phial is hidden
     exits = {gm.world.get(e["target"])["name"] for e in gm.world.edges(well["id"], "connects_to", "out")}
     assert exits == {"The Glass Flats", "Red Ridge"}
     assert not gm.inspect("The Low Well's head")["state"].get("water_source")
@@ -707,3 +707,56 @@ def test_with_the_truce_whole_the_wall_manned_and_water_in_the_jars_the_riders_t
     st = gm.inspect("Story")["state"]
     assert st["outcome"] == "held", st["reckoning"]
     assert any("Not this moon" in x for x in scenes(gm.history(kinds=["scene"], limit=40, newest=True)))
+
+
+def test_a_newcomer_carries_a_skin_and_an_edge_and_a_squall_pins_them_on_their_first_crossing_of_the_flats():
+    eng, gm = hosted()
+    ash = newcomer(eng, gm, "dreyer", "Ash")
+    assert {"Plain waterskin", "Short knife"} <= {c["name"] for c in gm.inspect("Ash")["contents"]}
+    ash.act("creep", "The Bone Field")
+    r = ash.act("creep", "The Glass Flats")
+    assert any("squall" in t for t in scenes(r["events"]))
+    with pytest.raises(Rejected) as ex:
+        ash.act("go", "The Salt Road")
+    assert "pinned" in str(ex.value)
+    gm.clock(step=7201)
+    assert not gm.inspect("Ash")["state"].get("pinned_until")
+    ash.act("go", "The Salt Road")
+    ash.act("go", "The Glass Flats")  # once is enough: the second crossing is clear
+    ash.act("go", "The Salt Road")
+    assert where(gm, "Ash") == "The Salt Road"
+
+
+def test_hidden_things_turn_up_for_the_right_look_and_the_place_says_where_to_look():
+    eng, gm = hosted()
+    ash = newcomer(eng, gm, "guard", "Ash")
+    assert "finger proud" in gm.inspect("The Gate Yard")["state"]["description"]
+    gm.patch("Ash", {"skills": {"search": 30, "blade": 30}})
+    seen = lambda: {c["name"] for c in ash.perceive()["present"]}
+    assert "Hollis's count" not in seen()
+    ash.act("check", params={"skill": "blade", "dc": 14})  # a pass with the wrong eye finds nothing
+    assert "Hollis's count" not in seen()
+    r = ash.act("check", params={"skill": "search", "dc": 14})
+    assert any("careful hand" in t for t in scenes(r["events"])) and "Hollis's count" in seen()
+    ash.act("take", "Hollis's count")
+    assert "Hollis's count" in {c["name"] for c in gm.inspect("Ash")["contents"]}
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot makes no second one and no second hint
+    assert len([e for e in gm.find(name="Hollis's count") if e["name"] == "Hollis's count"]) == 1
+    assert gm.inspect("The Gate Yard")["state"]["description"].count("finger proud") == 1
+
+
+def test_the_dry_camp_never_runs_dry_and_keeps_the_houses_salve():
+    eng, gm = hosted()
+    ash = newcomer(eng, gm, "dreyer", "Ash")
+    gm.patch("Ash", {"water": 2})
+    for _ in range(3):
+        ash.act("drink", "The house's tank")
+    assert gm.inspect("Ash")["state"]["water"] == 10 and gm.inspect("The house's tank")["state"].get("left") is None
+    chest = gm.inspect("The house's medicine chest")
+    pouches = [c["id"] for c in gm.world.children(chest["id"])]
+    assert len(pouches) == 4
+    ash.act("take", pouches[0])
+    me = gm.inspect("Ash")["id"]
+    lines = said(ash.act("talk", "Mother Sallow", {"about": "I am hurt"}), me)
+    assert any("next one" in x for x in lines)
+    assert [c["name"] for c in gm.inspect("Ash")["contents"]].count("Pouch of house salve") == 2

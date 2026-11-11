@@ -69,7 +69,7 @@ The token is shown once, in the invite's result and the paste. The server stores
 
 `playable: true` on an entity's state makes it a seat. A seat with nobody in it runs on its behaviors like any NPC; a player who takes it silences the behaviors; a player who leaves, is evicted, or goes quiet past `claim_lapse` gives the body back and the behaviors resume. Only grant holders lapse: the host's own sessions never lose a seat to silence.
 
-Templates live on the world root: `templates: {"carrier": {"type": "person", "place": "Deepwell gate", "doc": "a carrier off the road", "state": {...}, "brief": "..."}}`. `join(world, template="carrier", name="Kit")` spawns a `person` there, tagged `playable` and `template: carrier`, with the state and brief, and embodies it. Names must be unique in the world.
+Templates live on the world root: `templates: {"carrier": {"type": "person", "place": "Deepwell gate", "doc": "a carrier off the road", "state": {...}, "brief": "..."}}`. `join(world, template="carrier", name="Kit")` spawns a `person` there, tagged `playable` and `template: carrier`, with the state and brief, and embodies it. Names must be unique in the world. A template's `kit` is what the newcomer carries in, made fresh for each: `"kit": [{"type": "waterskin", "name": "Guild waterskin", "state": {"capacity": 4, "left": 4}}, {"type": "thing", "name": "Carrier's knife", "state": {...}}]`. Without one a newcomer arrives empty-handed. Players do not see the kit until they hold it.
 
 ## The pace of a body
 
