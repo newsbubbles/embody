@@ -204,12 +204,14 @@ def page(world_name: str, role: str, url: str, token: str, seat: str | None = No
             begin2 = f"2. Call join(): you are {seat}, a seat kept for them. What it returns is for you, not for them."
         elif template:
             begin2 = (f"2. They come in as someone new: a {template}" + (f" ({template_doc})" if template_doc else "")
-                      + f". Ask the human only what to call them, in the world's own words, then "
-                      f"join(template='{template}', name=...). This invite makes a {template} and nothing else. What "
+                      + f". Ask the human what to call them and, if they like, how they look to others, in the "
+                      f"world's own words, then join(template='{template}', name=..., description=...): the "
+                      f"description is set then or never. This invite makes a {template} and nothing else. What "
                       f"join returns is for you, not for them.")
         else:
             begin2 = ("2. Call seats(): the open seats and the templates for a new character. join(world, entity) takes a "
-                      "seat, join(world, template=..., name=...) makes someone new; ask the human only who they want to be, "
+                      "seat, join(world, template=..., name=..., description=...) makes someone new (the description, "
+                      "how they look to others, is set then or never); ask the human only who they want to be, "
                       "in the world's own words. What join returns is for you, not for them.")
         begin = (begin2 + "\n"
                  "3. Open the story. Say nothing of the setup, the server, seats, roles, grants, tokens, tools, or what join "

@@ -227,12 +227,14 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def join(world_id: str | None = None, entity: str | None = None, template: str | None = None, name: str = "",
-             principal: str | None = None) -> dict[str, Any]:
+             description: str = "", principal: str | None = None) -> dict[str, Any]:
         """Embody an entity (by id or unique name) in a world. Returns your first perception plus a briefing. With a
         grant, join() alone takes the seat the grant names. template=..., name=... makes a new character from the
-        world's templates (seats() lists them). Pass principal=<name> to join as another principal over this
-        connection (a mind for an NPC while the main principal stays who it is)."""
-        return S(principal).join(world_id, entity, template=template, name=name)
+        world's templates (seats() lists them); description=... is how that character looks to others, a few lines
+        others read on their card, set here once and never after (the backstory belongs in remember()). Pass
+        principal=<name> to join as another principal over this connection (a mind for an NPC while the main
+        principal stays who it is)."""
+        return S(principal).join(world_id, entity, template=template, name=name, description=description)
 
     @tool()
     @_wrap

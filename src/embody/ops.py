@@ -35,6 +35,7 @@ OBSERVER = "observer"
 _SAY_MAX = 1000
 _SAY_BURST = 30
 _NOTE_MAX = 2000  # a guest's remember() note, in characters
+_DESCRIPTION_MAX = 800  # how a newcomer looks, set once at join(template=..., description=...)
 _SAY_WINDOW = 60.0
 # State keys only the entity itself (its mind) and authors ever see.
 # State keys nobody but the host reads: a mind's memory, its brief and goals, and the host's plan for the world
@@ -496,15 +497,23 @@ class Session:
         return w.summary()
 
     def join(self, world_id: str | None = None, entity: str | None = None, template: str | None = None,
-             name: str = "") -> dict[str, Any]:
+             name: str = "", description: str = "") -> dict[str, Any]:
         """Embody an entity. A grant holder may call it bare: the seat the grant names, or the one they held last.
-        template=... makes a new character from the world root's `templates` and embodies it. Claims are one
-        transaction: two agents racing for a seat get one winner and one refusal that lists what is still open."""
+        template=... makes a new character from the world root's `templates` and embodies it; description=... is how
+        that newcomer looks to others, set once here (nothing changes it later). Claims are one transaction: two
+        agents racing for a seat get one winner and one refusal that lists what is still open."""
         if self.role == OBSERVER_ROLE:
             raise Rejected("observers do not embody", hint="use(world) then perceive(from_entity=...)")
         world_id = world_id or self.world_id
         if not world_id:
             raise Rejected("no world", hint="join(world_id, entity); worlds() lists them")
+        description = (description or "").strip()
+        if description and not template:
+            raise Rejected("a seat keeps the description its world gave it",
+                           hint="description= is for someone new: join(template=..., name=..., description=...)")
+        if len(description) > _DESCRIPTION_MAX:
+            raise Rejected(f"a description is at most {_DESCRIPTION_MAX} characters, not {len(description)}",
+                           hint="say what others see in a few lines; keep the backstory in remember()")
         self.engine.world(world_id)
         self.world_id = world_id
         w = self.world
@@ -513,7 +522,7 @@ class Session:
             w.store.begin()
             try:
                 if template:
-                    eid = self._from_template(template, name)
+                    eid = self._from_template(template, name, description)
                 else:
                     if entity is None:
                         entity = self._default_seat()
@@ -611,13 +620,15 @@ class Session:
             return {"world": w.id, "seats": [],
                     "templates": [{"template": mine, "type": templates.get(mine, {}).get("type"),
                                    "place": templates.get(mine, {}).get("place"), "doc": templates.get(mine, {}).get("doc", "")}],
-                    "hint": f"your invite makes a {mine}: ask the human for a name, then join(template='{mine}', name=...)"}
+                    "hint": f"your invite makes a {mine}: ask the human for a name, then join(template='{mine}', name=...); "
+                            "description=... (how they look to others) may be set then, and only then"}
         return {"world": w.id, "seats": self._seat_rows(self.engine.wall()),
                 "templates": [{"template": k, "type": t.get("type"), "place": t.get("place"), "doc": t.get("doc", "")}
                               for k, t in templates.items()],
-                "hint": "join(world, entity) takes an open seat; join(world, template=..., name=...) makes someone new"}
+                "hint": "join(world, entity) takes an open seat; join(world, template=..., name=..., description=...) makes "
+                        "someone new, and the description (how they look to others) is set then or never"}
 
-    def _from_template(self, template: str, name: str) -> str:
+    def _from_template(self, template: str, name: str, description: str = "") -> str:
         w = self.world
         root = w.get(w.root_id)
         templates = (root["state"].get("templates") or {}) if root else {}
@@ -636,6 +647,8 @@ class Session:
         state.update({"playable": True, "template": template})
         if t.get("brief"):
             state["brief"] = t["brief"]
+        if description:  # the newcomer's own word on how they look, over the template's
+            state["description"] = description
         parent = self._resolve(t["place"]) if t.get("place") else w.root_id
         return w.spawn(t.get("type", "creature"), parent, name=name, state=state)
 

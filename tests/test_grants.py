@@ -155,6 +155,27 @@ def test_template_makes_a_new_character_in_its_place():
         eng.session_for_token(gm.invite("player", label="kit2")["token"]).join(template="newcomer", name="kit")
 
 
+
+def test_a_newcomer_says_once_at_join_how_they_look():
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.patch(w.root_id, {"templates": {"newcomer": {"type": "person", "place": "Hall",
+                                                    "state": {"description": "A stranger off the road."}}}})
+    plain = eng.session_for_token(gm.invite("player", label="plain")["token"]).join(template="newcomer", name="Ada")
+    assert w.get(plain["you"]["id"])["state"]["description"] == "A stranger off the road."
+    p = eng.session_for_token(gm.invite("player", template="newcomer", label="kit")["token"])
+    assert "description" in p.seats()["hint"]
+    with pytest.raises(Rejected):
+        p.join(template="newcomer", name="Kit", description="x" * 801)
+    b = p.join(template="newcomer", name="Kit", description="  Tall, salt-burnt, a carrier's knot at the wrist.  ")
+    assert w.get(b["you"]["id"])["state"]["description"] == "Tall, salt-burnt, a carrier's knot at the wrist."
+    gm.patch("Prisoner", {"playable": True})
+    seat = eng.session_for_token(gm.invite("player", entity="Prisoner", label="seat")["token"])
+    with pytest.raises(Rejected) as r:
+        seat.join(description="A king in rags.")  # a seat keeps the description its world gave it
+    assert "template" in r.value.hint
+    assert w.get(i["Prisoner"])["state"].get("description") != "A king in rags."
+
 def test_mind_grant_holds_only_its_npcs():
     eng, w, i = engine_with_two_rooms()
     gm = owner(eng)
