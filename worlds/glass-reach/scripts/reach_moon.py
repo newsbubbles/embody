@@ -103,6 +103,16 @@ def hire(ctx, st, drifter, payer, it):
         return
     if side == "House Dreyer" and ds.turncoat:
         return
+    # one drifter a world day signs with each house, so a full purse cannot empty the works in one sitting
+    today = int(ctx.t // 86400)
+    took = dict(st.hired_days or {})
+    if took.get(side) == today:
+        ctx.move(it, payer)
+        scene(ctx, drifter.parent, drifter.name + " hands it back. 'One of us a day signs with any one house. The rest "
+              "want to see how the first is treated. Come back tomorrow.'")
+        return
+    took[side] = today
+    ctx.patch(story_of(ctx), {"hired_days": took})
     hold = ctx.get(st.hold)
     changes = {"faction": "House Varrick", "hired": True, "post": st.hold}
     if side == "House Dreyer":

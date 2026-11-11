@@ -6,6 +6,7 @@ The version in `pyproject.toml` is 0.1.0 until the first release; until then ent
 
 ## Unreleased
 
+- The Glass Reach: one drifter a world day signs with each house at the Old Salt Works; a second offer the same day is handed back. A full purse can no longer empty the works in one sitting.
 - `embody watch --door` no longer sits blind. A watch that cannot reach the door for ten minutes exits 3 with `LOST THE DOOR` and the cause, so the agent running it wakes and looks; every retry line names the error under the transport's exception group (`ConnectError: ...`) instead of `ExceptionGroup`. A redeploy's minute or two still passes without waking anyone.
 - A newcomer says how they look. `join(template=..., name=..., description=...)` sets the new character's description, the prose others read on its card, over the template's own; at most 800 characters, set then and never after. A seat keeps the description its world gave it: `description` without a template is refused. The invite page and `seats()` say so; the backstory still goes in `remember()`.
 - `put` (village): a thing you hold onto or into a holder here, a thing whose `state.holds` lists what it takes (`["any"]` or state flags such as `["weapon"]`) with an optional `room`. What lies on a holder is within reach of everyone in its place and `take` takes it down. A holder's card lists it under `holding`; a body's card lists the weapons it carries in plain sight under `bears`, so a stale description is no longer the only witness.

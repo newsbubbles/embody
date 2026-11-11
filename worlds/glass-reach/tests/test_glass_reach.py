@@ -822,6 +822,26 @@ def test_drifters_go_to_the_wall_for_pay_and_a_bought_one_counts_against_it():
     assert r["bought"] == 1
 
 
+def test_one_drifter_a_day_signs_with_each_house():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    hold = newcomer(eng, gm, "guard", "Bram")
+    gm.move("Bram", "The Old Salt Works")
+    gm.patch("Bram", {"water": 40, "max_water": 40})
+    hold.act("give", "Cass the Salter", params={"item": "Varrick waterskin"})
+    assert where(gm, "Cass the Salter") == "Scar Gate, the Hold"
+    glass = shard(gm, "Bram")
+    r = hold.act("give", "Joss", params={"item": glass})
+    assert any("Come back tomorrow" in t for t in scenes(r["events"]))
+    assert where(gm, "Joss") == "The Old Salt Works" and gm.inspect(glass)["parent"] == gm.inspect("Bram")["id"]
+    spy = newcomer(eng, gm, "dreyer", "Vey")
+    gm.move("Vey", "The Old Salt Works")
+    spy.act("give", "Merrow", params={"item": "Plain waterskin"})
+    assert gm.inspect("Merrow")["state"].get("turncoat")  # the other house still gets its one
+    gm.clock(step=86400)
+    hold.act("give", "Joss", params={"item": glass})
+    assert where(gm, "Joss") == "Scar Gate, the Hold" and not gm.inspect("Joss")["state"].get("turncoat")
+
 def test_pitch_mends_the_cistern_once_the_wedge_is_out_and_the_mended_cistern_counts():
     eng, gm = hosted(truce=True)
     chapter_two_now(gm)
