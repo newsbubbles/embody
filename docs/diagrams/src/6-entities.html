@@ -1,0 +1,100 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Everything is an entity</title>
+<style>
+  .tree { left: 64px; top: 222px; width: 470px; height: 578px; padding: 20px 22px; }
+  .tree svg { position: absolute; left: 0; top: 0; width: 470px; height: 566px; }
+  .tree text { font-family: var(--serif); font-size: 19px; fill: var(--salt); }
+  .tree .ty { font-family: var(--mono); font-size: 12.5px; fill: var(--dim); letter-spacing: .08em; }
+  .face { left: 572px; width: 470px; height: 186px; padding: 16px 22px; }
+  .face h3 { font-size: 23px; }
+  .face .code { display: inline-block; margin: 8px 6px 0 0; font-size: 14px; }
+  .face p { font-size: 16.5px; margin-top: 8px; }
+  .side { left: 1080px; width: 456px; }
+  .packs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .pk { border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 12px; }
+  .pk b { font-family: var(--mono); font-weight: 500; font-size: 14px; color: var(--water); }
+  .pk span { display: block; font-size: 15.5px; color: var(--text); margin-top: 2px; line-height: 1.25; }
+  .term { font-family: var(--mono); font-size: 14px; line-height: 1.6; background: #07080a; border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 14px; margin-top: 10px; color: var(--text); white-space: pre; }
+  .term .k { color: var(--ember-lit); } .term .s { color: var(--water); } .term .c { color: var(--dim); }
+</style></head>
+<body><div class="stage">
+  <div class="abs" style="left:64px; top:50px;">
+    <div class="kicker">embody · how it works · 6</div>
+    <h1>Everything is an entity. <em>A DOM for worlds.</em></h1>
+    <p class="lede" style="max-width: 1360px">Places, people, a door, the weather, a storyline: one tree. Each entity is state, code and verbs at once, and any of it can change while the world runs.</p>
+  </div>
+
+  <div class="node tree">
+    <svg viewBox="0 0 470 566">
+      <defs><marker id="up" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f26a48"/></marker>
+      <marker id="dn" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9fd8d3"/></marker></defs>
+      <text class="ty" x="22" y="38" style="fill:#a89f90; letter-spacing:.16em">ONE TREE</text>
+      <g stroke="rgba(236,230,218,.26)" fill="none">
+        <path d="M36,82 V470"/>
+        <path d="M36,118 H58"/><path d="M68,132 V318"/><path d="M68,166 H90"/><path d="M100,180 V262"/><path d="M100,214 H122"/><path d="M100,262 H122"/>
+        <path d="M68,318 H90"/><path d="M100,332 V366"/><path d="M100,366 H122"/>
+        <path d="M36,422 H58"/><path d="M36,470 H58"/>
+      </g>
+      <circle cx="36" cy="72" r="6" fill="#d2452d"/>
+      <text x="52" y="78">The world</text><text class="ty" x="156" y="78">root · clock · rules</text>
+      <text x="66" y="124">The Landing</text><text class="ty" x="190" y="124">place</text>
+      <text x="98" y="172">Mara</text><text class="ty" x="152" y="172">person</text>
+      <text x="130" y="220">Lantern</text><text class="ty" x="210" y="220">thing · lit</text>
+      <text x="130" y="268">Toll box</text><text class="ty" x="218" y="268">holder</text>
+      <text x="98" y="324">Ferry gate</text><text class="ty" x="204" y="324">door</text>
+      <text x="130" y="372">Gate lock</text><text class="ty" x="228" y="372">lock · locked</text>
+      <text x="66" y="428">The River</text><text class="ty" x="170" y="428">place · 2D grid</text>
+      <text x="66" y="476">The storyline</text><text class="ty" x="200" y="476">hidden · a rule</text>
+      <!-- events up, rules down -->
+      <path d="M410,380 V150" stroke="#f26a48" stroke-width="2" marker-end="url(#up)"/>
+      <path d="M440,150 V380" stroke="#9fd8d3" stroke-width="2" marker-end="url(#dn)"/>
+      <text class="ty" x="398" y="410" text-anchor="middle" style="fill:#f26a48">events</text>
+      <text class="ty" x="398" y="426" text-anchor="middle" style="fill:#f26a48">bubble up</text>
+      <text class="ty" x="446" y="134" text-anchor="end" style="fill:#9fd8d3">rules reach down</text>
+      <text class="ty" x="22" y="530" style="fill:#7f776b">a text room and a tactical grid are the</text><text class="ty" x="22" y="548" style="fill:#7f776b">same entity, with one number changed</text>
+    </svg>
+  </div>
+
+  <div class="node face" style="top:222px;">
+    <div class="label">Mara · content</div>
+    <h3>Her state</h3>
+    <span class="code">water: 7</span><span class="code">faction: "ferry"</span><span class="code">dialog: {…}</span><span class="code ember">memory: secret</span>
+    <p class="small">Plain data. Authors patch it; her own deeds change it.</p>
+  </div>
+  <div class="node face water" style="top:418px;">
+    <div class="label water">Mara · code</div>
+    <h3>What runs on her</h3>
+    <span class="code">tend_lamp every 600s</span><span class="code">person_on · on talked</span><span class="code">quench · when idle</span>
+    <p class="small">Small Python-syntax scripts the engine runs itself: no imports, a fuel limit.</p>
+  </div>
+  <div class="node face ember" style="top:614px;">
+    <div class="label ember">Mara · ops</div>
+    <h3>What you can do to her, from here</h3>
+    <span class="code ember">talk</span><span class="code ember">give</span><span class="code ember">follow</span><span class="code ember">attack</span>
+    <p class="small">The verbs are the interface. Your look lists them, and says why any is not possible now.</p>
+  </div>
+
+  <div class="node side" style="top:222px; height:302px;">
+    <div class="label water">Packs</div>
+    <h3>Mechanics plug in</h3>
+    <div class="packs">
+      <div class="pk"><b>village</b><span>go, take, talk, give, burn</span></div>
+      <div class="pk"><b>d20</b><span>dice, wounds, thirst, duels</span></div>
+      <div class="pk"><b>locks</b><span>keys, codes, picks, force</span></div>
+      <div class="pk"><b>works</b><span>build things, in time, with hands</span></div>
+    </div>
+    <p class="small" style="margin-top:10px">A world names what it requires. Missing a mechanic? Build it as a pack.</p>
+  </div>
+  <div class="node side ember" style="top:546px; height:254px;">
+    <div class="label ember">Live</div>
+    <h3>Change it while it runs</h3>
+<div class="term"><span class="c"># a player asks: can I eat berries?</span>
+<span class="k">define_schema</span>(<span class="s">"berries"</span>, actions={<span class="s">"eat"</span>: …})
+<span class="k">define_script</span>(<span class="s">"eat"</span>, <span class="s">"def apply(ctx): …"</span>)
+<span class="k">introduce</span>(<span class="s">"berries"</span>, <span class="s">"The Landing"</span>, …)</div>
+    <p class="small" style="margin-top:10px">The next act uses it. No restart, nobody's state lost.</p>
+  </div>
+
+  <div class="foot"><span><span class="brand"><i>embody</i></span> &nbsp; no LLM inside: narration and roleplay belong to whoever is connected</span><span><b>src/embody/</b>world.py · script.py · packs/</span></div>
+</div></body></html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Any agent, one world</title>
+<style>
+  .world { left: 590px; top: 214px; width: 420px; height: 428px; padding: 26px 30px; border-radius: 22px; }
+  .world ul { list-style: none; margin-top: 14px; }
+  .world li { font-size: 19.5px; line-height: 1.3; padding: 9px 0 9px 26px; border-top: 1px solid var(--line); position: relative; color: var(--salt); }
+  .world li::before { content: ""; position: absolute; left: 2px; top: 17px; width: 8px; height: 8px; border-radius: 2px; background: var(--water); transform: rotate(45deg); }
+  .world li span { display: block; font-size: 16px; color: var(--bone); margin-top: 2px; }
+  .world .noai { margin-top: 12px; font-family: var(--mono); font-size: 14px; letter-spacing: .16em; text-transform: uppercase; color: var(--ember-lit); }
+  .card { width: 430px; }
+  .l { left: 64px; } .r { left: 1106px; }
+  .t { top: 214px; } .b { top: 452px; }
+  .keeps { top: 676px; width: 690px; }
+  .calls { margin-top: 12px; font-family: var(--mono); font-size: 13.5px; letter-spacing: .06em; color: var(--water); }
+  .calls::before { content: "calls  "; color: var(--dim); }
+  .ember .calls { color: var(--ember-lit); }
+</style></head>
+<body><div class="stage">
+  <div class="abs" style="left:64px; top:50px;">
+    <div class="kicker">embody · how it works · 1</div>
+    <h1>Your agent is the window. <em>The world is the server.</em></h1>
+    <p class="lede" style="max-width: 1100px">There is no client to install. Everyone connects the agent they already use, and the engine is the one place they meet.</p>
+  </div>
+
+  <svg class="wires">
+    <defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9fd8d3"/></marker>
+    <marker id="e" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f26a48"/></marker></defs>
+    <path class="wire water" d="M496,306 C545,306 545,340 588,340" marker-end="url(#a)" marker-start="url(#a)"/>
+    <path class="wire water" d="M496,548 C545,548 545,520 588,520" marker-end="url(#a)" marker-start="url(#a)"/>
+    <path class="wire water" d="M1104,306 C1055,306 1055,340 1012,340" marker-end="url(#a)" marker-start="url(#a)"/>
+    <path class="wire ember" d="M1104,548 C1055,548 1055,520 1012,520" marker-end="url(#e)" marker-start="url(#e)"/>
+  </svg>
+
+  <div class="node card l t">
+    <div class="label">A player · Claude Code</div>
+    <h3>“Tell it to me as a story.”</h3>
+    <p class="prose">The lantern gutters as the ferry knocks against the landing. Mara counts your coins twice and does not look up.</p>
+    <div class="calls">perceive · act · say</div>
+  </div>
+  <div class="node card l b">
+    <div class="label">A player · Codex, with other tools</div>
+    <h3>“Draw me a live map.”</h3>
+    <p>Their agent drew a viewer of the room and rendered stills of each scene with other MCP servers running beside embody.</p>
+    <div class="calls">perceive · wait · history</div>
+  </div>
+
+  <div class="node world water">
+    <div class="label water">One server · many seats</div>
+    <h3 style="font-size:34px">The world</h3>
+    <ul>
+      <li>Who is where, holding what<span>a tree of places, people and things</span></li>
+      <li>The rules, as code<span>run by the engine, the same for everyone</span></li>
+      <li>A clock that does not pause<span>whether anyone is connected or not</span></li>
+      <li>Everything that happened<span>an event log, in order, kept for good</span></li>
+    </ul>
+    <div class="noai">No AI inside the engine</div>
+  </div>
+
+  <div class="node card r t">
+    <div class="label">One person · four agents</div>
+    <h3>“Play my four guards.”</h3>
+    <p>Each agent holds a mind grant and becomes the mind of a character the world already has: its brief, its memory, its post.</p>
+    <div class="calls">act · say · remember · intend</div>
+  </div>
+  <div class="node card r b ember">
+    <div class="label ember">The author · an agent with the pen</div>
+    <h3>“Add a strongroom with a lock.”</h3>
+    <p>Changes the running world while people play in it: places, people, rules, code. Nothing restarts.</p>
+    <div class="calls">introduce · patch · define_script</div>
+  </div>
+
+  <div class="node quiet keeps" style="left:64px;">
+    <div class="label water">The server keeps</div>
+    <p style="font-size:19px">Where everyone is, what they hold, what they did, what each one remembers.</p>
+  </div>
+  <div class="node quiet keeps" style="left:846px;">
+    <div class="label">Your agent keeps</div>
+    <p style="font-size:19px">How it looks and sounds to you. Switch agents: your character stays.</p>
+  </div>
+
+  <div class="foot"><span><span class="brand"><i>embody</i></span> &nbsp; MCP over stdio or HTTP · one token per grant · roles checked on every call</span><span><b>src/embody/</b>mcp_server.py · grants.py · ops.py</span></div>
+</div></body></html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>One body, three ways to hold it</title>
+<style>
+  .body { left: 64px; top: 222px; width: 336px; height: 540px; padding: 24px 26px; }
+  .body .sigil { width: 64px; height: 64px; border-radius: 50%; border: 1px solid rgba(242,106,72,.6);
+    background: radial-gradient(circle at 50% 38%, rgba(242,106,72,.55) 0 16%, transparent 17%),
+                radial-gradient(ellipse 34% 22% at 50% 78%, rgba(242,106,72,.45) 0 99%, transparent 100%), #120d0c;
+    box-shadow: 0 0 30px rgba(210,69,45,.35); }
+  .kv { margin-top: 18px; font-family: var(--mono); font-size: 15px; line-height: 2.15; }
+  .kv div { display: flex; justify-content: space-between; border-top: 1px solid var(--line); }
+  .kv span:first-child { color: var(--dim); } .kv span:last-child { color: var(--salt); }
+  .kv .secret span:last-child { color: var(--ember-lit); }
+  .col { top: 222px; width: 356px; height: 300px; }
+  .col .big { font-family: var(--mono); font-size: 40px; color: var(--dim); position: absolute; right: 22px; top: 12px; }
+  .col ul { list-style: none; margin-top: 10px; }
+  .col li { font-size: 19.5px; line-height: 1.34; padding: 6px 0 6px 18px; position: relative; color: var(--text); }
+  .col li::before { content: ""; position: absolute; left: 0; top: 14px; width: 6px; height: 6px; border-radius: 50%; background: var(--bone); }
+  .water li::before { background: var(--water); } .ember li::before { background: var(--ember-lit); }
+  .strip { left: 436px; top: 548px; width: 1100px; height: 214px; padding: 20px 24px; }
+  .track { display: flex; gap: 6px; margin-top: 16px; }
+  .seg { height: 18px; border-radius: 4px; }
+  .seg.p { background: var(--ember); box-shadow: 0 0 14px rgba(210,69,45,.5); }
+  .seg.i { background: repeating-linear-gradient(90deg, var(--bone) 0 8px, transparent 8px 13px); opacity: .7; }
+  .seg.n { background: #3a3631; }
+  .seg.m { background: var(--water); box-shadow: 0 0 14px rgba(159,216,211,.35); }
+  .caps { display: flex; gap: 6px; margin-top: 12px; }
+  .caps div { font-size: 18px; line-height: 1.3; color: var(--text); }
+  .caps b { display: block; font-family: var(--mono); font-weight: 500; font-size: 13.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--bone); margin-bottom: 4px; }
+</style></head>
+<body><div class="stage">
+  <div class="abs" style="left:64px; top:50px;">
+    <div class="kicker">embody · how it works · 3</div>
+    <h1>One body. <em>Three ways to hold it.</em></h1>
+    <p class="lede" style="max-width: 1240px">A character is not "a player" or "an NPC". It is a body in the world, and who holds it can change from one hour to the next.</p>
+  </div>
+
+  <div class="node body ember">
+    <div class="sigil"></div>
+    <div class="label ember" style="margin-top:16px">A body in the world</div>
+    <h3>Mara, who keeps the ferry</h3>
+    <div class="kv">
+      <div><span>where</span><span>The Landing</span></div>
+      <div><span>holds</span><span>a lantern, a toll box</span></div>
+      <div><span>knows</span><span>12 people, by name</span></div>
+      <div class="secret"><span>brief</span><span>secret: who she is</span></div>
+      <div class="secret"><span>memory</span><span>secret: what she saw</span></div>
+      <div class="secret"><span>goals</span><span>secret: what she wants</span></div>
+      <div><span>orders</span><span>for when she is left</span></div>
+    </div>
+    <p class="small" style="margin-top:18px; font-size:17px">All of it lives on the server, on her. Whoever holds her next reads the same card.</p>
+  </div>
+
+  <div class="node col" style="left:436px;">
+    <div class="big">1</div>
+    <div class="label">Nobody holds it</div>
+    <h3>It runs itself</h3>
+    <ul>
+      <li>Routines on the world's clock: tend the lamp, walk to water when thirsty</li>
+      <li>Answers from a dialog table the author wrote</li>
+      <li>Keeps its post and its standing orders</li>
+    </ul>
+  </div>
+  <div class="node col water" style="left:808px;">
+    <div class="big" style="color:var(--water-deep)">2</div>
+    <div class="label water">A mind holds it</div>
+    <h3>An agent plays it</h3>
+    <ul>
+      <li>Someone's agent, on a mind grant, reads her brief, memory and goals</li>
+      <li>Decides and speaks in her voice, any hour</li>
+      <li>One person can run many minds</li>
+    </ul>
+  </div>
+  <div class="node col ember" style="left:1180px;">
+    <div class="big" style="color:var(--ember-deep)">3</div>
+    <div class="label ember">A player holds it</div>
+    <h3>A person plays it</h3>
+    <ul>
+      <li>Through their own agent, from an invite link</li>
+      <li>Says what she does; the engine rules on it</li>
+      <li>Or arrives as someone new, with a name and a face</li>
+    </ul>
+  </div>
+
+  <div class="node strip">
+    <div class="label">The same body through one evening</div>
+    <div class="track">
+      <div class="seg p" style="flex:2.2"></div><div class="seg i" style="flex:2"></div><div class="seg n" style="flex:2"></div><div class="seg m" style="flex:2"></div><div class="seg p" style="flex:1.6"></div>
+    </div>
+    <div class="caps">
+      <div style="flex:2.2"><b style="color:var(--ember-lit)">player</b>Plays an hour, then goes to cook dinner.</div>
+      <div style="flex:2"><b>idle</b>No deed for 15 world minutes: she drinks, keeps her orders, answers one line.</div>
+      <div style="flex:2"><b>nobody</b>Silent too long: the seat frees, and she runs on her routines.</div>
+      <div style="flex:2"><b style="color:var(--water)">a mind</b>Someone's agent takes her up and keeps her talking.</div>
+      <div style="flex:1.6"><b style="color:var(--ember-lit)">player</b>Back: she is still there, and remembers.</div>
+    </div>
+  </div>
+
+  <div class="foot"><span><span class="brand"><i>embody</i></span> &nbsp; an idle seat runs its body's routines · a dialog table stands down while someone holds the body</span><span><b>src/embody/</b>world.py: idle · lapsed · join &nbsp;·&nbsp; ops.py: away</span></div>
+</div></body></html>

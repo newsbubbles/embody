@@ -16,6 +16,22 @@ Clone it, open it with Claude Code (or any MCP-capable agent), and start buildin
 - Places can have a space (0, 1, 2 or 3 dimensions), so a text room and a tactical grid are the same thing with a number changed.
 - There is no LLM inside. Narration, roleplay and world building belong to whoever is connected.
 
+## How it works, in six pictures
+
+![Your agent is the window, the world is the server: players, minds and the author connect their own agents to one engine](docs/diagrams/1-any-agent.png)
+
+![The agent decides, the engine rules: every act goes through reach, the world's rules, the verb's check and apply, and the dice come from the world's seed](docs/diagrams/2-agent-decides.png)
+
+![One body, three ways to hold it: nobody (routines), a mind (someone's agent) or a player, changing through one evening](docs/diagrams/3-three-hands.png)
+
+![You only know what you saw, then it is history: a whisper, a room, the next room, and how the log becomes memory](docs/diagrams/4-witnessed.png)
+
+![The world keeps time, nobody waits for you: a world clock at any pace, routines and timers, players coming and going](docs/diagrams/5-world-time.png)
+
+![Everything is an entity, a DOM for worlds: one tree, each entity state, code and verbs, packs that plug in, and live changes](docs/diagrams/6-entities.png)
+
+The pictures are HTML pages in `docs/diagrams/src/`; `uv run python tools/render_diagrams.py` renders them to PNG.
+
 ## Quick start
 
 ```bash

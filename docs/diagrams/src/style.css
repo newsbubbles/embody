@@ -1,0 +1,65 @@
+/* The diagrams' look: the Glass Reach site's tokens (theglassreach.quest), one 1600x900 stage per diagram.
+   tools/render_diagrams.py renders each page to docs/diagrams/<name>.png at 2x. */
+@import url("https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=IBM+Plex+Mono:wght@400;500;600&display=block");
+
+:root {
+  --ink: #050607; --glass: #0a0b0d; --glass-2: #101215; --glass-3: #16191d;
+  --salt: #efe9dd; --text: #d5cdbf; --bone: #a89f90; --dim: #7f776b;
+  --ember: #d2452d; --ember-lit: #f26a48; --ember-deep: #8f2416; --dune: #4d120b;
+  --water: #9fd8d3; --water-deep: #2c5653;
+  --line: rgba(236, 230, 218, .13); --line-2: rgba(236, 230, 218, .26);
+  --serif: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1600px; height: 900px; background: var(--ink); overflow: hidden; }
+body { font-family: var(--serif); color: var(--text); -webkit-font-smoothing: antialiased; }
+
+.stage { position: relative; width: 1600px; height: 900px; overflow: hidden;
+  background:
+    radial-gradient(1200px 600px at 78% 112%, rgba(77, 18, 11, .55), transparent 70%),
+    radial-gradient(900px 500px at 8% -10%, rgba(44, 86, 83, .16), transparent 70%),
+    var(--ink); }
+.stage::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px); }
+
+.abs { position: absolute; }
+svg.wires { position: absolute; inset: 0; width: 1600px; height: 900px; overflow: visible; pointer-events: none; }
+
+.kicker { font-family: var(--mono); font-size: 15px; letter-spacing: .22em; text-transform: uppercase; color: var(--ember-lit); }
+.kicker::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--ember);
+  box-shadow: 0 0 12px var(--ember); margin-right: 12px; vertical-align: 1px; }
+h1 { font-weight: 400; font-size: 58px; line-height: 1.02; color: var(--salt); letter-spacing: -.01em; margin-top: 14px; }
+h1 em { font-style: italic; color: var(--ember-lit); }
+.lede { font-size: 22px; line-height: 1.38; color: var(--text); margin-top: 14px; max-width: 760px; }
+
+.node { position: absolute; background: linear-gradient(180deg, var(--glass-3), var(--glass-2)); border: 1px solid var(--line-2);
+  border-radius: 14px; padding: 20px 22px; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+.node.ember { border-color: rgba(242, 106, 72, .55); box-shadow: 0 0 0 1px rgba(242,106,72,.12), 0 0 60px rgba(210,69,45,.18), 0 18px 50px rgba(0,0,0,.6); }
+.node.water { border-color: rgba(159, 216, 211, .45); box-shadow: 0 0 0 1px rgba(159,216,211,.08), 0 0 50px rgba(159,216,211,.08), 0 18px 50px rgba(0,0,0,.6); }
+.node.quiet { background: transparent; box-shadow: none; border-style: dashed; }
+.label { font-family: var(--mono); font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: var(--bone); }
+.label.ember { color: var(--ember-lit); } .label.water { color: var(--water); }
+.node h3 { font-weight: 500; font-size: 27px; line-height: 1.12; color: var(--salt); margin-top: 6px; }
+.node p { font-size: 18.5px; line-height: 1.38; color: var(--text); margin-top: 8px; }
+.node p.small { font-size: 16px; color: var(--bone); }
+.prose { font-style: italic; color: var(--salt) !important; }
+code, .code { font-family: var(--mono); font-size: 15px; color: var(--water); background: rgba(159,216,211,.07);
+  border: 1px solid rgba(159,216,211,.18); border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
+.code.ember { color: var(--ember-lit); background: rgba(242,106,72,.08); border-color: rgba(242,106,72,.25); }
+.pill { display: inline-block; font-family: var(--mono); font-size: 13px; letter-spacing: .1em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--bone); }
+.pill.ember { border-color: rgba(242,106,72,.5); color: var(--ember-lit); }
+.pill.water { border-color: rgba(159,216,211,.45); color: var(--water); }
+
+.wire { fill: none; stroke: var(--line-2); stroke-width: 2; }
+.wire.ember { stroke: var(--ember); } .wire.water { stroke: var(--water); }
+.wire.dash { stroke-dasharray: 6 7; }
+.wire-label { font-family: var(--mono); font-size: 14px; fill: var(--bone); letter-spacing: .06em; }
+.wire-label.ember { fill: var(--ember-lit); } .wire-label.water { fill: var(--water); }
+
+.foot { position: absolute; left: 64px; right: 64px; bottom: 26px; display: flex; justify-content: space-between; align-items: baseline;
+  font-family: var(--mono); font-size: 13px; color: var(--dim); letter-spacing: .04em; border-top: 1px solid var(--line); padding-top: 14px; }
+.foot b { color: var(--bone); font-weight: 500; }
+.brand { letter-spacing: .2em; text-transform: uppercase; color: var(--bone); }
+.brand i { font-style: normal; color: var(--ember-lit); }

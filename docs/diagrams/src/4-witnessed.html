@@ -1,0 +1,84 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>You only know what you witnessed</title>
+<style>
+  .map { position: absolute; left: 64px; top: 222px; width: 740px; height: 560px; }
+  .map text { font-family: var(--serif); }
+  .t-place { font-family: var(--mono) !important; font-size: 13px; letter-spacing: .16em; fill: var(--bone); text-transform: uppercase; }
+  .t-name { font-size: 19px; fill: var(--salt); }
+  .t-note { font-size: 16px; fill: var(--bone); font-style: italic; }
+  .t-ember { fill: var(--ember-lit); } .t-water { fill: var(--water); }
+  .step { left: 846px; width: 690px; height: 120px; padding: 16px 22px 16px 78px; }
+  .step .num { position: absolute; left: 22px; top: 18px; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line-2);
+    font-family: var(--mono); font-size: 16px; display: flex; align-items: center; justify-content: center; color: var(--bone); }
+  .step.water .num { border-color: rgba(159,216,211,.5); color: var(--water); } .step.ember .num { border-color: rgba(242,106,72,.6); color: var(--ember-lit); }
+  .step h3 { font-size: 23px; margin-top: 0; }
+  .step p { font-size: 17px; margin-top: 6px; line-height: 1.34; }
+</style></head>
+<body><div class="stage">
+  <div class="abs" style="left:64px; top:50px;">
+    <div class="kicker">embody · how it works · 4</div>
+    <h1>You only know what you saw. <em>Then it is history.</em></h1>
+    <p class="lede" style="max-width: 1300px">Nobody gets a god's-eye view, agents included. Each body sees its own place, hears what reaches it, and keeps what it saw.</p>
+  </div>
+
+  <svg class="map" viewBox="0 0 740 560">
+    <defs>
+      <radialGradient id="ripple" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#d2452d" stop-opacity=".34"/><stop offset="1" stop-color="#d2452d" stop-opacity="0"/></radialGradient>
+      <marker id="d" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#a89f90"/></marker>
+    </defs>
+    <!-- the world and two places -->
+    <rect x="1" y="1" width="738" height="558" rx="18" fill="rgba(255,255,255,.012)" stroke="rgba(236,230,218,.18)" stroke-dasharray="4 6"/>
+    <text class="t-place" x="22" y="30">the world</text>
+    <rect x="22" y="48" width="470" height="490" rx="16" fill="#0f1113" stroke="rgba(236,230,218,.26)"/>
+    <text class="t-place" x="42" y="76">the landing</text>
+    <rect x="512" y="48" width="206" height="490" rx="16" fill="#0f1113" stroke="rgba(236,230,218,.26)"/>
+    <text class="t-place" x="532" y="76">the inn</text>
+    <!-- a door between them -->
+    <rect x="488" y="300" width="28" height="74" rx="4" fill="#050607" stroke="rgba(236,230,218,.26)"/>
+
+    <!-- said aloud: the whole landing -->
+    <circle cx="190" cy="250" r="200" fill="url(#ripple)"/>
+    <circle cx="190" cy="250" r="128" fill="none" stroke="#d2452d" stroke-opacity=".6" stroke-dasharray="3 7"/>
+    <circle cx="190" cy="250" r="196" fill="none" stroke="#d2452d" stroke-opacity=".35" stroke-dasharray="3 9"/>
+
+    <!-- you -->
+    <circle cx="190" cy="250" r="12" fill="#f26a48"/>
+    <text class="t-name" x="170" y="226" text-anchor="end">You</text>
+    <!-- mara: the whisper -->
+    <circle cx="300" cy="196" r="10" fill="#efe9dd"/>
+    <text class="t-name" x="318" y="192">Mara</text>
+    <path d="M204,242 Q250,206 288,200" fill="none" stroke="#9fd8d3" stroke-width="2"/>
+    <text class="t-note t-water" x="300" y="166" text-anchor="middle">a whisper reaches her alone</text>
+    <!-- a dock hand -->
+    <circle cx="110" cy="380" r="10" fill="#efe9dd"/>
+    <text class="t-name" x="128" y="386">Dock hand</text>
+    <text class="t-note t-ember" x="56" y="418">hears what you say aloud</text>
+    <!-- tobin comes in later -->
+    <circle cx="380" cy="470" r="10" fill="none" stroke="#efe9dd" stroke-width="2"/>
+    <path d="M380,532 L380,486" stroke="#a89f90" stroke-width="2" stroke-dasharray="4 5" marker-end="url(#d)"/>
+    <text class="t-name" x="364" y="476" text-anchor="end">Tobin, a minute later</text>
+    <text class="t-note" x="364" y="502" text-anchor="end">walks in after it was said:</text>
+    <text class="t-note" x="364" y="522" text-anchor="end">it is not his to hear</text>
+    <!-- wick at the inn -->
+    <circle cx="612" cy="250" r="10" fill="#3a3631" stroke="#7f776b"/>
+    <text class="t-name" x="612" y="226" text-anchor="middle" style="fill:#a89f90">Wick</text>
+    <text class="t-note" x="612" y="282" text-anchor="middle">next door:</text>
+    <text class="t-note" x="612" y="302" text-anchor="middle">hears nothing</text>
+    <text class="t-note" x="612" y="430" text-anchor="middle" style="fill:#9fd8d3">until someone</text>
+    <text class="t-note" x="612" y="450" text-anchor="middle" style="fill:#9fd8d3">tells him</text>
+  </svg>
+
+  <svg class="wires">
+    <defs><marker id="w" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7f776b"/></marker></defs>
+    <path class="wire" d="M884,346 L884,360" marker-end="url(#w)"/>
+    <path class="wire" d="M884,486 L884,500" marker-end="url(#w)"/>
+    <path class="wire" d="M884,626 L884,640" marker-end="url(#w)"/>
+  </svg>
+
+  <div class="node step" style="top:222px;"><div class="num">1</div><h3>It happened, and the log keeps it</h3><p>Every act, word and roll goes into one event log, in order, for good. Nobody edits the past.</p></div>
+  <div class="node step ember" style="top:362px;"><div class="num">2</div><h3>Whoever was there remembers it</h3><p>They saw it in their own feed. A gift raises what they think of you, a blow lowers it: +2, −3, on the spot.</p></div>
+  <div class="node step water" style="top:502px;"><div class="num">3</div><h3>It travels by mouth</h3><p>Mara tells Wick at the inn, or leaves word for whoever comes asking. He knows it as she told it, not as it was.</p></div>
+  <div class="node step" style="top:642px;"><div class="num">4</div><h3>Next time, they know you</h3><p>Each body keeps who it has met, how it stands with them, and the last things said between them.</p></div>
+
+  <div class="foot"><span><span class="brand"><i>embody</i></span> &nbsp; a body's feed is rebuilt from where it stood at each moment, so walking in does not hand you the past</span><span><b>src/embody/</b>world.py: _located · _opinion_floor</span></div>
+</div></body></html>

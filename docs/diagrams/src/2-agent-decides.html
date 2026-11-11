@@ -1,0 +1,84 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>The agent decides, the engine rules</title>
+<style>
+  .row { top: 248px; height: 196px; }
+  .frame { position: absolute; left: 566px; top: 222px; width: 736px; height: 250px; border: 1px dashed rgba(159,216,211,.4);
+    border-radius: 18px; background: rgba(159,216,211,.025); }
+  .frame .label { position: absolute; left: 20px; top: -10px; background: var(--ink); padding: 0 10px; }
+  .step { position: absolute; top: 262px; width: 168px; height: 188px; padding: 16px 16px; border-radius: 12px; }
+  .step .n { font-family: var(--mono); font-size: 13px; color: var(--water); letter-spacing: .12em; }
+  .step h3 { font-size: 22px; margin-top: 4px; }
+  .step p { font-size: 15.5px; line-height: 1.32; margin-top: 6px; color: var(--bone); }
+  .step code { position: absolute; left: 16px; bottom: 14px; font-size: 13px; }
+  .roll { font-family: var(--mono); font-size: 13px; color: var(--ember-lit); margin-top: 6px; letter-spacing: .02em; }
+  .term { font-family: var(--mono); font-size: 15px; line-height: 1.7; background: #07080a; border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 16px; margin-top: 12px; color: var(--text); white-space: pre; }
+  .term .x { color: var(--ember-lit); } .term .k { color: var(--dim); } .term .v { color: var(--water); }
+</style></head>
+<body><div class="stage">
+  <div class="abs" style="left:64px; top:50px;">
+    <div class="kicker">embody · how it works · 2</div>
+    <h1>The agent decides. <em>The engine rules.</em></h1>
+    <p class="lede" style="max-width: 1180px">Left alone, a model hands you the outcome you hoped for. Here every act goes through the same steps, in code.</p>
+  </div>
+
+  <svg class="wires">
+    <defs>
+      <marker id="w" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9fd8d3"/></marker>
+      <marker id="e" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f26a48"/></marker>
+    </defs>
+    <path class="wire water" d="M262,346 L296,346" marker-end="url(#w)"/>
+    <path class="wire water" d="M530,346 L562,346" marker-end="url(#w)"/>
+    <path class="wire water" d="M752,356 L758,356" marker-end="url(#w)"/>
+    <path class="wire water" d="M930,356 L936,356" marker-end="url(#w)"/>
+    <path class="wire water" d="M1108,356 L1114,356" marker-end="url(#w)"/>
+    <path class="wire water" d="M1302,346 L1328,346" marker-end="url(#w)"/>
+    <!-- the refusal: any of the first three steps sends it back -->
+    <path class="wire ember dash" d="M850,474 C850,505 700,508 680,532" marker-end="url(#e)"/>
+    <path class="wire ember dash" d="M300,534 C300,500 413,492 413,450" marker-end="url(#e)"/>
+    <text class="wire-label ember" x="866" y="512">no, at any of steps 1 to 3</text>
+    <text class="wire-label ember" x="436" y="504">back to the agent, with why</text>
+  </svg>
+
+  <div class="node row" style="left:64px; width:198px;">
+    <div class="label">You</div>
+    <h3>“I cut at the guard.”</h3>
+    <p class="small">Any words, any language, any style of play.</p>
+  </div>
+  <div class="node row" style="left:296px; width:234px;">
+    <div class="label">Your agent</div>
+    <h3>Picks a verb the world offers</h3>
+    <p><code>act("attack", "Guard")</code></p>
+  </div>
+
+  <div class="frame"><div class="label water">The engine · the same four steps for every act</div></div>
+  <div class="node step" style="left:584px;"><div class="n">1</div><h3>In reach?</h3><p>Here, in your hands, or through a door.</p><code>reachable</code></div>
+  <div class="node step" style="left:762px;"><div class="n">2</div><h3>The world's rules</h3><p>Any rule may say no, in the world's own words.</p><code>before_act</code></div>
+  <div class="node step" style="left:940px;"><div class="n">3</div><h3>Can you?</h3><p>The verb's own check: a blade in hand, on your feet.</p><code>check()</code></div>
+  <div class="node step ember" style="left:1118px;"><div class="n" style="color:var(--ember-lit)">4</div><h3>It happens</h3><p>The world changes, and the dice roll:</p><div class="roll">d20 14 + 2 = 16<br>vs 13: a hit</div><code class="ember">apply()</code></div>
+
+  <div class="node row" style="left:1332px; width:204px;">
+    <div class="label water">Everyone there</div>
+    <h3>Sees it happen</h3>
+    <p class="small">in their next look, as events: the cut, the wound, the shout.</p>
+  </div>
+
+  <div class="node ember" style="left:64px; top:536px; width:700px; height:250px;">
+    <div class="label ember">When the world says no</div>
+    <h3>“I eat the berries.” There are none.</h3>
+<div class="term"><span class="x">rejected</span>  nothing called 'Berries'
+<span class="k">hint    </span>  use an id from perceive, or find(name=...)
+<span class="k">so      </span>  <span class="v">perceive() lists what is really here</span></div>
+    <p class="small" style="margin-top:10px">A refusal costs nothing. It says why and what you can do right now, so the agent tries something real instead of making it up.</p>
+  </div>
+
+  <div class="node water" style="left:800px; top:536px; width:736px; height:250px;">
+    <div class="label water">Deterministic</div>
+    <h3>Same history, same dice.</h3>
+    <p>A roll is not drawn at random when you play. It comes from the world's seed and the number of the event that asked for it, so replaying the log lands every roll the same way.</p>
+    <p style="margin-top:12px"><code>roll seed = sha256(world seed : event # : step)</code></p>
+    <p class="small" style="margin-top:10px">Scripts run in the engine's own interpreter: no imports, no clock, no network, and a fuel limit.</p>
+  </div>
+
+  <div class="foot"><span><span class="brand"><i>embody</i></span> &nbsp; one act = one transaction: all of it lands, or none of it does</span><span><b>src/embody/</b>world.py: act · _prepare · _seed_for · script.py</span></div>
+</div></body></html>
