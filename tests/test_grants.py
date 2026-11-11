@@ -155,6 +155,29 @@ def test_template_makes_a_new_character_in_its_place():
         eng.session_for_token(gm.invite("player", label="kit2")["token"]).join(template="newcomer", name="kit")
 
 
+def test_a_guest_who_joined_under_a_handle_takes_a_character_name():
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.patch(w.root_id, {"templates": {"newcomer": {"type": "person", "place": "Hall"}}})
+    guest = eng.session_for_token(gm.invite("player", label="binx")["token"])
+    me = guest.join(template="newcomer", name="binx")["you"]["id"]
+    guard = eng.session("guard-mind")
+    guard.join("two-rooms", "Guard")
+    with pytest.raises(Rejected) as r:
+        gm.rename("binx", "guard")  # the same rule as join: nobody else has the name, in any case
+    assert "already called" in r.value.reason
+    with pytest.raises(Rejected):
+        guest.rename("binx", "Kestrel")  # an author's op, not a player's
+    out = gm.rename("binx", "Kestrel Vane")
+    assert out["id"] == me and out["name"] == "Kestrel Vane" and out["was"] == "binx"
+    assert guest.perceive()["you"]["name"] == "Kestrel Vane"
+    heard = [e for e in guard.perceive()["events"] if e["kind"] == "renamed"]
+    assert heard and heard[0]["payload"] == {"old": "binx", "new": "Kestrel Vane"}  # the room hears it
+    assert gm.inspect("Kestrel Vane")["id"] == me and not [e for e in gm.find(name="binx") if e["name"] == "binx"]
+    assert w.store.query("event", "world_id=? AND kind='renamed'", (w.id,))[0]["payload"]["old"] == "binx"  # the log keeps it
+    assert gm.rename(me, "Kestrel Vane")["was"] == "Kestrel Vane"  # the same name again changes nothing
+
+
 
 def test_a_newcomer_says_once_at_join_how_they_look():
     eng, w, i = engine_with_two_rooms()

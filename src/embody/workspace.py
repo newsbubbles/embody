@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from .ops import Engine, Session
 
 USE_LINE = re.compile(r'^\s*use\(\s*["\']([\w./-]+)["\']\s*\)\s*(#.*)?$')
-RECORDED_OPS = ["define_schema", "spawn", "introduce", "patch", "move", "destroy", "link", "connect", "unlink", "relate",
+RECORDED_OPS = ["define_schema", "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate",
                 "unrelate", "set_rule", "clear_rule", "schedule", "unschedule"]
 
 BUILD_SKELETON = '''"""{name}: a world for embody. Edit this file and the scripts beside it; load it with

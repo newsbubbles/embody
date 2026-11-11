@@ -317,7 +317,7 @@ class Session:
         role patches, moves or destroys it, and only the owner sets or lifts the mark. Limits (a grant's `under`,
         `types`, `scripts`): the write lands inside them, and a script it defines carries them in its first line."""
         w = self.world
-        ent = args.get("entity") if op in ("patch", "move", "destroy") else None
+        ent = args.get("entity") if op in ("patch", "rename", "move", "destroy") else None
         if ent is not None:
             eid = self._resolve(ent)
             hit = [x for x in (w.subtree_ids(eid) if op == "destroy" else [eid]) if (w.get(x) or {}).get("state", {}).get("canon")]
@@ -354,7 +354,7 @@ class Session:
             if not w.may_spawn(args["type"], lim):
                 raise Rejected(f"your grant may not make a {args['type']}", hint="a type its limits list, or a schema of yours",
                                alternatives=list(lim.get("types") or []))
-        elif op in ("patch", "destroy", "act_as", "say_as"):
+        elif op in ("patch", "rename", "destroy", "act_as", "say_as"):
             need(args["entity"])
         elif op == "move":
             need(args["entity"], args["parent"])
@@ -2023,6 +2023,17 @@ class Session:
         self.world.patch(eid, changes, actor=self._actor_or_none(), replace=replace)
         return self._card(self.world.need(eid), full=True)
 
+    def rename(self, entity: str, name: str) -> dict[str, Any]:
+        """A new name for anyone or anything (a guest who joined under a handle picks a character name). Refused
+        when someone else already has it; the room hears `renamed` {old, new}, and the old name stays in the log."""
+        self._need(AUTHOR)
+        eid = self._resolve(entity)
+        self._record("rename", entity=entity, name=name)
+        old = self.world.rename(eid, name, actor=self._actor_or_none())
+        out = self._card(self.world.need(eid), full=True)
+        out["was"] = old
+        return out
+
     def move(self, entity: str, parent: str, pos: list[float] | None = None) -> dict[str, Any]:
         self._need(AUTHOR)
         eid = self._resolve(entity)
@@ -2234,7 +2245,7 @@ OPS = [
     "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
     "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
-    "spawn", "introduce", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
+    "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
     "measure", "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
 ]
 
@@ -2254,7 +2265,7 @@ def allowed_ops(role: str) -> frozenset[str]:
 
 
 # Ops that write where canon and a grant's limits are checked before they run (Session._hold).
-_HELD = frozenset({"spawn", "introduce", "patch", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "schedule", "layout",
+_HELD = frozenset({"spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "schedule", "layout",
                    "unschedule", "act_as", "say_as", "remember", "intend", "set_rule", "clear_rule", "define_script",
                    "define_schema", "clock", "create_world", "fork_world", "save", "restore", "mirror"})
 

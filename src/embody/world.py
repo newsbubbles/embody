@@ -880,6 +880,23 @@ class World:
         self.emit("patched", actor=actor, target=id, reach=1, caused_by=caused_by,
                   payload={"changes": changes, "before": before, "replace": replace})
 
+    def rename(self, id: str, name: str, actor: str | None = None, caused_by: int | None = None) -> str:
+        """Give an entity a new name, refused when someone else in the world already has it (the rule join keeps).
+        The room hears `renamed` {old, new}; the old name stays in the log. Returns the old name."""
+        e = self.need(id)
+        name = str(name or "").strip()
+        if not name:
+            raise Rejected("a new name cannot be empty", hint="rename(entity, 'the name they go by now')")
+        old = e["name"]
+        if name == old:
+            return old
+        if any(r["id"] != id and r["name"].lower() == name.lower() for r in self.find(name=name, limit=None)):
+            raise Rejected(f"someone is already called {name!r}", hint="pick another name")
+        e["name"] = name
+        self._touch(e)
+        self.emit("renamed", actor=actor, target=id, reach=1, caused_by=caused_by, payload={"old": old, "new": name})
+        return old
+
     def _touch(self, e: dict[str, Any]) -> None:
         e["version"] += 1
         e["updated_seq"] = self.store.next_seq(self.id)

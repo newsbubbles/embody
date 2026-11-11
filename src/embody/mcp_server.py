@@ -502,6 +502,13 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
+    def rename(entity: str, name: str) -> dict[str, Any]:
+        """(author) Give an entity a new name (a guest who joined under a handle picks a character name). Refused when
+        someone else already has it; the room hears `renamed` {old, new}, and the old name stays in the log."""
+        return s.rename(entity, name)
+
+    @tool()
+    @_wrap
     def move(entity: str, parent: str, pos: list[float] | None = None) -> dict[str, Any]:
         """(author) Reparent an entity (teleport, hand over, put inside)."""
         return s.move(entity, parent, pos=pos)
