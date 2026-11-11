@@ -213,7 +213,7 @@ class Ctx(ScriptObject):
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
-        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule",
+        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "embodied", "remember",
     )
 
     def __init__(self, world: "World", *, actor: str | None, target: str | None, owner: str | None,
@@ -321,6 +321,10 @@ class Ctx(ScriptObject):
     def distance(self, a: Any, b: Any) -> float | None:
         return self._w.distance(_ev(self._w, a), _ev(self._w, b))
 
+    def embodied(self, id: Any) -> bool:
+        """Someone (a mind, a player) holds this body: it acts for itself, so a rule should not drive it."""
+        return self._w.embodied(_ev(self._w, id)) is not None
+
     # -- mutations
     def patch(self, id: Any, changes: dict[str, Any] | None = None, **kw: Any) -> None:
         ch = dict(changes or {})
@@ -387,6 +391,12 @@ class Ctx(ScriptObject):
         self._hold(*([tgt] if tgt else []), kind=kind)
         return self._w.emit(kind, actor=self._actor, target=tgt, reach=reach, payload=p,
                             caused_by=self._caused_by)["seq"]
+
+    def remember(self, id: Any, text: str) -> None:
+        """Write a note into that one's secret memory (what they did, what they saw): their mind reads it."""
+        self._hold(id)
+        eid = _ev(self._w, id)
+        self._w.remember(eid, str(text), actor=eid)
 
     def say(self, text: str, reach: int = 1, to: Any = None) -> int:
         who = self._owner or self._actor

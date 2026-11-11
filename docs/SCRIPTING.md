@@ -80,6 +80,7 @@ Queries (ids or views both work as arguments):
 - `ctx.edges(x, relation=None, direction="both")` returns dicts `{id, source, target, relation, data}`
 - `ctx.linked(x, relation, direction="out")` returns views; `ctx.relations(x, relation=None)` the n-ary ones
 - `ctx.distance(a, b)` within one container's space, None when not comparable
+- `ctx.embodied(x)` True while a mind or a player holds that body (a rule that drives workers or guards leaves those alone)
 
 Mutations (each one is logged as an event):
 
@@ -89,6 +90,7 @@ Mutations (each one is logged as an event):
 - `ctx.link(a, b, relation, data=None)`, `ctx.unlink(a, b, relation)`
 - `ctx.relate(relation, [participants], data=None)`, `ctx.unrelate(id)`
 - `ctx.set_rule(entity, script, kinds=None)`, `ctx.clear_rule(entity, script)`
+- `ctx.remember(x, text)` a note in x's secret memory, as `remember` writes it: what they did or saw, for their mind
 
 Events and time:
 
