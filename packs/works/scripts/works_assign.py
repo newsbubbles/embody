@@ -14,8 +14,13 @@ def leads(ctx, me, who):
     # the named leader of who's side has standing over them
     if not who.state.faction:
         return False
-    for f in ctx.find(type="faction", name=who.state.faction, limit=1):
-        return f.state.leader in (me.id, me.name)
+    for f in ctx.find(type="faction", name=who.state.faction, limit=5):
+        if f.name != who.state.faction:
+            continue
+        ldr = f.state.leader
+        if isinstance(ldr, list):
+            return me.id in ldr or me.name in ldr
+        return ldr in (me.id, me.name)
     return False
 
 def check(ctx):

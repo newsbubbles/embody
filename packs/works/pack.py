@@ -22,7 +22,7 @@ binds nothing on its people. Every verb is done to the plan or to the works, by 
   it is and the first thing stopping it.
 - the crew, three ways: hired (`hire` someone whose state has `for_hire` {"wage": {"kind", "count"}, "roles",
   "line"}; paid from the works each pay day, two days unpaid and they walk off), assigned (`assign`: the `leader`
-  named on a faction's state puts that side's people with no mind to work; the owner does it by acting as the
+  named on a faction's state, a name or a list of names, puts that side's people with no mind to work; the owner does it by acting as the
   leader), volunteered (anyone takes an open role by working). A mind is never assigned or hired: it works by
   choosing to.
 - the labour routine is the project's tick, every ten world minutes: the crew nobody plays walks in from one step

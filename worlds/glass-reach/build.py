@@ -51,7 +51,7 @@ WORLD = {
     "name": "The Glass Reach",
     "seed": 23,
     "description": "A desert fief, a cracked cistern, a people with the water, a blade left behind. Rules on the table.",
-    "requires": ["d20", "village"],
+    "requires": ["d20", "village", "works"],
 }
 
 # ---- what there is ---------------------------------------------------------------------
@@ -345,6 +345,10 @@ def define(s):
                            "description_on": "A belt plate with a thumb-switch. A faint hum when it is on.",
                            "description_off": "A belt plate with a thumb-switch. Silent."},
                     actions={"toggle": {"script": "ward_toggle", "doc": "Switch it on or off"}})
+    s.define_schema("rubble", extends="thing", doc="Fallen stone. Dressing a block out of it takes half an hour and a chisel's noise.",
+                    state={"portable": False, "stone": 0},
+                    actions={"dress": {"script": "dress", "doc": "Square a block out of the pile (half an hour, loud); "
+                                                                 "the wall works take dressed stone", "duration": 1800}})
     s.define_schema("story", extends="entity", doc="The rails. Hidden; holds the facts the story has seen.",
                     state={"hidden": True, "seen_ridge": False, "seen_flats": False, "found_well": False, "truce": False,
                            "dram_done": False, "reeve_dead": False, "done": False})
@@ -1044,6 +1048,105 @@ def keep_lore(s, names):
         s.patch(names["Cass the Salter"], {"dialog": dialog})
     s.patch(story, {"west_rumours": True})
 
+# The wall works (packs/works, docs/WORKS.md; settled with Nate 2026-11-11). The broken stretch of the yard wall can be
+# raised in three courses; each one laid and set counts as a man on the wall at the moon (reach_moon, reach_chapter).
+# Stone is dressed out of the rubble at the foot of the Scar, lime comes from Ossa at her price, and a Guild mason
+# walks in at the next dawn looking for the work. Dreyer has every reason to stop it: lime and stone can be taken, the
+# mason goes unpaid, and a course still setting can be pulled down.
+LEADERS = {"House Varrick": ["Reeve Ansel Varrick", "Captain Ruhl"], "the Keth": ["Elder Taan"],
+           "House Dreyer": ["Halvard Dreyer"], "the Carriers": ["Ossa the Carrier"]}
+
+
+def course(n, word):
+    return {"name": word + " course", "labour": 12, "needs": {"Dressed stone": 4, "lime": 1}, "roles": {"mason": 1, "hand": 2},
+            "settles": 6,
+            "scene": f"The {word} course is laid along the broken stretch, stone on stone in a bed of wet lime. It wants six "
+                     f"hours to set before anyone leans on it.",
+            "undone": f"The {word} course comes down while the lime is still soft: blocks tipped into the yard, the bed scraped "
+                      f"out. It will all have to be laid again."}
+
+
+WALL_PLAN = {
+    "portable": False, "patrons": ["House Varrick"], "hours": [0, 12], "pay_every": 86400,
+    "description": "A line of chalk on the yard flags along the broken stretch of the wall, with tally marks for three "
+                   "courses beside it.",
+    "text": "Ruhl's chalk, in a soldier's square hand: three courses along the broken stretch, each four dressed stones "
+            "in lime, a mason to lay them and two hands to lift. Each course must set six hours. Every course that "
+            "stands is one man the riders count on the wall.",
+    "begun_scene": "The wall works begin: the chalk line is scraped clean, the old footing swept, a lime trough set "
+                   "down by the broken stretch.",
+    "stages": [course(1, "first"), course(2, "second"), course(3, "third")],
+    "becomes": {"type": "thing", "name": "The raised wall",
+                "state": {"portable": False, "wall_men": 3,
+                          "description": "The broken stretch of the yard wall, raised again in three courses of new stone, "
+                                         "pale against the old. The riders will count it."},
+                "scene": "The third course has set. The broken stretch of the yard wall stands whole again, three courses of "
+                         "pale new stone in the old grey, and the works come down."},
+}
+RUBBLE = {"portable": False, "stone": 24,
+          "description": "A spill of fallen Scar stone at the foot of the yard wall, under the ridge. Good stone, if someone "
+                         "puts a chisel to it."}
+LIME = {"portable": True, "kind": "lime", "bulk": 2,
+        "description": "A Guild sack of quicklime, stencilled and tied. It burns wet hands."}
+MASON_NAME = "Jory Flint"
+MASON = {"body": 3, "wits": 2, "will": 2, "skills": {"survival": 1}, "water": 10, "max_water": 10, "carry": 8,
+         "faction": None, "playable": False,
+         "description": "A broad man with lime-burnt hands and a mason's hammer through his belt, dust to the knees.",
+         "for_hire": {"wage": {"kind": "ember", "count": 1}, "roles": ["mason"],
+                      "line": "A shard a day, paid at dawn, and I lay you a course a day. Don't pay me and I walk."},
+         "default_line": "Jory looks along the broken stretch. 'Wall work. I'm for hire: a shard a day.'",
+         "dialog": {"wall|work|course|stone|build": "'Four dressed stones and a sack of lime a course. Two hands to lift, "
+                                                    "me to lay. Six hours to set, and nobody leans on it till then.'",
+                    "pay|shard|wage|hire": "'A shard of glass a day, out of the works, at dawn. Two dawns with nothing "
+                                           "and I'm on the next crawler.'",
+                    "guild|ossa|crawler|landing": "'Came up on the dawn crawler. Ossa said the Hold wanted wall work. "
+                                                  "She didn't say why.'",
+                    "dreyer|keth|ruhl|reeve": "'I lay stone. Whose wall it is, I don't ask.'"}}
+MASON_REMEMBERS = ["I came up on the dawn crawler from the Landing. Ossa the Carrier said the Hold at Scar Gate wanted "
+                   "wall work. I ask a shard of emberglass a day, paid at dawn, and I leave after two dawns unpaid."]
+
+
+def keep_works(s, names):
+    """The wall works: the chalked plan in the Gate Yard, the rubble under the wall, three sacks of lime in Ossa's
+    stock, the faction leaders who may put their people to work, and Jory Flint on the next dawn crawler. Each thing is
+    introduced once by name, always there and known to those who would know it; the mason once, by a mark on the
+    story, so a reboot does not send for him again."""
+    yard = names.get("The Gate Yard")
+    if yard is None:
+        return
+    for f in s.world.find(type="faction", limit=None):
+        want = LEADERS.get(f["name"])
+        if want and s.world.get(f["id"])["state"].get("leader") is None:
+            s.patch(f["id"], {"leader": want})
+    know = [n for n in ("Captain Ruhl", "Reeve Ansel Varrick", "Dram Hollis") if n in names]
+    if "The wall line" not in names:
+        s.introduce("blueprint", yard, "The wall line", how="always_there", state=dict(WALL_PLAN),
+                    known_by={n: "Ruhl chalked the broken stretch of the yard wall for raising: three courses of dressed "
+                                 "stone in lime. Every course that stands counts as a man on the wall at the moon. It "
+                                 "wants a mason and two hands, stone from the rubble, and Guild lime." for n in know})
+    if "Scar rubble" not in names:
+        s.introduce("rubble", yard, "Scar rubble", how="always_there", state=dict(RUBBLE),
+                    known_by={n: "The rubble under the yard wall is good Scar stone: a chisel squares a block out of it in "
+                                 "half an hour." for n in know})
+    ossa = names.get("Ossa the Carrier")
+    if ossa and not any(e["name"] == "Sack of lime" for e in s.world.find(name="Sack of lime", limit=None)):
+        for _ in range(3):
+            s.introduce("thing", ossa, "Sack of lime", how="always_there", state=dict(LIME), known_by={})
+        s.remember("Three sacks of Guild lime came up on the crawler for me to sell. The Hold will want them for the "
+                   "wall: a sack a course. The price is mine to name.", entity=ossa)
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    if s.world.get(story)["state"].get("mason_sent") or MASON_NAME in names:
+        return
+    t = s.world.t
+    after = 86400 - (t % 86400) or 86400
+    s.introduce("person", yard, MASON_NAME, how="arrived", after=after, state=dict(MASON),
+                scene="A broad man walks in off the Salt Road with a mason's hammer through his belt, dust to the knees, "
+                      "and stops to look along the broken stretch of the wall.",
+                known_by={ossa: "The Guild sends a mason up on the next dawn crawler, Jory Flint, for the Hold's wall "
+                                "work. He asks a shard a day."} if ossa else {},
+                remembers=list(MASON_REMEMBERS))
+    s.patch(story, {"mason_sent": True})
+
 
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
@@ -1087,6 +1190,7 @@ def keep_canon(s):
     keep_salt_works(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
     keep_wardens(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
     keep_lore(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
+    keep_works(s, {e["name"]: e["id"] for e in s.world.find(limit=None)})
     keep_carry(s)
     if st.get("garrison"):
         return

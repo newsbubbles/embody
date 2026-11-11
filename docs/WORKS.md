@@ -129,7 +129,7 @@ lets the Hold see riders from the Bone Field coming.
    the owner over anyone. A mind is never assigned: it chooses.
 3. **Wages**: settled: either, named by the blueprint, paid at dusk.
 
-## Order of work
+## Order of work (all three built 2026-11-11)
 
 1. `introduce(after=...)`, with tests.
 2. The works pack (`packs/works`): blueprint, project, stages, roles, the five verbs, the labour routine, settle

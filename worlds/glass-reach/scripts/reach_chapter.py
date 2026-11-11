@@ -75,6 +75,19 @@ def strain(ctx, story, why):
         scene(ctx, st.deepwell, "Taan hears what was done on the Flats and says nothing for a long time. 'Once,' she says.")
         ctx.emit("truce_strained", target=ctx.root(), reach=-1, why=why, strain=n)
 
+def courses(b):
+    # the wall works (packs/works): every course laid and set stands as a man; one still setting does not yet
+    bs = b.state
+    if bs.wall_men:
+        return int(bs.wall_men)
+    want = ((bs.becomes or {}).get("state") or {}).get("wall_men")
+    if b.type != "project" or not want:
+        return 0
+    n = len(bs.built_stages or [])
+    if bs.settling_until is not None:
+        n = n - 1
+    return max(0, n)
+
 def wall_and_water(ctx, st):
     # a bought man on the wall is worse than none: he counts against it. Keth bows stand on it with proof and the truce.
     men = 0
@@ -88,6 +101,8 @@ def wall_and_water(ctx, st):
                 else:
                     men = men + 1
     men = men - bought
+    for b in ctx.children(st.yard):
+        men = men + courses(b)
     if st.keth_proof and st.truce:
         men = men + KETH_BOWS
     water = 0

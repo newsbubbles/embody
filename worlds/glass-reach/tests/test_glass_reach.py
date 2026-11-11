@@ -750,7 +750,7 @@ def test_the_dry_camp_never_runs_dry_and_keeps_the_houses_salve():
     eng, gm = hosted()
     ash = newcomer(eng, gm, "dreyer", "Ash")
     gm.patch("Ash", {"water": 2})
-    for _ in range(3):
+    for _ in range(2):  # 2 + 4 + 4: full, and a full body drinks no more
         ash.act("drink", "The house's tank")
     assert gm.inspect("Ash")["state"]["water"] == 10 and gm.inspect("The house's tank")["state"].get("left") is None
     chest = gm.inspect("The house's medicine chest")
@@ -1021,3 +1021,50 @@ def test_west_of_the_scar_is_only_rumour_and_torn_pages():
     taan = gm.world.get(gm.inspect("Elder Taan")["id"])["state"]["memory"]
     assert len([n for n in taan if "old count" in n["text"]]) == 1
     assert "west|scar|seep|brine|gate" in gm.world.get(gm.inspect("Cass the Salter")["id"])["state"]["dialog"]
+
+
+def test_the_wall_works_raise_a_course_and_the_moon_counts_it():
+    eng, gm = hosted()
+    chapter_one_done(gm)
+    gm.patch(gm.inspect("Story")["id"], {"dreyer_came": True, "guild_came": True})
+    assert gm.inspect("The wall line")["parent"] == gm.inspect("The Gate Yard")["id"]
+    assert len([e for e in gm.find(name="Sack of lime") if e["name"] == "Sack of lime"]) == 3
+    assert not gm.find(name="Jory Flint")  # sent for: he comes on the dawn crawler
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot sends for nobody twice and makes nothing again
+    assert len([e for e in gm.find(name="Sack of lime") if e["name"] == "Sack of lime"]) == 3
+    assert len([x for x in gm.timers() if x["kind"] == "introduce"]) == 1
+    notes = [n["text"] for n in gm.world.get(gm.inspect("Ossa the Carrier")["id"])["state"]["memory"]]
+    assert len([n for n in notes if "sacks of Guild lime" in n]) == 1 and len([n for n in notes if "Jory Flint" in n]) == 1
+    to_next(gm, "dawn")
+    assert gm.inspect("Jory Flint")["parent"] == gm.inspect("The Gate Yard")["id"]
+    ruhl = eng.session("ruhl")
+    ruhl.join("glass-reach", "Captain Ruhl")
+    gm.move("Captain Ruhl", "The Gate Yard")
+    ruhl.act("build", "The wall line")
+    works = gm.find(type="project")[0]["id"]
+    for _ in range(4):
+        gm.spawn("thing", works, "Dressed stone", state={"kind": "dressed stone", "portable": True, "bulk": 2})
+    gm.move([e for e in gm.find(name="Sack of lime") if e["name"] == "Sack of lime"][0]["id"], works)
+    gm.spawn("thing", works, "Emberglass", state={"kind": "ember", "portable": True})
+    ruhl.act("hire", works, {"who": "Jory Flint", "role": "mason"})
+    hold = gm.inspect("Scar Gate, the Hold")["id"]
+    men = [e["id"] for e in gm.find(type="fighter", parent=hold) + gm.find(type="person", parent=hold)
+           if gm.world.get(e["id"])["state"].get("faction") == "House Varrick"
+           and not gm.world.embodied(e["id"]) and e["name"] not in ("Captain Ruhl", "Reeve Ansel Varrick")][:2]
+    for m in men:
+        ruhl.act("assign", works, {"who": m, "role": "hand"})
+    for _ in range(6 * 11):  # eleven world hours, in the ten-minute steps a running clock takes
+        gm.clock(step=600)
+    w = gm.inspect(works)["state"]
+    assert w["built_stages"] == ["first course"] and w.get("settling_until") is None, w.get("description")
+    assert not [e for e in gm.find(name="Dressed stone") if e["name"] == "Dressed stone"]  # laid
+    to_next(gm, "moon_turns")
+    st = gm.inspect("Story")["state"]
+    standing = 0
+    for pid in (hold, gm.inspect("The Gate Yard")["id"]):
+        for e in gm.world.children(pid):
+            s = e["state"]
+            if s.get("faction") == "House Varrick" and not s.get("dead") and not s.get("down"):
+                standing += -1 if s.get("turncoat") else 1
+    bows = 3 if st.get("keth_proof") and st.get("truce") else 0
+    assert st["reckoning"]["wall"] == standing + bows + 1  # the course stands as a man
