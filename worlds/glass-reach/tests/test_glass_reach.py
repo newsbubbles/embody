@@ -517,7 +517,7 @@ def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_
     m = gm.map(depth=2)
     rows = {e["name"]: e for e in m["entities"]}
     places = [e for e in m["entities"] if e["type"] == "place"]
-    assert len(places) == 13 and all(e["own"] for e in places)
+    assert len(places) == 17 and all(e["own"] for e in places)  # thirteen, and the Guild Yard, its two rooms and Hauler Nine
     assert rows["The Keth jars"]["own"] and rows["The Hold's ration cask"]["own"]  # spawned by the routines, placed after
     assert len(m["paths"]) >= 7 and all(p["drawn"] for p in m["paths"])
     ridge = gm.measure("Scar Gate, the Hold", "Red Ridge")
@@ -1116,3 +1116,39 @@ def test_a_letter_burned_at_the_hearth_is_gone_and_only_its_readers_know_it():
     load_world(gm, "glass-reach", upgrade=True)  # a reboot nails no second notice and builds no second hearth
     assert len([e for e in gm.find(name="The hearth") if e["name"] == "The hearth"]) == 1
     assert not [e for e in gm.find(name="Notice by the cistern") if e["name"] == "Notice by the cistern"]
+
+
+def test_the_guild_yard_keeps_its_counting_house_fills_its_tank_and_its_hauler_drives_the_road():
+    eng, gm = hosted()
+    yard = gm.inspect("The Guild Yard")["id"]
+    box = gm.inspect("The Guild strongbox")
+    shards = [c for c in gm.world.children(box["id"]) if c["name"] == "Emberglass"]
+    assert len(shards) == 60 and gm.inspect("Mira Ost")["parent"] == yard
+    kinds = lambda k: gm.world.store.count("event", "world_id=? AND kind=?", (gm.world.id, k))
+    # a Keth stranger walks into the counting house and the yard turns them back
+    me = newcomer(eng, gm, "keth", "Tam")
+    gm.move("Tam", yard)
+    me.act("go", "The Counting House")
+    assert gm.inspect("Tam")["parent"] == yard and kinds("turned_away") == 1
+    # one of the Guild walks in
+    gm.move("Garran Teague", "The Counting House")
+    # the dawn crawler fills the tank
+    tank = gm.inspect("The yard tank")["id"]
+    gm.patch(tank, {"left": 3})
+    to_next(gm, "crawler")
+    assert gm.inspect("The yard tank")["state"]["left"] == 30
+    # Tam climbs into Hauler Nine and drives it to the Salt Road, and steps out there
+    gm.move("Tam", "Hauler Nine")
+    me.act("drive", "Hauler Nine's wheel", params={"to": "the salt road"})
+    gm.clock(step=901)
+    hauler = gm.inspect("Hauler Nine")
+    assert hauler["state"]["at"] == gm.inspect("The Salt Road")["id"] and kinds("hauled") == 1
+    me.act("go", "The Salt Road")
+    assert gm.inspect("Tam")["parent"] == gm.inspect("The Salt Road")["id"]
+    with pytest.raises(Rejected, match="keeps to the road"):
+        gm.move("Tam", "Hauler Nine")
+        me.act("drive", "Hauler Nine's wheel", params={"to": "The Glass Flats"})
+    errs = gm.world.store.query("event", "world_id=? AND kind='script_error'", (gm.world.id,))
+    assert not errs, errs[:2]
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot builds no second yard
+    assert len([e for e in gm.find(name="Mira Ost") if e["name"] == "Mira Ost"]) == 1

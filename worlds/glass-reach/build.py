@@ -236,6 +236,8 @@ MOON_KINDS = ["convoy_word", "rook_arrives", "riders_fires", "herald_comes", "gi
               "keth_council", "convoy_closes", "pitch_sets"]
 # The Guild's road wardens on the Salt Road (scripts/reach_wardens.py).
 WARDEN_KINDS = ["arrived", "talked", "given", "dawn", "dusk"]
+# The Guild Yard beside the Landing (scripts/reach_guild.py): the counting house kept, the yard tank filled by the crawler.
+GUILD_KINDS = ["arrived", "crawler"]
 # What is hidden until someone looks (scripts/reach_finds.py) and what the road does to a newcomer (scripts/reach_road.py).
 FIND_KINDS = ["checked"]
 ROAD_KINDS = ["arrived", "squall", "squall_passes"]
@@ -329,6 +331,8 @@ def define(s):
                         "follow": {"script": "follow", "doc": "Go where they go, until you stay", "targets": "creature", "scope": "here"},
                         "stay": {"script": "stay", "doc": "Stop following"},
                         "watch": {"script": "watch", "doc": "Look into the next place without stepping in: who and what is there now", "targets": "place", "scope": "exits", "duration": 5},
+                        "drive": {"script": "guild_drive", "doc": "Drive a hauler you stand in to another stop on the road: params {\"to\": a stop's name}; the wheel says which stops",
+                                  "targets": "thing", "scope": "here", "duration": 900, "params": {"to": "the stop to drive to"}},
                         "burn": {"script": "burn", "doc": "Burn a paper you hold or that lies here, at a fire: it is gone for good, and only those who read it know what it said",
                                  "targets": "thing", "duration": 3},
                     },
@@ -450,6 +454,7 @@ def populate(s):
     s.set_rule(root, "reach_road", kinds=ROAD_KINDS)
     s.set_rule(root, "reach_moon", kinds=MOON_KINDS)
     s.set_rule(root, "reach_wardens", kinds=WARDEN_KINDS)
+    s.set_rule(root, "reach_guild", kinds=GUILD_KINDS)
     by_name = {"Reeve Ansel Varrick": ansel, "Sefa of the Keth": sefa, "Captain Ruhl": ruhl, "Dram Hollis": dram,
                "Ossa the Carrier": ossa, "Elder Taan": taan, "Nico": nico}
     seed_reach(s, by_name)
@@ -520,6 +525,7 @@ def upgrade(s):
     s.set_rule(root, "reach_road", kinds=ROAD_KINDS)
     s.set_rule(root, "reach_moon", kinds=MOON_KINDS)
     s.set_rule(root, "reach_wardens", kinds=WARDEN_KINDS)
+    s.set_rule(root, "reach_guild", kinds=GUILD_KINDS)
     s.patch(root, {"policy": POLICY, "briefing": BRIEFING, "templates": TEMPLATES})
     keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
     keep_canon(s)
@@ -562,6 +568,12 @@ PLACES = [
     {"entity": "The Low Well's head", "at": [3950, -250, -6], "radius": 1.2},
     {"entity": "Four cairns", "at": [3962, -244, -6], "size": [6, 1.5, 1]},
     {"entity": "Bows on the wall", "at": [12, -18, 0], "note": "on pegs at the foot of the wall stair"},
+    {"entity": "The Guild Yard", "at": [520, 3500, 0], "size": [120, 80], "note": "the Guild's walled yard east of the Landing"},
+    {"entity": "The Yard Bunkhouse", "at": [565, 3555, 0], "size": [24, 10], "note": "along the yard's north wall"},
+    {"entity": "The Counting House", "at": [565, 3445, 0], "size": [12, 10], "note": "brick, one door, on the yard's south side"},
+    {"entity": "Hauler Nine", "at": [480, 3530, 0], "size": [14, 5, 4], "note": "a Guild crawler; it moves along the road"},
+    {"entity": "The yard tank", "at": [520, 3500, 0], "radius": 2},
+    {"entity": "The Guild strongbox", "at": [565, 3445, 0], "size": [1.5, 1, 1]},
 ]
 ROUTES = [
     {"a": "Scar Gate, the Hold", "b": "The Gate Yard", "route": [[10, 0], [20, 0]]},
@@ -576,6 +588,10 @@ ROUTES = [
     {"a": "The Salt Road", "b": "The Old Salt Works", "route": [[60, 5600], [-300, 5600, -2]]},
     {"a": "The Glass Flats", "b": "The Low Well", "route": [[2800, 1000], [3600, 100], [3950, -250, -6]]},
     {"a": "Red Ridge", "b": "The Low Well", "route": [[4050, 100, 0], [3950, -250, -6]]},
+    {"a": "The Carriers' Landing", "b": "The Guild Yard", "route": [[450, 3500], [460, 3500]]},
+    {"a": "The Guild Yard", "b": "The Yard Bunkhouse", "route": [[540, 3530], [560, 3550]]},
+    {"a": "The Guild Yard", "b": "The Counting House", "route": [[540, 3470], [560, 3450]]},
+    {"a": "The Guild Yard", "b": "Hauler Nine", "route": [[500, 3515], [480, 3530]]},
 ]
 
 
@@ -588,6 +604,7 @@ def lay_out(s):
     ids = {e["name"]: e["id"] for e in s.world.find(limit=None)}
     places = [p for p in PLACES if p["entity"] in ids and not w.get(ids[p["entity"]])["state"].get("layout")]
     routes = [r for r in ROUTES if r["a"] in ids and r["b"] in ids
+              and any(ed["target"] == ids[r["b"]] for ed in w.edges(ids[r["a"]], "connects_to", "out"))  # a hauler on the road is not in its shed
               and not any(ed["target"] == ids[r["b"]] and ed["data"].get("route") for ed in w.edges(ids[r["a"]], "connects_to", "out"))]
     frame = None if w.get(root)["state"].get("frame") else FRAME
     if not (places or routes or frame):
@@ -1237,6 +1254,162 @@ def keep_burn(s, names):
         s.patch(well, {"fire": True})
 
 
+# The Guild Yard (Nate 2026-11-11): the Carriers' Guild's own ground beside the Landing, opened again by the letter that
+# brought the journeyman wright (a guest's seat, Binx at first) and his four. The Guild's ranks in the Reach: the Master
+# of the Reach leg, up the road north and never seen here; Ossa, the factor, who keeps the tally at the Landing; the
+# wright set over the yard; his four, whose minds a guest's agents run. Marr's wardens keep the road and answer to Ossa
+# for the shards they take. The yard has its own tank (the dawn crawler fills it), a bunkhouse, the counting house with
+# the strongbox that holds the Reach leg's glass until the convoy carries it north at the moon, and Hauler Nine, which
+# drives the road between its stops. The yard was there all along, shut since Dreyer's day; Ossa knew it.
+YARD_NAME = "The Guild Yard"
+YARD = ("A walled yard of baked brick behind the Landing, the Guild's own ground. Crawler sheds stand open along the west "
+        "wall, a tank on iron legs sweats in the middle, and the gate is stencilled with the Carriers' wheel. A long "
+        "bunkhouse runs along the north wall; on the south side a squat brick counting house has one door and no "
+        "windows. It stood shut through Dreyer's last years; the Guild has opened it again.")
+BUNK = ("A long low room of cots and sea chests that came up the road on crawlers. Skins hang on pegs, there is a rack "
+        "of Guild arms by the door, and a slate on the wall carries the yard's watch in chalk.")
+COUNTING = ("A brick box with walls an arm thick, one iron-banded door and a lamp on a chain. The Guild's strongbox sits "
+            "bolted to the floor. Whatever the Reach leg earns waits here until the convoy carries it north at the moon.")
+HAULER_NAME = "Hauler Nine"
+HAULER = ("The cab and bed of a Guild crawler: eight broad wheels of woven steel, a canvas hood over the bed, casks "
+          "lashed down, and a wheel at the front worn bright by hands. It smells of pitch and hot iron.")
+HAULER_STOPS = ["The Guild Yard", "The Salt Road", "The Gate Yard", "The Crawler's Lee", "The Old Salt Works"]
+WHEEL = {"portable": False, "wheel": True,
+         "description": "Hauler Nine's wheel, iron rimmed, the grips wrapped in old cord. Drive it to a stop on the road: "
+                        "the Guild Yard, the Salt Road post, the Gate Yard, the Crawler's Lee or the Old Salt Works. "
+                        "Never onto the glass: the Thresher hears a crawler a league off."}
+YARD_TANK = {"portable": False, "water_source": True, "left": 30, "max_left": 30, "guild": True,
+             "description": "A riveted Guild tank on iron legs, beaded with sweat. The dawn crawler fills it; the yard's "
+                            "own drink from it, and a stranger pays Ossa's price."}
+STRONGBOX = {"portable": False, "holds": ["any"], "room": 200, "guild": True,
+             "description": "An iron-strapped box of black oak bolted to the floor, the Carriers' wheel burned into the "
+                            "lid. Heavy enough that nobody carries it anywhere."}
+YARD_BOOK = {"portable": True, "burnable": True,
+             "description": "A Guild ledger with the yard's wheel on the cover, kept in the strongbox.",
+             "text": "THE GUILD YARD, REACH LEG. Opened again by letter of the Master of the Reach leg. The wright set over "
+                     "the yard answers to the factor's tally; the yard's four answer to the wright. Held for the convoy "
+                     "north at the moon: sixty shards of emberglass, counted twice. Hauler Nine in the shed, sound. The "
+                     "tank filled by the dawn crawler. Nothing leaves the counting house but by the factor's word or the "
+                     "wright's, written here."}
+SHARD = {"kind": "ember", "portable": True,
+         "description": "A shard the length of a hand, dull red, warm through the cloth you wrap it in."}
+ARMS_RACK = {"portable": False, "holds": ["weapon"], "room": 8,
+             "description": "A rack of Guild arms by the bunkhouse door: spears, and a crossbow on a hook."}
+CROSSBOW = {"weapon": True, "damage": 3, "bonus": 0, "portable": True,
+            "description": "A Guild crossbow with a steel prod and a cranequin, a case of bolts strapped to the stock."}
+GUILD_SPEAR = {"weapon": True, "damage": 2, "bonus": 1, "portable": True,
+               "description": "A Guild warden's spear, ash shaft gone grey, the head bound on with wire."}
+CREW_STATE = {"faction": "the Carriers", "yard": True, "body": 3, "wits": 3, "will": 3, "vigor": 8, "max_vigor": 8,
+              "water": 10, "max_water": 10, "carry": 8,
+              "secret": ["dialog", "gives", "gave", "word_left", "brief"]}
+CREW_WORK = {"yard|guild|wright|chief": "'The yard is the Guild's. Business with it goes through the wright, or through "
+                                         "Ossa at the tally.'",
+             "counting|strongbox|box|glass|shards": "'What's in the counting house is the Guild's, and it stays there.'",
+             "hauler|crawler|nine|ride": "'Hauler Nine goes where the wright says. Ask him.'"}
+# name, (weapon name, state), skills, look, line, brief
+CREW = [
+    ("Garran Teague", ("Driver's maul", {"weapon": True, "damage": 2, "bonus": 0, "portable": True,
+                                           "description": "An iron bar with a lead head, kept under the hauler's seat."}),
+     {"survival": 2, "lore": 2, "blade": 1},
+     "A grey, heavy-handed driver with salt in the creases of his neck and a wheel tattooed on one wrist.",
+     "Garran does not look up from the axle he is greasing. 'If it rolls, I drive it.'",
+     "You are Garran Teague, Hauler Nine's driver, twenty years on the Salt Road. You know every rut, every cairn and "
+     "which stretches the Thresher listens to; you never take a crawler onto the glass. You drove the same leg as "
+     "hauler fourteen, and its driver, Sel Amory, was your friend: riders off the south dunes took fourteen years back "
+     "and nobody ever said whose. You suspect Dreyer and would like to know. You are slow to talk and quick to notice."),
+    ("Mira Ost", ("Guild spear", GUILD_SPEAR),
+     {"blade": 3, "resolve": 2},
+     "A lean woman in a Guild coat with the sleeves cut off, a spear always within reach, eyes on the counting house door.",
+     "Mira Ost puts herself between you and the counting house door without seeming to move. 'Yes?'",
+     "You are Mira Ost, the yard's guard and keeper of the counting house door. You stood six years on Sergeant "
+     "Marr's road post and left it two years ago: you believe one of her wardens skims the road toll and you could "
+     "not prove it, and Marr took the ledger's word over yours. You respect Marr and do not trust her post. Nobody "
+     "goes into the counting house without the wright's word or Ossa's, and you would fight to keep it so."),
+    ("Dov Ashby", ("Pitch hook", {"weapon": True, "damage": 1, "bonus": 1, "portable": True,
+                                    "description": "A wright's iron hook for lifting hot pitch pots, sharp at the point."}),
+     {"lore": 1, "survival": 1, "blade": 1},
+     "A young wright's mate with pitch to the elbows, all elbows and questions, a burn scar on one hand.",
+     "Dov Ashby wipes his hands on his apron. 'You want something sealed?'",
+     "You are Dov Ashby, the wright's mate: pitch, seals, casks, the hauler's joints. You are young, eager and talk "
+     "too much. Ossa is your mother's sister; she got you this posting and you would rather nobody knew it, least of "
+     "all the wright. You have heard the cistern in the Hold was sealed with Guild pitch and want to see it for yourself."),
+    ("Pell Harrow", ("Outrider's bow", {"weapon": True, "damage": 2, "bonus": 1, "portable": True,
+                                          "description": "A short horn bow and a quiver of reed arrows, wrapped against sand."}),
+     {"stealth": 2, "survival": 2, "blade": 2},
+     "A thin outrider with a sand veil pulled down, a short bow across the back and dust to the knees.",
+     "Pell Harrow tilts the veil down an inch. 'Road's quiet. That's when it isn't.'",
+     "You are Pell Harrow, the yard's outrider: you walk the road ahead of Hauler Nine and watch the glass for the "
+     "Thresher's sign and for riders. You are superstitious about the Scar (the Guild does not carry west, and you "
+     "have never asked why out loud) and you listen to the dunes. You have heard Keth talk of riders in the south and "
+     "believe it. You want the yard to stand, and you want to be paid on time."),
+]
+OSSA_KNOWS_YARD = ("The Guild's yard behind the Landing, shut since Dreyer's last years, is open again by the Master's "
+                   "letter: the wright the letter sent is set over it, with four of the Guild's (Garran Teague the "
+                   "driver, Mira Ost on the counting house door, Dov Ashby my sister's boy, Pell Harrow the outrider), "
+                   "Hauler Nine in the shed, and the strongbox that holds the leg's glass for the convoy north at the "
+                   "moon. The wright answers to my tally.")
+CREW_KNOWS = ("The wright the Guild set over the yard this week is my chief; I answer to him, and he to Ossa's tally, "
+              "and she to the Master of the Reach leg up the road.")
+
+
+def keep_guild(s, names):
+    """The Guild Yard beside the Landing: the yard, its bunkhouse and counting house, the tank, the strongbox with the
+    Reach leg's sixty shards and the yard book, the arms rack, Hauler Nine with its wheel and casks, and the four of the
+    yard with their arms, skins and shards. Each made once, by name; what Ossa and the four know, once, by a mark on
+    the story."""
+    landing = names.get("The Carriers' Landing")
+    if landing is None:
+        return
+    root = s.summary()["root"]
+    if YARD_NAME not in names:
+        names[YARD_NAME] = s.spawn("place", root, YARD_NAME, state={"description": YARD, "open": True, "guild": True})["id"]
+        s.connect(landing, names[YARD_NAME])
+    yard = names[YARD_NAME]
+    for name, desc, extra in (("The Yard Bunkhouse", BUNK, {}), ("The Counting House", COUNTING, {"strongroom": True})):
+        if name not in names:
+            names[name] = s.spawn("place", root, name, state={"description": desc, "guild": True, **extra})["id"]
+            s.connect(yard, names[name])
+    if "The yard tank" not in names:
+        s.spawn("thing", yard, "The yard tank", state=dict(YARD_TANK))
+    if "The Guild strongbox" not in names:
+        box = s.spawn("thing", names["The Counting House"], "The Guild strongbox", state=dict(STRONGBOX))["id"]
+        s.spawn("letter", box, "The yard book", state=dict(YARD_BOOK))
+        for _ in range(60):
+            s.spawn("thing", box, "Emberglass", state=dict(SHARD))
+    if "The yard's arms rack" not in names:
+        rack = s.spawn("thing", names["The Yard Bunkhouse"], "The yard's arms rack", state=dict(ARMS_RACK))["id"]
+        s.spawn("thing", rack, "Guild crossbow", state=dict(CROSSBOW))
+        s.spawn("thing", rack, "Spare Guild spear", state=dict(GUILD_SPEAR))
+    if HAULER_NAME not in names:
+        hauler = s.spawn("place", root, HAULER_NAME, state={"description": HAULER, "hauler": True, "guild": True,
+                                                          "stops": list(HAULER_STOPS), "at": yard})["id"]
+        names[HAULER_NAME] = hauler
+        s.connect(yard, hauler)
+        s.spawn("thing", hauler, "Hauler Nine's wheel", state=dict(WHEEL))
+        for _ in range(2):
+            s.spawn("thing", hauler, "Guild cask", state={"portable": False, "water_source": True, "left": 6,
+                                                          "description": "A Guild cask lashed down in the hauler's bed."})
+    for name, (arm, arm_state), skills, look, line, brief in CREW:
+        if name in names:
+            continue
+        who = s.spawn("fighter", yard, name, state={**CREW_STATE, "skills": dict(skills), "description": look,
+                                                    "default_line": line, "dialog": dict(CREW_WORK), "brief": brief,
+                                                    "post": yard})["id"]
+        names[name] = who
+        s.spawn("thing", who, arm, state=dict(arm_state))
+        s.spawn("waterskin", who, "Guild waterskin", state={"capacity": 4, "left": 4})
+        for _ in range(3):
+            s.spawn("thing", who, "Emberglass", state=dict(SHARD))
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    if s.world.get(story)["state"].get("guild_yard"):
+        return
+    s.patch(story, {"guild_yard": yard})
+    if "Ossa the Carrier" in names:
+        s.remember(OSSA_KNOWS_YARD, entity=names["Ossa the Carrier"])
+    for name, *_ in CREW:
+        s.remember(CREW_KNOWS, entity=names[name])
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -1282,6 +1455,7 @@ def keep_canon(s):
     keep_works(s, names_of(s))
     keep_host(s, names_of(s))
     keep_burn(s, names_of(s))
+    keep_guild(s, names_of(s))
     keep_carry(s)
     if st.get("garrison"):
         return
