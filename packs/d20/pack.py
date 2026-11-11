@@ -41,6 +41,12 @@ The numbers, so a narrator can explain a roll:
   seat that has done nothing for the world's `idle_after` (a mind on a watcher, a player asleep) drinks the same
   way. `python packs/d20/soak.py <world> --days N` runs a world that long with nobody playing and says who
   went dry and which sources ran out.
+- Sweat: heavy work costs water on top of the beat. A blow in a fight (`attack`, or a fighter's own), `harvest`,
+  `dig`, `dress`, `break` (a lock forced) and a walk (`go`, `crawl`) to or from open ground under more than half
+  your `carry` each cost a point (`sweated`, reach 0, with `by` and `cost`). Talk, look, wait, `pick` and `drink`
+  are free; works labour pays in its own tick. A world sets `sweat` on its root to tune it: a table by key (a verb,
+  or `fight` and `heavy_walk`) laid over the default `{fight: 1, harvest: 1, dig: 1, dress: 1, break: 1,
+  heavy_walk: 1}`, or `false` for none.
 - Mending: rest heals. A body with water in it (more than 3) mends a point of `vigor` a beat (`mended`): the
   `mend` behavior, a beat of ten minutes in a turn-based story, the world's own with `set_pace` (the Reach: one point
   every six world hours). Above half vigor the wound closes (`wounded` off). A body a wound put down gets up on its
@@ -51,7 +57,8 @@ The numbers, so a narrator can explain a roll:
   dose heals its `heals` (default 3) at once, no roll, on anyone hurt, the down included; that is what a medic
   carries. Bare hands do nothing for someone already on their feet.
 - Sleep: `sleep` lies a body down (`asleep`, a `slept` event; a seat going away can do it with `away(sleep=true)`). Asleep it
-  mends two points a beat for the water of one, and hears only what is loud (an event that says `loud`, or that
+  mends two points a beat for the water of one, dries at half the pace (a half carried to the next beat in
+  `thirst_owed`), and hears only what is loud (an event that says `loud`, or that
   carries two levels up: a lock broken, the thresher) or done to it. It is easy prey: a blow on a sleeper rolls twice
   and keeps the better, against bare hands and no brace; `search` works on a sleeper as on someone down, by stealth
   (d20 + wits + stealth against 10 + their wits): done, the `lifted` event names the thief and the sleeper sleeps on;

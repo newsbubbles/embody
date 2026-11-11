@@ -1,3 +1,4 @@
+use("common")
 def on(ctx, event):
     # installed on the root: the dead do nothing, the down do little, a brace lasts until your next deed and so does sleep
     a = ctx.get(event.actor) if event.actor else None
@@ -16,3 +17,12 @@ def on(ctx, event):
             # a deed wakes the one who does it
             ctx.patch(a, {"asleep": False})
             ctx.emit("woke", target=a, reach=1, by=a.id, why="rose")
+        # heavy deeds cost water (the table in common); a fight's blows pay in strike, works labour in its own tick
+        if verb in ["go", "crawl"]:
+            here = a.parent
+            to = ctx.get(event.payload.get("target")) if event.payload.get("target") else None
+            carry = a.state.carry
+            if carry and ctx.load(a) > float(carry) / 2 and ((here and here.state.open) or (to and to.state.open)):
+                sweat(ctx, a, "heavy_walk")
+        elif verb not in ["fight", "heavy_walk"]:
+            sweat(ctx, a, verb)

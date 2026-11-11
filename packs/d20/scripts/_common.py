@@ -91,8 +91,37 @@ def settle(ctx, who, cause):
         ctx.patch(who, {"wounded": True})
         ctx.emit("wounded", target=who, reach=1, by=cause)
 
+# heavy work makes a body sweat: a point of water for a blow in a fight, a harvest, a dig, dressing stone, forcing a
+# lock, or a walk to or from open ground under more than half its carry. A world tunes it with `sweat` on its root: a
+# table of costs by key (a verb, or "fight" and "heavy_walk") over these, or false for none.
+SWEAT = {"fight": 1, "harvest": 1, "dig": 1, "dress": 1, "break": 1, "heavy_walk": 1}
+
+def sweat_cost(ctx, key):
+    table = ctx.root().state.sweat
+    if table is False:
+        return 0
+    if table and table.get(key) is not None:
+        return table.get(key)
+    return SWEAT.get(key, 0)
+
+def sweat(ctx, who, key):
+    n = sweat_cost(ctx, key)
+    st = who.state
+    if not n or st.dead or st.water is None:
+        return 0
+    water = max(0, int(st.water) - int(n))
+    changes = {"water": water}
+    if water <= 3 and not st.thirsty:
+        changes["thirsty"] = True
+    ctx.patch(who, changes)
+    ctx.emit("sweated", target=who, reach=0, by=key, cost=n, water=water)
+    if changes.get("thirsty"):
+        ctx.emit("thirsty", target=who, reach=0, water=water)
+    return n
+
 def strike(ctx, me, t, slow):
     # one blow: the opposed roll, the ward, the damage, the conditions. Used by attack and by fighters' ticks.
+    sweat(ctx, me, "fight")
     weapon = held(me, "weapon")
     wname = weapon.name if weapon else "bare hands"
     ward = held(t, "ward")

@@ -147,5 +147,7 @@ def test_thirst_wakes_a_sleeper(camp):
     ada.act("sleep")
     gm.patch("Ada", {"water": 4})
     gm.clock(step=60)
+    assert gm.inspect("Ada")["state"]["asleep"]  # asleep, a beat in the shade is half a point
+    gm.clock(step=60)
     assert not gm.inspect("Ada")["state"].get("asleep")
     assert kinds(eng, "woke")[-1]["payload"]["why"] == "thirst"
