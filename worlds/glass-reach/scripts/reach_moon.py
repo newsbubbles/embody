@@ -442,6 +442,13 @@ RUMOURS = {
     "Mother Sallow": "'Hollis talked, they say. Every word. If he did, the plan's no good.'",  # nobody knows
     "Jory Flint": "'They say the riders pay masons double to take a wall down. I only put them up.'",
 }
+SOURCE_KEY = "who|where|first|told|from|source"
+# where a rumour came from, for the ones somebody chases (the reeve hunted the wedge's teller, 2026-11-12)
+RUMOUR_SOURCE = {
+    "Hobb": "'Who said it? A man in a dust coat who drank at the gate two dusks back and went off south. Said it like "
+            "he'd been told to.'",  # a Dreyer mouth, stoking the truce
+    "Pip": "'Joss, up at the Salt Works. Joss says anything for a drink.'",
+}
 GUILD_KEY = "guild|factor|carriers|star|slow|landing"
 # chapter three, planted (notes/chapters-roadmap.md): the factor comes down after the moon and names who holds the gate,
 # the house the moon left there unless the other put ten shards or more in his hand (scripts/reach_speakers.py)
@@ -600,6 +607,8 @@ def talk(ctx, st):
             dialog[MOON_KEY] = MOON_TALK[group][tier].replace("{d}", say_days(d))
             if name in RUMOURS:
                 dialog[RUMOUR_KEY] = RUMOURS[name]
+            if name in RUMOUR_SOURCE:
+                dialog[SOURCE_KEY] = RUMOUR_SOURCE[name]
             if name in GUILD_TALK:
                 dialog[GUILD_KEY] = GUILD_TALK[name]
             ctx.patch(p, {"dialog": dialog})
