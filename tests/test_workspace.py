@@ -100,6 +100,11 @@ def test_scripts_are_files_that_use_each_other_and_packs_define_before_the_world
     assert [e["kind"] for e in you.act("shout")["events"] if e["kind"] == "shouted"] == ["shouted"]
     r = you.act("hum")
     assert next(e for e in r["events"] if e["kind"] == "hummed")["payload"]["how"] == "world"
+    # defined live, a script's use() lines expand as the loader expands them, and a bad script says why
+    gm.define_script("yell", 'use("common")\ndef apply(ctx):\n    ctx.emit("yelled", target=ctx.actor, how=LOUD)\n')
+    assert "LOUD = 'LOUD'" in gm.script_source("yell")["source"]
+    with pytest.raises(Rejected, match="syntax error"):
+        gm.define_script("broken", "def apply(ctx)\n    pass\n")
     # a missing include says what to do
     (world / "scripts" / "bad.py").write_text('use("nowhere")\ndef apply(ctx):\n    pass\n')
     gm2 = Engine(workspace=tmp_path).session("gm", capabilities=[AUTHOR])

@@ -811,6 +811,19 @@ class World:
             return []
         return [c for c in self.children(e["parent_id"], type) if c["id"] != id]
 
+    def knows_way(self, who: str | None, place: str) -> bool:
+        """Whether a body knows the way to a place: any place not `hidden`, and a hidden one whose `known_to` names
+        the body or its `faction` (a string, or a list of ids and factions), as the packs' go verbs read it."""
+        p = self.get(place)
+        if p is None or not p["state"].get("hidden"):
+            return True
+        kt = p["state"].get("known_to")
+        me = self.get(who) if who else None
+        if kt is None or me is None:
+            return False
+        names = {me["id"], me["state"].get("faction")} - {None}
+        return bool(names & set(kt)) if isinstance(kt, list) else kt in names
+
     def within(self, id: str, under: str) -> bool:
         """id is under (or is) the entity `under`."""
         return id == under or under in self.ancestors(id)
@@ -1671,7 +1684,8 @@ class World:
                 candidates.append(actor["parent_id"])
                 candidates.extend(c["id"] for c in self.children(actor["parent_id"]) if c["id"] != actor_id
                                   and not c["state"].get("hidden"))
-                candidates.extend(self.neighbors(actor["parent_id"], "connects_to"))
+                candidates.extend(n for n in self.neighbors(actor["parent_id"], "connects_to")
+                                  if self.knows_way(actor_id, n))  # a hidden way is shown to those who know it
             candidates.extend(c["id"] for c in self.children(actor_id))
             for cid in list(candidates):  # what is attached to a thing or a place in reach (a lock) is in reach too
                 ent = self.get(cid)

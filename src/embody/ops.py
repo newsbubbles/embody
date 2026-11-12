@@ -27,7 +27,7 @@ from .script import Script, ScriptError
 from .store import Store
 from . import access as acl
 from .world import ALWAYS_SECRET, LIMITS_HEAD, Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event, own_verbs
-from .workspace import Workspace, restore_world, save_world
+from .workspace import USE_LINE, Workspace, read_scripts, resolve_uses, restore_world, save_world
 
 AUTHOR = "author"
 NARRATOR = "narrator"
@@ -987,7 +987,7 @@ class Session:
             "here": self._place_card(here) if here else None,
             "present": [self._card(c) for c in w.children(here_id) if c["id"] != me and not c["state"].get("hidden")]
             if here_id else [],
-            "exits": self._exits(here_id) if here_id else [],
+            "exits": self._exits(here_id, me) if here_id else [],
             "relations": self._relations(me),
             "knows": self._knows(me),
             "known_places": [{"id": pid, "name": w.get(pid)["name"]} for pid in w.known_places(me) if w.get(pid)],
@@ -1404,12 +1404,13 @@ class Session:
             card["space"] = sp
         return card
 
-    def _exits(self, here_id: str) -> list[dict[str, Any]]:
+    def _exits(self, here_id: str, me: str | None = None) -> list[dict[str, Any]]:
+        """The ways out of a place as `me` sees them: a hidden place's way only when its known_to names them."""
         w = self.world
         out = []
         for e in w.edges(here_id, "connects_to", "out"):
             to = w.get(e["target"])
-            if to is None:
+            if to is None or not w.knows_way(me, e["target"]):
                 continue
             x: dict[str, Any] = {"to": e["target"], "name": to["name"], **{k: v for k, v in e["data"].items()}}
             via = e["data"].get("via")
@@ -2233,9 +2234,25 @@ class Session:
         self._record("define_schema", id=id, **kw)
         return {"ok": True, "schema": id, "version": row["version"]}
 
+    def _expand_uses(self, sid: str, source: str) -> str:
+        """use("x") lines, expanded as the loader expands them: x from the world's stored scripts, else from a pack's
+        include files (scripts/_x.py), so a script file defines live the way it builds."""
+        if not any(USE_LINE.match(line) for line in source.splitlines()):
+            return source
+        known = {s["id"]: s["source"] for s in self.world.scripts()}
+        ws = self.engine.workspace
+        if ws is not None:
+            for name in ws.list_packs():
+                for k, v in read_scripts(ws.pack_dir(name)).items():
+                    known.setdefault(k, v)
+        return resolve_uses(sid, {sid: source}, known)
+
     def define_script(self, id: str, source: str, doc: str = "") -> dict[str, Any]:
         self._need(AUTHOR)
-        row = self.world.define_script(id, source, doc)
+        try:
+            row = self.world.define_script(id, self._expand_uses(id, source), doc)
+        except ScriptError as e:
+            raise Rejected(f"script {id!r}: {e.reason}", hint=e.hint or "fix the script source") from None
         r = {"ok": True, "script": id, "version": row["version"]}
         if self._recording():
             p = self.engine.workspace.write_script(self.world_id, id, source)

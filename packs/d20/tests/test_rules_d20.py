@@ -211,7 +211,7 @@ def test_the_ring_holds_during_a_duel():
     assert "ring holds" in str(ex.value)
     with pytest.raises(Rejected):
         you.act("attack", "Bystander")
-    strong(gm, "Reeve Ansel Varrick")
+    strong(gm, "Reeve Ansel Varrick", body=40)  # a defence roll may reach 27: d20 + 40 beats it whatever the seed
     gm.patch("Captain Ruhl", {"vigor": 1})
     r = you.act("attack", "Captain Ruhl")
     assert "downed" in kinds(r) and "duel_over" in kinds(r)
