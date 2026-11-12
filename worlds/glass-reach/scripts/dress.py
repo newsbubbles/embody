@@ -1,10 +1,3 @@
-def load(who):
-    # the same count take uses: a skin or anything with a capacity is 2, the rest 1 unless it says
-    n = 0
-    for c in who.children():
-        n = n + int(c.state.bulk or (2 if c.state.capacity else 1))
-    return n
-
 def check(ctx):
     if ctx.target.parent.id != ctx.actor.parent.id:
         return "it is not here"
@@ -12,7 +5,9 @@ def check(ctx):
         return "nothing left in the pile worth the chisel"
     if ctx.actor.state.down:
         return "you are down"
-    if ctx.actor.state.carry and load(ctx.actor) + 2 > int(ctx.actor.state.carry):
+    # the engine's own count, as take and give use it: stacks by the piece, paper at nothing (a wright went to 9 of
+    # 8 on a count of his own that missed his three shards, 2026-11-12)
+    if ctx.actor.state.carry and ctx.load(ctx.actor) + 2 > float(ctx.actor.state.carry):
         return "your hands are full: a dressed stone is a two-hand load; drop or put something first"
     return True
 

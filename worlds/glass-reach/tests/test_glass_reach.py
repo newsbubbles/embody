@@ -1065,6 +1065,18 @@ def test_a_blank_leaf_takes_writing_and_a_signature_and_the_bone_field_shows_the
     load_world(gm, "glass-reach", upgrade=True)  # a reboot lays no second set
     assert len(gm.find(name="A blank leaf", limit=100)) == 10 and len(gm.find(name="The burned house crawler")) == 1
 
+
+def test_dressing_stone_counts_a_stack_of_glass_by_the_piece():
+    eng, gm = hosted()
+    me = newcomer(eng, gm, "guard", "Bram")
+    gm.move("Bram", gm.inspect("The Gate Yard")["id"])
+    bram = gm.inspect("Bram")["id"]
+    for c in gm.inspect(bram)["contents"]:
+        gm.move(c["id"], gm.inspect("The Gate Yard")["id"])
+    gm.spawn("thing", bram, "Emberglass", state={"kind": "ember", "portable": True, "count": 7})
+    with pytest.raises(Rejected):
+        me.act("dress", "Scar rubble")
+
 def test_west_of_the_scar_is_only_rumour_and_torn_pages():
     eng, gm = hosted()
     hold = gm.inspect("Scar Gate, the Hold")["id"]
