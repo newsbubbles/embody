@@ -1,0 +1,66 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Truth, knowledge and belief</title>
+<style>
+  .col { top: 228px; width: 468px; height: 400px; display: flex; flex-direction: column; }
+  .col h3 { font-size: 25px; }
+  .col p { font-size: 17px; line-height: 1.36; }
+  .chips { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips code { font-size: 14px; }
+  .eg { margin-top: auto; border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; background: rgba(5,6,7,.55); }
+  .eg .label { font-size: 12px; }
+  .eg p { font-size: 17px; margin-top: 4px; }
+  .harness { left: 64px; top: 724px; width: 1472px; height: 104px; padding: 16px 24px; display: flex; gap: 30px; align-items: center; }
+  .harness h3 { font-size: 23px; margin-top: 4px; }
+  .harness p { font-size: 17px; margin-top: 0; }
+</style></head>
+<body><div class="stage">
+  <div class="abs" style="left:64px; top:50px;">
+    <div class="kicker">embody · how it works · 7</div>
+    <h1>Truth, knowledge and <em>belief.</em></h1>
+    <p class="lede" style="max-width: 1400px">The world holds the true map. Each body knows only what it witnessed, and believes what it was told, which may be wrong. Three different things, and the engine keeps them apart.</p>
+  </div>
+
+  <div class="node col ember" style="left:64px;">
+    <div class="label ember">1 · Truth · the world state</div>
+    <h3>The whole map, held by the engine</h3>
+    <p>Every entity, every place at its metres, routes and bearings, hidden places, secret state, the rules and the seeded dice. No body sees it whole, and every act goes through its rules.</p>
+    <div class="chips"><code>hidden: true</code><code>known_to: [...]</code><code class="ember">memory: secret</code><code>seed</code></div>
+    <div class="eg"><div class="label">the east well</div><p><code class="ember">poisoned: true</code> &nbsp;whatever anyone says</p></div>
+  </div>
+
+  <div class="node col water" style="left:566px;">
+    <div class="label water">2 · Knowledge · what one body witnessed</div>
+    <h3>Only what reached this body</h3>
+    <p>perceive is egocentric: this room, the ways out this body knows, distance and bearing with <code>layout=true</code>. Events reach the bodies in range, so everyone in the yard remembers who did what.</p>
+    <p class="small">Self memory: its notes and goals. Relational memory: each side of a meeting keeps its own edge and standing.</p>
+    <div class="eg"><div class="label water">Ren drank at the east well</div><p>and fell sick. Ren <em class="prose">knows</em> it is poisoned.</p></div>
+  </div>
+
+  <div class="node col" style="left:1068px;">
+    <div class="label">3 · Belief · told, read or reasoned</div>
+    <h3>What it was told, true or not</h3>
+    <p>Hearsay passed on by minds, a rumour kept in a body's state, a letter, notice or map that can be wrong or forged, a witness who speaks only when shown proof.</p>
+    <div class="chips"><code>say</code><code>read</code><code>rumour: "..."</code></div>
+    <p class="small">A belief is data a body holds. The engine stores it and never corrects it.</p>
+    <div class="eg"><div class="label">Ada read a letter</div><p class="prose">"The east well is sweet."</p><p>Ada <em class="prose">believes</em> it, and may drink.</p></div>
+  </div>
+
+  <svg class="wires">
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#a89f90"/></marker>
+      <marker id="e" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d2452d"/></marker>
+    </defs>
+    <path class="wire" d="M533,330 L563,330" marker-end="url(#a)"/>
+    <path class="wire" d="M1035,330 L1065,330" marker-end="url(#a)"/>
+    <!-- belief meets the truth -->
+    <path class="wire ember dash" d="M1302,630 L1302,700 L298,700 L298,636" marker-end="url(#e)"/>
+    <text class="wire-label ember" x="800" y="690" text-anchor="middle">belief changes only when a body meets the truth: drinks, looks, compares. The engine never tells it.</text>
+  </svg>
+
+  <div class="node quiet harness">
+    <div style="flex: 0 0 500px;"><div class="label">4 · Outside the world · the harness</div><h3>Your agent's memory is not your character's</h3></div>
+    <p>Chat history and notes in Claude Code or Codex belong to the player. The body knows only what the world gave it, and a player who knows more still has to find it in the world: a hidden way refuses a body it is not known to.</p>
+  </div>
+
+  <div class="foot"><span><span class="brand"><i>embody</i></span> &nbsp; one truth in the state; every body's view of it is rebuilt from where it stood</span><span><b>src/embody/</b>ops.py: perceive · recall · world.py: knows_way · _sealed</span></div>
+</div></body></html>
