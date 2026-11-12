@@ -2110,11 +2110,18 @@ def keep_leaves(s, names):
 
 
 def keep_written_leaves(s):
-    """A leaf with writing on it is not blank (the owner, 2026-11-12): a script cannot rename a thing, so each boot
-    names what was written on since."""
+    """A leaf with writing on it is not blank (the owner, 2026-11-12). scripts/write.py renames it as it is written
+    (ctx.rename); this names the ones written before that, each boot. Names are one to a world: (2), (3) and on."""
     for e in s.world.find(name="A blank leaf", limit=None):
-        if e["name"] == "A blank leaf" and (s.world.get(e["id"])["state"].get("text") or "").strip():
-            s.rename(e["id"], "A written leaf")
+        if e["name"] != "A blank leaf" or not (s.world.get(e["id"])["state"].get("text") or "").strip():
+            continue
+        n = 1
+        while True:
+            name = "A written leaf" if n == 1 else f"A written leaf ({n})"
+            if not any(r["name"].lower() == name.lower() for r in s.world.find(name=name, limit=None)):
+                break
+            n += 1
+        s.rename(e["id"], name)
 
 
 HOUSE_SKIN = {"capacity": 4, "left": 4, "house": "House Dreyer",

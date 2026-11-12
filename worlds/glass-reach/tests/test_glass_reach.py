@@ -1105,11 +1105,18 @@ def test_a_blank_leaf_takes_writing_and_a_signature_and_the_bone_field_shows_the
     me.act("write", leaf, {"text": "Bram"})
     st = gm.inspect(leaf)["state"]
     assert st["text"].endswith("north at the moon.\nBram") and st["hands"] == [gm.inspect("Bram")["id"]]
+    assert gm.inspect(leaf)["name"] == "A written leaf"  # written on, it is not blank any more
+    second = [c["id"] for c in gm.inspect(hold)["contents"] if c["name"] == "A blank leaf"][0]
+    me.act("take", second)
+    me.act("write", second, {"text": "A second page."})
+    assert gm.inspect(second)["name"] == "A written leaf (2)"  # names are one to a world
     r = me.act("read", leaf)
     assert any("Manifest" in str(e["payload"]) for e in r["events"])
+    third = [c["id"] for c in gm.inspect(hold)["contents"] if c["name"] == "A blank leaf"][0]
+    gm.patch(third, {"text": "Written before leaves were renamed."})
     load_world(gm, "glass-reach", upgrade=True)  # a reboot lays no second set
-    assert len(gm.find(name="A blank leaf", limit=100)) == 9 and len(gm.find(name="The burned house crawler")) == 1
-    assert gm.inspect(leaf)["name"] == "A written leaf"  # the reboot names what was written on
+    assert len(gm.find(name="A blank leaf", limit=100)) == 7 and len(gm.find(name="The burned house crawler")) == 1
+    assert gm.inspect(third)["name"] == "A written leaf (3)"  # the reboot names what was written on before
 
 
 def test_dressing_stone_counts_a_stack_of_glass_by_the_piece():

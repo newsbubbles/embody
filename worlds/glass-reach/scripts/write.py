@@ -3,6 +3,18 @@
 # up to what fits; a signature is your name written on it. Nobody reading it sees whose hand wrote it unless the
 # writer signed it: the hands are kept on the paper's state, for whoever later learns to compare them.
 ROOM = 1200  # letters a leaf holds
+WRITTEN = "A written leaf"  # what a blank leaf is called once written on; names are one to a world, so (2), (3)...
+
+def free_name(ctx, base):
+    for n in range(1, 200):
+        name = base if n == 1 else base + " (" + str(n) + ")"
+        taken = False
+        for e in ctx.find(name=name, limit=20):
+            if (e.name or "").lower() == name.lower():
+                taken = True
+        if not taken:
+            return name
+    return None
 
 def words_of(ctx):
     return str((ctx.params or {}).get("text") or "").strip()
@@ -27,6 +39,10 @@ def apply(ctx):
     if ctx.actor.id not in hands:
         hands.append(ctx.actor.id)
     ctx.patch(it, {"text": words if not text else text + "\n" + words, "hands": hands, "blank": False})
+    if it.name == "A blank leaf":
+        name = free_name(ctx, WRITTEN)
+        if name:
+            ctx.rename(it, name)
     ctx.emit("wrote", target=it, reach=0, by=ctx.actor.id, text=words)
     if ctx.actor.parent is not None:
         ctx.emit("scene", target=ctx.actor.parent, reach=1, text=ctx.actor.name + " writes on " + it.name.lower() + ".")
