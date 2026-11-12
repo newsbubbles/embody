@@ -706,6 +706,26 @@ def test_the_moon_turns_on_a_held_wall_or_a_broken_truce():
     assert st["reckoning"]["wall"] >= 9
 
 
+def test_a_dreyer_dig_is_a_keth_grudge_against_the_house_not_a_strike_on_the_holds_terms_and_a_mend_restores():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    root = gm.summary()["root"]
+    spy = newcomer(eng, gm, "dreyer", "Vey")
+    gm.move("Vey", "The Glass Flats")
+    for _ in range(2):
+        spy.act("harvest", "Red vein")
+        gm.clock(step=120)
+    st = gm.inspect("Story")["state"]
+    assert st["truce"] and not st.get("strain") and st["keth_grudges"]["House Dreyer"] == 2
+    assert any("Dreyer's" in x for x in scenes(gm.history(kinds=["scene"], limit=20, newest=True)))
+    gm.patch(gm.inspect("Story")["id"], {"truce": False, "strain": 2, "truce_broken": "glass dug on the Flats"})
+    gm.schedule(1, "truce_mended", entity=root)
+    gm.clock(step=2)
+    st = gm.inspect("Story")["state"]
+    assert st["truce"] and st["strain"] == 0 and not st.get("truce_broken")
+    assert gm.world.hyperedges(gm.inspect("the Keth")["id"], "truce")
+
+
 def test_with_the_truce_whole_the_wall_manned_and_water_in_the_jars_the_riders_turn_back():
     eng, gm = hosted()
     chapter_one_done(gm)

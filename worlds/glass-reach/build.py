@@ -230,7 +230,7 @@ HOSTED = {"rate": 4, "claim_lapse": 3600,
 
 ROUTINE_KINDS = ["keth_run", "crawler"]
 # Chapter two (scripts/reach_chapter.py): the dawn that starts it, what strains the truce, the moon.
-CHAPTER_KINDS = ["dawn", "harvested", "downed", "killed", "given", "moon_turns", "chapter_two_begins"]
+CHAPTER_KINDS = ["dawn", "harvested", "downed", "killed", "given", "moon_turns", "chapter_two_begins", "truce_mended"]
 # Chapter two's middle (scripts/reach_moon.py): the beats on the calendar and the four contests the moon counts.
 MOON_KINDS = ["convoy_word", "rook_arrives", "riders_fires", "herald_comes", "given", "talked", "checked", "dawn", "moon_word",
               "keth_council", "convoy_closes", "pitch_sets"]

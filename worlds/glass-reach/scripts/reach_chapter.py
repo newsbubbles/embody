@@ -63,6 +63,41 @@ def break_truce(ctx, story, why):
                             "water goes up the road at dusk.'")
     ctx.emit("truce_broken", target=ctx.root(), reach=-1, why=why)
 
+DUG_BY = {"House Dreyer": "Sand wraps and a long glass, the Keth watchers say. Dreyer's. 'The house that poisoned the "
+                          "Low Well digs our glass now,' Taan says. 'The Hold's terms stand. Dreyer has none.'",
+          "the Carriers": "A Guild coat on the Flats with a spade, the Keth watchers say. Taan says nothing for a while. "
+                          "'The Guild takes its cut of everything. Now it takes the ground.'"}
+
+def outsider_dig(ctx, story, digger):
+    side = str(digger.state.faction or "a stranger")
+    grudges = dict(story.state.keth_grudges or {})
+    grudges[side] = int(grudges.get(side) or 0) + 1
+    ctx.patch(story, {"keth_grudges": grudges})
+    scene(ctx, story.state.deepwell, DUG_BY.get(side, "Someone dug the Flats, the Keth watchers say, and not in a Hold "
+                                                     "coat. 'Not the Hold's doing,' Taan says. 'Find out whose.'"))
+    ctx.emit("keth_grudge", target=ctx.root(), reach=-1, side=side, n=grudges[side])
+
+def mend_truce(ctx, story):
+    # the host's mend (2026-11-12): the truce broke on two digs by Dreyer men under the old rule, which blamed the Hold
+    st = story.state
+    if st.truce:
+        return
+    keth = ctx.get(st.keth)
+    side = ctx.find(type="faction", name="House Varrick", limit=1)
+    if keth is not None and side:
+        ctx.relate("truce", [keth.id, side[0].id], {"terms": "water at dusk, the Flats quiet", "since": ctx.t, "public": True})
+    ctx.patch(story, {"truce": True, "strain": 0, "truce_broken": None, "truce_broken_t": None})
+    taan = ctx.get(st.taan)
+    if taan is not None:
+        ctx.patch(taan, {"dialog": {"water|well|truce": "We have terms. Keth water goes up the road at dusk and the Flats stay "
+                                                        "quiet. Keep it so."}})
+    scene(ctx, st.deepwell, "Sefa comes down the broken step and speaks to Taan a long time: the digger on the Flats wore "
+                            "sand wraps and carried a long glass, no Hold coat. Taan hangs the Hold's cup back on its cord. "
+                            "'The Hold did not break the terms. Dreyer wants us to think it did. The water goes up at dusk.'")
+    scene(ctx, st.hold, "A Keth runner comes to the gate in the dark and says it once: the terms stand. It was Dreyer on the "
+                        "Flats, not the Hold. The water comes.")
+    ctx.emit("truce_restored", target=ctx.root(), reach=-1)
+
 def strain(ctx, story, why):
     st = story.state
     if not st.truce:
@@ -238,9 +273,17 @@ def on(ctx, event):
     if k == "moon_turns":
         reckon(ctx, story)
     elif k == "harvested":
+        # the terms are the Hold's: a Hold man digging strains them (a bought man in a Varrick coat too, which is the
+        # house's way to break them). Anyone else digging is a grievance the Keth hold against his own side.
         digger = ctx.get(p.get("by"))
-        if digger is not None and digger.state.faction != "the Keth":
+        if digger is None or digger.state.faction == "the Keth":
+            return
+        if digger.state.faction == "House Varrick":
             strain(ctx, story, "glass dug on the Flats")
+        else:
+            outsider_dig(ctx, story, digger)
+    elif k == "truce_mended":
+        mend_truce(ctx, story)
     elif k in ["downed", "killed"]:
         hurt = ctx.get(event.target)
         if event.target == st.worm and k == "killed" and not st.thresher_dead:
