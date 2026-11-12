@@ -197,3 +197,17 @@ and the file waited for Corin to talk to Ruhl first. Nothing turned to him by na
 **Taught:** a hook is not an offer. When a player goes idle, a mind who holds a hook for them should put it to them
 directly, by name, with where to go and what it changes. The night check should look for idle players as well as
 idle minds.
+
+## 2026-11-12: A mind said it wrote a line, and the paper stayed blank
+
+**Seen:** Aaron's player handed Hollis a blank leaf to get a sample of his hand for the Keeper's glass. Hollis's
+mind said "I write, in my usual hand... There" and gave the leaf back, but it never used the `write` verb. Aaron
+held a blank leaf, and the comparison he had worked toward all day would have read "no hand".
+
+**Why:** a mind can narrate a deed in speech, and nothing in the world checks a `say` against the state. For talk
+that is fine, but for an act a player will test later, the words and the world come apart.
+
+**Taught:** the claims audit should check deeds too, not only facts: "I wrote", "I gave", "I locked" against the
+log. When a mind says it did something a verb exists for, the host either makes the world match (this time the
+leaf was patched to hold Hollis's line in his hand) or corrects the mind. The engine could also flag a `say` that
+narrates an act from the speaker's verb list with no matching act in the same turn.
