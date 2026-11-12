@@ -62,7 +62,9 @@ def on(ctx, event):
             ctx.spawn("thing", man, "Varrick bow", state=dict(BOW))
         else:
             ctx.spawn("thing", man, "The Hold's boar spear", state=dict(SPEAR))
-        ctx.patch(man, {"file_of": leader.id})
+        # a file of men nobody plays goes where its leader goes (village go moves whoever follows the walker), and
+        # off the Hold's post, or the walk back from water would take them home from wherever he led them
+        ctx.patch(man, {"file_of": leader.id, "follows": leader.id, "post": None})
         others = []
         for pair in FILE:
             if pair[0] != name:

@@ -1445,6 +1445,12 @@ def test_corin_talks_to_ruhl_and_gets_a_file_of_two_bows_and_a_spear_once():
     arms = {gm.world.get(m)["name"]: [c["name"] for c in gm.world.children(m) if c["state"].get("weapon")] for m in file}
     assert arms == {"Brannoc Hale": ["Varrick bow"], "Lute Callow": ["Varrick bow"], "Osk Barran": ["The Hold's boar spear"]}
     assert all(gm.world.get(m)["state"]["file_of"] == cid for m in file)
+    # nobody plays the three: they go where Corin goes
+    assert all(gm.world.get(m)["state"]["follows"] == cid and not gm.world.get(m)["state"].get("post") for m in file)
+    corin.act("go", "Scar Gate, the Hold")
+    hold = gm.inspect("Scar Gate, the Hold")["id"]
+    assert all(gm.world.get(m)["parent_id"] == hold for m in file)
+    corin.act("go", "The Gate Yard")
     rack = gm.inspect("Rack of practice blades")["id"]
     assert sum(1 for c in gm.world.children(rack) if c["name"] == "Varrick blade") == 3
     assert "two empty pegs" in gm.inspect("Bows on the wall")["state"]["description"]
