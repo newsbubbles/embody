@@ -482,7 +482,8 @@ def populate(s):
     nico = s.spawn("person", ridge, "Nico", state=NICO)["id"]
     s.spawn("thing", nico, "Long glass", state={"portable": True, "description": "A brass spyglass, Carrier make, the lens scratched."})
     taan = s.spawn("person", deepwell, "Elder Taan", state=TAAN)["id"]
-    s.spawn("thing", deepwell, "Stone cups on cords", state={"portable": False, "description": "Cups worn smooth, one for each Keth who has ever drunk here."})
+    s.spawn("thing", deepwell, "Stone cups on cords", state={"portable": False, "water_source": True,  # dipped in the pool: never dry
+        "description": "Cups worn smooth, one for each Keth who has ever drunk here. Dipped in the black pool, they come up full."})
     worm = s.spawn("thresher", deep, "The Thresher", state={"home": deep})["id"]
 
     # the rails and the clock
