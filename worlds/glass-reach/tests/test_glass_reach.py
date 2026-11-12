@@ -1720,6 +1720,40 @@ def test_a_keeper_gives_its_key_only_to_whom_it_is_for_and_passes_word_once_and_
     assert mem.count("I read A kept book. Words that stay.") == 1
 
 
+def test_each_faction_keeps_a_store_at_home_that_opens_to_a_word_its_people_remember():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("reach_build", REPO / "worlds" / "glass-reach" / "build.py")
+    B = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(B)
+    eng, gm = hosted()
+    for faction, home, store, _, lock, _, head, words, _ in B.FACTION_STORES:
+        assert where(gm, store) == home
+        code = gm.world.get(gm.inspect(lock)["id"])["state"]["code"]
+        assert code in words and gm.inspect(lock)["state"]["locked"]
+        members = [e for e in gm.world.find(limit=None) if gm.world.get(e["id"])["state"].get("faction") == faction
+                   and e["type"] != "faction"]
+        assert members and all(any(code in n["text"] for n in gm.world.get(m["id"])["state"].get("memory") or [])
+                               for m in members)
+        if head:
+            assert where(gm, head[1]) == head[0]
+    # a Keth come lately asks Taan for the count; a wrong one opens nothing, the right one opens the cist
+    me = newcomer(eng, gm, "keth", "Tam")
+    assert "Taan" in gm.world.get(gm.inspect("Tam")["id"])["state"]["brief"]
+    gm.move("Tam", "The Deepwell")
+    gm.spawn("thing", "Tam", "A blue shard", state={"portable": True})
+    with pytest.raises(Rejected):
+        me.act("put", "The Keth cist", params={"item": "A blue shard"})
+    with pytest.raises(Rejected):
+        me.act("unlock", "The cist's knot-cord", params={"code": "9-9-9"})
+    code = gm.world.get(gm.inspect("The cist's knot-cord")["id"])["state"]["code"]
+    me.act("unlock", "The cist's knot-cord", params={"code": code})
+    me.act("put", "The Keth cist", params={"item": "A blue shard"})
+    assert where(gm, "A blue shard") == "The Keth cist"
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot makes no second store, lock or key
+    for name in ("The Keth cist", "The strongchest's lock", "The store chest key"):
+        assert len([e for e in gm.find(name=name) if e["name"] == name]) == 1
+
+
 def test_a_candle_lights_from_a_tinderbox_or_a_fire_snuffs_and_burns_down():
     eng, gm, you = reach()
     hold = gm.find(name="Scar Gate, the Hold")[0]["id"]

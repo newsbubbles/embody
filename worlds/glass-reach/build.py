@@ -211,6 +211,16 @@ TEMPLATES = {
                         "Salt Road, in the lee of the dead crawler, Wick the runner carries the house's letters; the word "
                         "that opens him is saltmark. Walk the sand with the broken step (creep), or the Thresher hears you."},
 }
+# where each newcomer's people keep what they find (keep_faction_stores), and whom to ask for the word
+STORE_HINTS = {
+    "carrier": "The Carriers keep a coffer at the Landing for what they carry for each other; Ossa has the word that "
+               "opens it.",
+    "guard": "The Hold keeps a store chest under the stair for what its people bring in; Ruhl gives the word to his own.",
+    "keth": "The Keth keep a cist at the Deepwell for what any Keth finds; Taan will tell you the count that opens it.",
+    "dreyer": "The house keeps a strongchest at the Dry Camp; Halvard gives its word to the house's own.",
+}
+for _role, _hint in STORE_HINTS.items():
+    TEMPLATES[_role]["brief"] += " " + _hint
 
 STORY_KINDS = ["arrived", "checked", "talked", "agreed", "dram_moves", "downed", "killed", "yielded",
                "heat", "dusk", "night", "dawn", "cistern_cracks"]
@@ -531,6 +541,7 @@ def populate(s):
     s.schedule(600, "cistern_cracks", entity=root)
     keep_canon(s)
     keep_corins_file_kit(s, names_of(s))  # after the nine are made
+    keep_faction_stores(s, names_of(s))  # last, so everyone made above learns the word
     lay_out(s)
     s.clock(run=False, turn=3)
     return s.summary()
@@ -600,6 +611,7 @@ def upgrade(s):
     keep_behaviors(s.world)  # bodies from before rest mended get the mend tick
     keep_canon(s)
     keep_corins_file_kit(s, names_of(s))  # after the nine are made
+    keep_faction_stores(s, names_of(s))  # last, so everyone made above learns the word
     lay_out(s)
 
 
@@ -1599,6 +1611,74 @@ def keep_guild_locks(s, names):
             s.spawn("thing", holder, "The counting house key", state=dict(DOOR_KEY))
 
 
+# Each faction's store (Nate 2026-11-12: "make sure that each faction has a place to store shit they find and share"):
+# a holder at the faction's home with a lock on it. The lock opens to a word every body of the faction remembers, so
+# what one finds the rest can take; a house's head also holds a key. The word is drawn when the lock is made and is in
+# no file: it lives on the lock (secret) and in the members' memories, and a newcomer asks their own people for it.
+# (faction, place, store, its state, lock, lock state, (key holder, key) or None, words to draw from, memory line)
+FACTION_STORES = [
+    ("House Varrick", "Scar Gate, the Hold", "The Hold's store chest",
+     {"portable": False, "holds": ["any"], "room": 40,
+      "description": "A long chest of black wood under the Hold's stair, iron at every corner and a ring of lettered "
+                     "tumblers on its hasp. What the Hold's people bring in from the Reach goes in here, and comes out "
+                     "by the house's word."},
+     "The store chest's lock", {"pick_dc": 17, "break_dc": 19,
+                                "description": "A ring of five lettered tumblers on a black iron hasp, and a keyhole."},
+     ("Captain Ruhl", "The store chest key"), ["CAIRN", "SLATE", "EMBER", "WARDS", "STAIR", "BRINE", "FLINT"],
+     "The Hold's store chest under the stair opens to the house's word, {code}. Keep it to Varrick's own."),
+    ("the Keth", "The Deepwell", "The Keth cist",
+     {"portable": False, "holds": ["any"], "room": 40,
+      "description": "A stone cist cut into the wall above the waterline, its lid a slab held by a pin wrapped in "
+                     "knotted cord. What the Keth find goes in here for all the Keth."},
+     "The cist's knot-cord", {"pick_dc": 15, "break_dc": 12,
+                              "description": "Goat-hair cord knotted round the pin in the old count. Untie it in the right "
+                                             "order and the pin draws; cut it, and every Keth will know who."},
+     None, ["4-1-3", "2-5-1", "3-3-1", "1-4-2", "5-1-1", "2-2-4"],
+     "The cist at the Deepwell opens to its knots untied in this order, {code}. It is for the Keth."),
+    ("House Dreyer", "The Dry Camp", "The house's strongchest",
+     {"portable": False, "holds": ["any"], "room": 40,
+      "description": "A brass-cornered strongchest sunk to its lid in the sand behind the tank, the well-and-bar burned "
+                     "into the wood. The house's people put in what they bring back, and take out by the house's word."},
+     "The strongchest's lock", {"pick_dc": 18, "break_dc": 20,
+                                "description": "A brass combination lock, five lettered wheels, close-fitted, and a keyhole."},
+     ("Halvard Dreyer", "The strongchest key"), ["WRITS", "BARGE", "DUNES", "TALLY", "SEALS", "RIDGE", "THIRST"],
+     "The house's strongchest at the Dry Camp opens to the word {code}. Only the house's own have it."),
+    ("the Carriers", "The Carriers' Landing", "The Carriers' coffer",
+     {"portable": False, "holds": ["any"], "room": 40,
+      "description": "An iron-strapped coffer chained to a ring in the Landing's wall, the Carriers' wheel on the lid. "
+                     "Carriers leave in it what they carry for each other between convoys."},
+     "The coffer's lock", {"pick_dc": 16, "break_dc": 18,
+                           "description": "A Guild wheel lock: five lettered tumblers set in the wheel's rim."},
+     None, ["WHEEL", "LEDGE", "CRAWL", "SPOKE", "DRIFT", "HAULS"],
+     "The Carriers' coffer at the Landing opens to the wheel word, {code}. It is for carriers."),
+]
+STORE_KEY = {"portable": True, "key": True, "description": "A heavy key on a cord, worn bright at the bit."}
+
+
+def keep_faction_stores(s, names):
+    """Each faction's store at its home, its lock with a fresh word, the head's key, and the word in the memory of every
+    member who lacks it (so people made after the store learn it on the next build too). The store is made once, by
+    name; a store burned, or a lock broken, stays as play left it."""
+    import secrets
+    for faction, home, store, state, lock, lock_state, head, words, line in FACTION_STORES:
+        if store not in names and names.get(home):
+            box = s.spawn("thing", names[home], store, state=dict(state))["id"]
+            names[lock] = s.spawn("lock", box, lock, state=dict(lock_state, code=secrets.choice(words),
+                                                                 key=head[1] if head else None))["id"]
+            if head and names.get(head[0]):
+                s.spawn("thing", names[head[0]], head[1], state=dict(STORE_KEY))
+        lk = s.world.get(names[lock]) if names.get(lock) else None
+        code = lk["state"].get("code") if lk else None
+        if not code:
+            continue
+        for e in s.world.find(limit=None):
+            st = s.world.get(e["id"])["state"]
+            if st.get("faction") != faction or e["type"] == "faction" or st.get("dead"):
+                continue
+            if not any(code in str(n.get("text")) for n in st.get("memory") or []):
+                s.remember(line.format(code=code), entity=e["id"])
+
+
 # Pointers (the chapter-two check, 2026-11-11): after eight days nobody had found the proof Taan asks for, because no
 # one in the world pointed anyone at where it lies. Each line points at a place, not at the thing, and says why its
 # speaker never went to look. And the convoy: the dawn crawler's driver said it goes south at the moon, the Guild's
@@ -2446,6 +2526,7 @@ def keep_routines(s, root):
         names["The Hold's ration cask"] = s.spawn("thing", st["hold"], "The Hold's ration cask", state={"portable": False, "water_source": True, "left": 0,
             "description": "A Guild cask stencilled with the Varrick mark. The crawler rolls a full one off at dawn; the writ pays."})["id"]
     keep_medic(s, names["Iska of the Keth"])
+    keep_faction_stores(s, names_of(s))  # Iska is Keth, and learns the cist's count
     want = {"bearer": names["Iska of the Keth"], "keth_jars": names["The Keth jars"], "hold_ration": names["The Hold's ration cask"]}
     if any(st.get(k) != v for k, v in want.items()):
         s.patch(story, want)
