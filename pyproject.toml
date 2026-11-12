@@ -29,5 +29,5 @@ module-name = "embody"
 dev = ["pytest>=8"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "worlds", "packs"]
+testpaths = ["tests", "examples", "worlds", "packs"]
 pythonpath = ["."]

@@ -17,7 +17,7 @@ NOW = dict(clock=lambda: 0.0, sleep=lambda s: None)
 def ferry(path=None):
     eng = Engine(path, workspace=REPO, record=False) if path else Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world(gm, "ferry-at-dusk")
+    load_world(gm, REPO / "examples" / "ferry-at-dusk")
     return eng, gm
 
 

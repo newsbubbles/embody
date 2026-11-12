@@ -6,6 +6,10 @@ dist/
 .pytest_cache/
 *.db
 *.db-journal
+# worlds/ is the owner's own workspace; the samples live in examples/. The Glass Reach stays tracked:
+# the deploy ships the committed tree (tools/stage_deploy.py) and hosts it.
+worlds/*
+!worlds/glass-reach/
 worlds/*/mirror/
 worlds/mirror/
 .embody.json

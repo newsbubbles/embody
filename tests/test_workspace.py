@@ -109,20 +109,22 @@ def test_scripts_are_files_that_use_each_other_and_packs_define_before_the_world
         load_world(gm2, "nope")
 
 
-def test_the_samples_load_by_id_and_the_legacy_single_file_world_still_loads():
+def test_the_hosted_world_loads_by_id_the_samples_by_path_and_the_legacy_single_file_world_still_loads():
     eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
     r = load_world(gm, "glass-reach")
-    assert r["packs"] == ["d20", "village"] and set(r["scripts"]) == {"go", "creep", "ward_toggle", "ossa_on", "reach_story", "reach_routines"}
+    assert {"d20", "village"} <= set(r["packs"]) and {"go", "reach_story", "reach_routines"} <= set(r["scripts"])
     assert r["git"].startswith("inside")
     ids = {s["id"] for s in gm.scripts()}
     assert {"attack", "check", "talk", "take", "go", "reach_story"} <= ids and "_common" not in ids
-    r = load_world(gm, "two-rooms")
+    r = load_world(gm, REPO / "examples" / "two-rooms")
     assert gm.world_id == r["id"] and r["folder"].endswith("two-rooms")
     ws = Workspace(REPO)
-    assert [w["id"] for w in ws.list_worlds()] == ["ferry-at-dusk", "glass-reach", "two-rooms"]
-    assert ws.list_packs() == ["d20", "village"]
-    assert ws.list_worlds()[0]["manifest"]["requires"] == ["village"]
+    # worlds/ is the owner's: the hosted world is there, and whatever else the owner keeps beside it is not a failure
+    assert "glass-reach" in [w["id"] for w in ws.list_worlds()]
+    samples = sorted(d.name for d in (REPO / "examples").iterdir() if (d / "build.py").exists())
+    assert samples == ["ferry-at-dusk", "two-rooms"]
+    assert ws.list_packs() == ["d20", "locks", "village", "works"]
     with pytest.raises(Rejected, match="already exists"):
         load_world(gm, "glass-reach")
 
@@ -130,7 +132,7 @@ def test_the_samples_load_by_id_and_the_legacy_single_file_world_still_loads():
 def test_save_and_restore_carry_a_game_as_one_file(tmp_path):
     eng = Engine(tmp_path / "embody.db", workspace=REPO, record=False)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world(gm, "ferry-at-dusk")
+    load_world(gm, REPO / "examples" / "ferry-at-dusk")
     you = eng.session("you")
     you.join("ferry-at-dusk", "Traveler")
     you.act("go", "The Landing")

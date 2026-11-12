@@ -13,7 +13,7 @@ REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml"
 def ferry():
     eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world(gm, "ferry-at-dusk")
+    load_world(gm, REPO / "examples" / "ferry-at-dusk")
     return eng, gm
 
 

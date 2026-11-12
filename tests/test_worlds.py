@@ -11,7 +11,7 @@ REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml"
 def test_ferry_at_dusk_rails_complete():
     eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world(gm, "ferry-at-dusk")
+    load_world(gm, REPO / "examples" / "ferry-at-dusk")
     you = eng.session("you")
     first = you.join("ferry-at-dusk", "Traveler")
     assert first["here"]["name"] == "Ashford Square"
@@ -70,7 +70,7 @@ def test_ferry_at_dusk_is_deterministic():
     for _ in range(2):
         eng = Engine(workspace=REPO)
         gm = eng.session("gm", capabilities=[AUTHOR])
-        load_world(gm, "ferry-at-dusk")
+        load_world(gm, REPO / "examples" / "ferry-at-dusk")
         gm.clock(step=200)
         hashes.append(gm.world.state_hash())
     assert hashes[0] == hashes[1]

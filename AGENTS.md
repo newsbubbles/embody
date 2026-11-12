@@ -14,7 +14,7 @@ The role reference is `.claude/skills/embody/SKILL.md`: an index with the rules 
 
 ## The loop
 
-1. `worlds()` to see what exists. Empty? `load_world(file="ferry-at-dusk")` builds the sample, or build your own.
+1. `worlds()` to see what exists. Empty? `load_world(file="examples/ferry-at-dusk")` builds the sample, or build your own.
 2. `join(world_id, entity)` to embody someone, or `use(world_id)` to stand outside as the author. Invited: `join()`. Open seat: `seats()` lists what is playable and the templates for a new character, then `join(world, entity)` or `join(world, template=..., name=...)`.
 3. `perceive()` gives the whole bundle: where you are, who and what is here, exits, what you hold, who you know, the verbs you could try and why some are not possible right now, and events since you last looked.
 4. `say(text, to=...)` for words (no `to`: said into the room; `reach=0` with `to`: a whisper), `act(verb, target, params)` for deeds. `intend` keeps your character's goals, `recall(about=...)` is the graph query around someone within what you may know.

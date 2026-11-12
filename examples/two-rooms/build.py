@@ -1,7 +1,7 @@
 """The test world as a loadable world: two rooms, a locked door, a key, a guard. A legacy build(session) world,
 no manifest: the loader still takes those.
 
-    uv run embody --as gm --author load two-rooms
+    uv run embody --as gm --author load examples/two-rooms
 """
 
 import sys

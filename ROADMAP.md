@@ -17,7 +17,7 @@ Status: alpha. The first vertical slice was built in one day (2026-11-08) and pl
 - Engine: entity graph with containment, schemas with `extends`, actions with check and apply, events that bubble with reach, listeners along the bubble path, behaviors on the clock (`always` ones tick on embodied seats too), rules via `set_rule` that hear everything under their entity whatever the reach, relations as edges and hyperedges, event-sourced SQLite, deterministic state hash, seeded rand, a Python-subset interpreter for scripts.
 - Ops: 41 of them behind a Session with capabilities (author, observer, embodied). CLI and MCP server expose the same table. `wait` blocks on events and returns a light bundle. `act` returns everything that touched you since you last looked. One clock and one id counter however many processes share the database. The MCP server holds many principals behind one connection (`principal=` on the playing tools).
 - Minds in the engine: secret `memory`, `brief` and `goals` (`intend`), `recall` as the permission-aware graph query, per-entity cursors, `knows` edges with an opinion floor and the last exchanges, `known_places`, addressed speech (`say(to=...)`, `say_as`) and speech into the room, `fork_world`, turn-based play (`clock(turn=n)`), deep-merging `patch`, scoped affordances, per-viewer event filtering, `ambient` facts and `clock` in every perceive, `timers` and `unschedule`.
-- Content: `worlds/ferry-at-dusk/` on the `village` pack (five places, four NPCs with goals and opinions of each other, a storyline that checks facts with two routes to the ferryman, fog, night and dawn on timers, sleep and wake, followers, chores with durations that settle a debt relation, drink and tipsiness; split into define/populate/upgrade so a live world takes new code and additions), `worlds/glass-reach/` on `packs/d20/` (a desert hold, a hidden well, three factions with standings, a reusable d20 rule set where every rule is a verb: `check` against a DC, `attack` with wounds, down and dead, wards, `yield` and honor, duels that a root rule turns into a ring, `threaten` and `parley` as opposed rolls, thirst as a body behavior, fighters that fight without a mind, a thresher under the glass, a storyline with a truce or a lost ending), `worlds/two-rooms/` (a legacy single-file world).
+- Content: `examples/ferry-at-dusk/` on the `village` pack (five places, four NPCs with goals and opinions of each other, a storyline that checks facts with two routes to the ferryman, fog, night and dawn on timers, sleep and wake, followers, chores with durations that settle a debt relation, drink and tipsiness; split into define/populate/upgrade so a live world takes new code and additions), `worlds/glass-reach/` on `packs/d20/` (a desert hold, a hidden well, three factions with standings, a reusable d20 rule set where every rule is a verb: `check` against a DC, `attack` with wounds, down and dead, wards, `yield` and honor, duels that a root rule turns into a ring, `threaten` and `parley` as opposed rolls, thirst as a body behavior, fighters that fight without a mind, a thresher under the glass, a storyline with a truce or a lost ending), `worlds/two-rooms/` (a legacy single-file world).
 - Workspace (round 6): a world is a folder, `worlds/<id>/` with `build.py` (manifest, define, populate, upgrade), `scripts/` as files with `use()` includes, `changes.jsonl` written by live authoring and replayed by a fresh build, `saves/`, `notes/`, `tests/`; packs under `packs/`; `create_world` scaffolds the folder and starts a git repository; `save` and `restore`; `embody init`; the database at the workspace root.
 - Hosted (live on Railway since 2026-11-09): the Glass Reach with roles and grants, invites as one-use links, owner grants over the door, a steady 4x clock, idle seats whose bodies see to their water, the Reach's water routines, `wait(until=...)` and `embody watch` for minds and narrators that wait for hours, `packs/d20/soak.py`. CHANGELOG.md has the engine's changes by date.
 - Tooling: 154 tests, markdown mirror, `embody.watch` live graph viewer (run by `tools/watch.py`, served hosted at `/watch`) with zoom, pan and a world switcher, CLAUDE.md and an `embody` skill with the three roles for Claude Code.
@@ -49,7 +49,7 @@ Gaps
 
 ## Found in the second playtest
 
-Source: worlds/ferry-at-dusk/notes/ferry-at-dusk-2-2026-11-08.md (the forked world, turn-based, a subagent mind for Mara) and the round-3 design message. Closed in round 3 (2026-11-08) unless marked open.
+Source: examples/ferry-at-dusk/notes/ferry-at-dusk-2-2026-11-08.md (the forked world, turn-based, a subagent mind for Mara) and the round-3 design message. Closed in round 3 (2026-11-08) unless marked open.
 
 Bugs
 
@@ -76,7 +76,7 @@ Gaps
 
 ## Found in the third playtest
 
-Source: worlds/ferry-at-dusk/notes/ferry-at-dusk-3-2026-11-08.md (the narrator, with Nate as Hob the miller) and worlds/ferry-at-dusk/notes/ferry-at-dusk-3-traveler-mind-2026-11-08.md (the Traveler, a CLI mind in another process).
+Source: examples/ferry-at-dusk/notes/ferry-at-dusk-3-2026-11-08.md (the narrator, with Nate as Hob the miller) and examples/ferry-at-dusk/notes/ferry-at-dusk-3-traveler-mind-2026-11-08.md (the Traveler, a CLI mind in another process).
 
 Bugs
 
@@ -188,7 +188,7 @@ These were agreed in conversation on 2026-11-08 and are not built. Order of atta
 ### Workspace, not repo
 
 - [x] (round 6) The engine is a package; the repo is its source. A workspace is any folder with a database, `worlds/` and `packs/`. `embody init` makes one; the MCP server in that folder uses it; `.mcp.json` points at the workspace.
-- [ ] Sample worlds ship inside the package, so `load_world("ferry-at-dusk")` works from any workspace without a path.
+- [ ] Sample worlds (`examples/` in the repository) ship inside the package, so `load_world("ferry-at-dusk")` works from any workspace without a path.
 - [x] World state is never in the engine repo. Already true (databases, mirrors and session files are ignored); keep it true after the split.
 
 ### Hosted, many players

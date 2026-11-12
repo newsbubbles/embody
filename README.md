@@ -46,7 +46,7 @@ claude
 The CLI works without an agent:
 
 ```bash
-uv run embody --as gm --author load ferry-at-dusk
+uv run embody --as gm --author load examples/ferry-at-dusk
 uv run embody --as you join ferry-at-dusk Traveler
 uv run embody --as you perceive
 uv run embody --as you act talk Mara --param about=ferry
@@ -82,7 +82,8 @@ CHANGELOG.md says what changed in the engine, by date. ROADMAP.md tracks what ex
 ## Layout
 
 - `src/embody/` the engine: `script.py` interpreter, `store.py` SQLite, `world.py` graph, events, actions, clock, `ops.py` sessions and capabilities, `workspace.py` worlds as folders, `mirror.py`, `cli.py`, `mcp_server.py`
-- `worlds/` sample worlds, one folder each (`ferry-at-dusk/`, `glass-reach/`, `two-rooms/`): `build.py`, `scripts/`, `notes/`, `tests/`
+- `examples/` sample worlds, one folder each (`ferry-at-dusk/`, `two-rooms/`): `build.py`, `scripts/`, `notes/`, `tests/`. Load one by its path (`load examples/ferry-at-dusk`), or copy it into `worlds/` to make it your own
+- `worlds/` your own worlds, the workspace's folder (git ignores it, all but `glass-reach/`, the hosted world)
 - `packs/` shared verbs and rules a world `requires` (`village/`, `d20/`)
 - `docs/SCRIPTING.md` the scripting reference (also the `guide()` tool)
 - `DESIGN.md` the design, authoritative

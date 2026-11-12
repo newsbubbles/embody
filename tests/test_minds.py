@@ -14,7 +14,7 @@ REPO = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml"
 def ferry():
     eng = Engine(workspace=REPO)
     gm = eng.session("gm", capabilities=[AUTHOR])
-    load_world(gm, "ferry-at-dusk")
+    load_world(gm, REPO / "examples" / "ferry-at-dusk")
     return eng, gm
 
 
@@ -223,11 +223,11 @@ def test_upgrade_redefines_code_and_keeps_state():
     you.act("take", "Bone")
     h = gm.world.state_hash()
     gm.define_script("read", "def apply(ctx):\n    return 'scribbles'\n")
-    r = load_world(gm, "ferry-at-dusk", upgrade=True)
+    r = load_world(gm, REPO / "examples" / "ferry-at-dusk", upgrade=True)
     assert r["upgraded"] is True
     assert gm.world.state_hash() == h
     assert "nothing is written" in gm.script_source("read")["source"]
     assert any(h2["name"] == "Bone" for h2 in you.perceive()["holding"])
     fresh = eng.session("fresh", capabilities=[AUTHOR])
     with pytest.raises(Rejected):
-        load_world(fresh, "ferry-at-dusk", upgrade=True)
+        load_world(fresh, REPO / "examples" / "ferry-at-dusk", upgrade=True)
