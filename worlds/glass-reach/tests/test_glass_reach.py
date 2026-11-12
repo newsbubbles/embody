@@ -947,6 +947,18 @@ def test_a_knife_in_the_soft_pitch_undoes_the_mend():
     assert any("pried it out" in t for t in scenes(gm.history(kinds=["scene"], limit=20, newest=True)))
 
 
+def test_the_house_mark_on_a_wedge_or_a_sealed_letter_is_proof_for_the_keth():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    keth = newcomer(eng, gm, "keth", "Sen")
+    gm.spawn("letter", gm.inspect("Sen")["id"], name="Sealed letter", state={"portable": True, "text": "D."})
+    gm.move("Sen", "The Deepwell")
+    keth.act("give", "Elder Taan", params={"item": "Sealed letter"})
+    assert gm.inspect("Story")["state"]["keth_proof_pending"] == "Sealed letter"
+    to_next(gm, "keth_council")
+    assert gm.inspect("Story")["state"]["keth_proof"] == "Sealed letter"
+
+
 def test_proof_for_the_keth_puts_bows_on_the_wall_and_the_convoy_goes_to_who_pays():
     eng, gm = hosted(truce=True)
     chapter_two_now(gm)

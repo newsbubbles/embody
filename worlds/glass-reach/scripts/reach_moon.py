@@ -17,6 +17,10 @@ CUT_DC = 12  # a knife in the soft pitch: stealth, craft or blade at the Hold
 WALL = 9
 DRY = 4
 KETH_BOWS = 3
+# what Taan takes as proof of the house's hand, "in the house's own mark": the poison phial, the manifest, the deed, and
+# (2026-11-12, the Keeper brought them and the council would not sit) the wedge stamped with the well-and-bar and the
+# letter under its seal
+PROOFS = ["Empty phial", "Dreyer manifest", "The steading's deed", "Bronze wedge", "Sealed letter"]
 
 
 def story_of(ctx):
@@ -668,7 +672,7 @@ def on(ctx, event):
             hire(ctx, st, to, payer, it)
         elif st.rook and to.id == st.rook:
             pay_rook(ctx, st, to, payer, it)
-        elif to.id == st.taan and it.name in ["Empty phial", "Dreyer manifest", "The steading's deed"] and not st.keth_proof \
+        elif to.id == st.taan and it.name in PROOFS and not st.keth_proof \
                 and not st.keth_proof_pending:
             ctx.patch(story, {"keth_proof_pending": it.name, "keth_proof_by": payer.id})
             ctx.schedule(COUNCIL, "keth_council", target=ctx.root())
