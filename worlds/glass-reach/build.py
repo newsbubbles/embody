@@ -1288,7 +1288,7 @@ KILN_PLAN = {
             "Scar stone in it hot, with glassthorn from the brake, two bundles a stone, six hours, and rake out a sack "
             "of lime. No shard to the Guild, if you have the hands and the nerve for the thorn.",
     "begun_scene": "The kiln works begin: the chalk circle is swept, the footing stones set, and Jory squints at the wind.",
-    "stages": [{"name": "the kiln", "labour": 6, "needs": {"Dressed stone": 2}, "roles": {"mason": 1, "hand": 1},
+    "stages": [{"name": "kiln", "labour": 6, "needs": {"Dressed stone": 2}, "roles": {"mason": 1, "hand": 1},
                 "scene": "Jory sets the last stone of the kiln's throat and slaps it. 'She'll draw. Stone and thorn.'"}],
     "becomes": {"type": "kiln", "name": "The lime kiln",
                 "state": {"portable": False, "description": "A squat round kiln of dressed Scar stone beside the wall "
