@@ -1228,6 +1228,8 @@ class Session:
                     # an author's edit to someone else is the world changing under you, not news you heard;
                     # what it changed shows in the next perceive, the raw diff stays with the author
                     continue
+                if e["kind"] == "spawned" and (w.get(e["target_id"]) or {}).get("state", {}).get("hidden"):
+                    continue  # a hidden thing made where you are (a ledger's page, a trap) is still hidden
             pe = _public_event(e)
             a = e["actor_id"]
             if a and a != me:
@@ -2454,7 +2456,7 @@ _NEWS_KINDS = frozenset({"found", "downed", "killed", "outlawed", "yielded", "tr
                          "challenged", "agreed", "spoiled", "wounded", "rose", "searched", "stopped",
                          "broke_down", "struck"})
 _CHRONICLE_QUIET = frozenset({"spawned", "patched", "linked", "unlinked", "related", "unrelated", "laid_out", "moved",
-                              "left", "chronicled", "scene", "say", "unscheduled"})
+                              "left", "chronicled", "scene", "say", "unscheduled", "ledger_received"})
 
 
 _PLAY_OR_WATCH = frozenset({"worlds", "use", "summary", "seats", "join", "leave", "perceive", "inspect", "find", "history",

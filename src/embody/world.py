@@ -213,7 +213,7 @@ class Ctx(ScriptObject):
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
-        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "embodied", "locked", "remember",
+        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "embodied", "event_at", "locked", "remember",
         "count", "split", "merge", "transfer", "bulk", "load",
     )
 
@@ -325,6 +325,18 @@ class Ctx(ScriptObject):
     def embodied(self, id: Any) -> bool:
         """Someone (a mind, a player) holds this body: it acts for itself, so a rule should not drive it."""
         return self._w.embodied(_ev(self._w, id)) is not None
+
+    def event_at(self, seq: Any) -> EventView | None:
+        """One event of the log by its number (the deed a record came from), or None. Notes and intents stay their
+        owners', and a script defined under a grant's limits reads only events done to its own plot."""
+        rows = self._w.store.query("event", "world_id=? AND seq=?", (self._w.id, int(seq)), limit=1)
+        if not rows or rows[0]["kind"] in _PRIVATE_KINDS:
+            return None
+        under = (self._limits or {}).get("under")
+        if under and not (rows[0]["target_id"] and self._w.get(rows[0]["target_id"])
+                          and self._w.within(rows[0]["target_id"], under)):
+            return None  # a limited grant's script reads the log of its own plot only
+        return _event_view(rows[0])
 
     def locked(self, id: Any) -> EntityView | None:
         """What keeps a box, a door or a place shut (its own `locked`, or a lock attached to it), or None."""
@@ -496,6 +508,7 @@ class World:
         self._row = row
         self._script_cache: dict[tuple[str, int], Script] = {}
         self._schema_cache: dict[str, dict[str, Any]] = {}
+        self._holder_types: set[str] | None = None  # the schemas with a `holder` listener (_holder_listeners)
 
     # ---- lifecycle ---------------------------------------------------------
 
@@ -604,6 +617,7 @@ class World:
         }
         self.store.put("schema", row)
         self._schema_cache.clear()
+        self._holder_types = None
         self.emit("schema_defined", target=None, reach=0, payload={"schema": id, "version": row["version"]})
         return row
 
@@ -1210,36 +1224,81 @@ class World:
         """Run listeners along the path, target first, then the rules of every ancestor above the path. A schema
         listener hears what bubbles to its entity (the event's reach); a rule set on an entity hears everything
         that happens under it, however short the reach, so a rule on the root is the table's rule. A listener may
-        reject or stop."""
+        reject or stop. A schema listener with `holder: True` on a thing also hears what its holder does, or has
+        done to it, wherever that is (_holder_listeners)."""
         logs: list[str] = []
         path = list(ev["path"])
         above = []
         if ev["target_id"] and ev["reach"] >= 0:
             above = [a for a in self.ancestors(ev["target_id"]) if a not in path]
+        stopped = False
         for node in path + above:
             for lst in self._listeners_for(node, rules_only=node not in path):
-                kinds = lst.get("kinds") or []
-                if kinds and ev["kind"] not in kinds:
-                    continue
-                if lst.get("unless_embodied") and self.embodied(node):
-                    continue  # the table is the floor; an embodied mind answers instead
-                s = self.script(lst["script"])
-                fn = lst.get("fn", "on")
-                if not s.has(fn):
-                    continue
-                ctx = Ctx(self, actor=actor or ev["actor_id"], target=target or ev["target_id"], owner=node,
-                          params=params, event=_event_view(ev), verb=verb, caused_by=ev["seq"],
-                          seed=self._seed_for(ev["seq"], node))
-                try:
-                    ctx.run(s, fn, [ctx, _event_view(ev)], fuel=20_000)
-                except _Stop:
-                    logs.extend(ctx.logs)
-                    return logs
-                except ScriptError as e:
-                    raise Rejected(f"listener {lst['script']!r} on {node} failed: {e.reason}",
-                                   hint=e.hint or "fix the listener script") from None
-                logs.extend(ctx.logs)
+                if self._hear(ev, node, lst, logs, actor, target, verb, params):
+                    stopped = True
+                    break
+            if stopped:
+                break
+        # a carried thing's holder listener hears its holder's deeds wherever they happen; stop() ends the bubbling
+        # up the tree, not this, since the thing is not above anyone
+        for node, lst in self._holder_listeners(ev, set(path) | set(above)):
+            self._hear(ev, node, lst, logs, actor, target, verb, params)
         return logs
+
+    def _hear(self, ev: dict[str, Any], node: str, lst: dict[str, Any], logs: list[str], actor: str | None,
+              target: str | None, verb: str | None, params: dict[str, Any] | None) -> bool:
+        """Run one listener on one event; True when it stopped the event."""
+        kinds = lst.get("kinds") or []
+        if kinds and ev["kind"] not in kinds:
+            return False
+        if lst.get("unless_embodied") and self.embodied(node):
+            return False  # the table is the floor; an embodied mind answers instead
+        s = self.script(lst["script"])
+        fn = lst.get("fn", "on")
+        if not s.has(fn):
+            return False
+        ctx = Ctx(self, actor=actor or ev["actor_id"], target=target or ev["target_id"], owner=node,
+                  params=params, event=_event_view(ev), verb=verb, caused_by=ev["seq"],
+                  seed=self._seed_for(ev["seq"], node))
+        try:
+            ctx.run(s, fn, [ctx, _event_view(ev)], fuel=20_000)
+        except _Stop:
+            logs.extend(ctx.logs)
+            return True
+        except ScriptError as e:
+            raise Rejected(f"listener {lst['script']!r} on {node} failed: {e.reason}",
+                           hint=e.hint or "fix the listener script") from None
+        logs.extend(ctx.logs)
+        return False
+
+    def _holder_listeners(self, ev: dict[str, Any], heard: set[str]) -> list[tuple[str, dict[str, Any]]]:
+        """The schema listeners marked `holder` on the things the event's parties carry: its actor, its target, and
+        the bodies its payload names as `by`, `who`, `to` or `source`. A ledger in a pocket hears its holder give,
+        take and be paid. before_act only reaches one whose `kinds` names it."""
+        types = self._holder_types
+        if types is None:
+            types = self._holder_types = {s["id"] for s in self.schemas()
+                                          if any(lst.get("holder") for lst in self.schema_components(s["id"], "listeners"))}
+        if not types:
+            return []
+        p = ev["payload"] or {}
+        parties: list[str] = []
+        for pid in (ev["actor_id"], ev["target_id"], p.get("by"), p.get("who"), p.get("to"), p.get("source")):
+            if isinstance(pid, str) and pid and pid not in parties:
+                parties.append(pid)
+        out: list[tuple[str, dict[str, Any]]] = []
+        kinds = sorted(types)
+        marks = ",".join("?" * len(kinds))
+        for pid in parties:
+            for c in self.store.query("entity", f"world_id=? AND parent_id=? AND type IN ({marks})", (self.id, pid, *kinds),
+                                      order="created_seq"):
+                if c["id"] in heard:
+                    continue
+                heard.add(c["id"])
+                for lst in self.schema_components(c["type"], "listeners"):
+                    if lst.get("holder") and (ev["kind"] != "before_act" or ev["kind"] in (lst.get("kinds") or [])):
+                        out.append((c["id"], lst))
+        return out
 
     def _seed_for(self, seq: int, salt: str) -> int:
         h = hashlib.sha256(f"{self.seed}:{seq}:{salt}".encode()).digest()
@@ -1435,7 +1494,8 @@ class World:
                       verb=verb, caused_by=ev["seq"], seed=self._seed_for(ev["seq"], "apply"))
             ctx._consent = True
             try:
-                result = ctx.run(s, "apply", [ctx], fuel=50_000)
+                # a verb that walks a big book may ask for more (`fuel` on the action, at most a million)
+                result = ctx.run(s, "apply", [ctx], fuel=min(int(adef.get("fuel") or 50_000), 1_000_000))
             except ScriptError as e:
                 raise Rejected(f"{verb} failed while applying: {e.reason}", hint=e.hint) from None
             logs.extend(ctx.logs)

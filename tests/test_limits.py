@@ -114,3 +114,28 @@ def test_limits_are_checked_when_the_invite_is_made():
     k.use("two-rooms")
     assert k.spawn("thing", "Cell", name="Pebble")["name"] == "Pebble"
     assert call(k, "spawn", type="creature", parent="Cell")["ok"] is False
+
+
+PEEK = """
+def apply(ctx):
+    ev = ctx.event_at(ctx.params.get("seq"))
+    return ev.kind if ev is not None else None
+"""
+
+
+def test_a_builders_script_reads_the_log_of_its_own_plot_only():
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    b, inv = builder(eng, gm)
+    pre = inv["limits"]["scripts"]
+    b.use("two-rooms")
+    b.define_script(f"{pre}peek", PEEK)
+    b.define_schema(f"{pre}glass", extends="thing", actions={"peek": {"script": f"{pre}peek", "reach": "near",
+                                                                       "params": {"seq": "an event"}}})
+    b.spawn(f"{pre}glass", "Hall", name="Glass")
+    inside = w.emit("rang", target=w.find(name="Glass")[0]["id"])["seq"]
+    outside = w.emit("whispered", target=i["Prisoner"])["seq"]  # in the Cell, out of Mara's plot
+    guard = eng.session("sam")
+    guard.join("two-rooms", "Guard")
+    assert guard.act("peek", "Glass", {"seq": inside})["result"] == "rang"
+    assert guard.act("peek", "Glass", {"seq": outside})["result"] is None
