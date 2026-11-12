@@ -1600,3 +1600,35 @@ def test_the_reach_hands_out_slates_bound_to_their_holders_with_the_live_counts_
     load_world(gm, "glass-reach", upgrade=True)
     gm.world.step(10)
     assert sum(1 for e in gm.world.find(name="Ossa's tally-slate", limit=None) if e["name"] == "Ossa's tally-slate") == 1
+
+
+def test_a_keeper_gives_its_key_only_to_whom_it_is_for_and_passes_word_once_and_a_kept_book_is_remembered():
+    eng, gm, you = reach()
+    yard = gm.find(name="The Guild Yard")[0]["id"]
+    for sid in ("keeper", "read_keeps"):
+        gm.define_script(sid, (REPO / "worlds/glass-reach/scripts" / f"{sid}.py").read_text(encoding="utf-8"))
+    wright = gm.spawn("person", yard, "The wright")["id"]
+    k = gm.spawn("person", yard, "A keeper", state={
+        "dialog": {"key": ""},
+        "keeps": {"item": "A test key", "for": ["The wright"], "topics": "key", "yes": "Yours.", "no": "Not yours.",
+                  "gone": "Given."},
+        "passes_word": {"to": ["Garran Teague"], "line": "Tell the wright.", "memory": "The wright has a key waiting."}})["id"]
+    gm.spawn("thing", k, "A test key", state={"portable": True, "key": True})
+    gm.set_rule(k, "keeper", kinds=["talked", "keeper_word"])
+    gm.set_rule(yard, "keeper", kinds=["arrived"])
+    gm.act_as("Garran Teague", "go", "The Carriers' Landing")
+    gm.act_as("Garran Teague", "go", "The Guild Yard")
+    gm.clock(step=5)
+    assert "The wright has a key waiting." in str(gm.inspect("Garran Teague")["state"]["memory"])
+    assert gm.inspect(k)["state"]["passes_word"]["done"] is True
+    said = lambda r: [e["payload"]["text"] for e in r["events"] if e["kind"] == "say"]  # noqa: E731
+    assert said(gm.act_as("Garran Teague", "talk", k, {"about": "the key"})) == ["Not yours."]
+    assert said(gm.act_as(wright, "talk", k, {"about": "the key"})) == ["Yours."]
+    assert [c["name"] for c in gm.find(parent=wright)] == ["A test key"]
+    assert said(gm.act_as("Garran Teague", "talk", k, {"about": "key"})) == ["Given."]
+    book = gm.spawn("letter", yard, "A kept book", state={"portable": True, "text": "Words that stay.", "keeps_in_mind": True})["id"]
+    gm.set_rule(book, "read_keeps", kinds=["read"])
+    gm.act_as(wright, "read", book)
+    gm.act_as(wright, "read", book)
+    mem = [m["text"] for m in gm.inspect(wright)["state"]["memory"]]
+    assert mem.count("I read A kept book. Words that stay.") == 1
