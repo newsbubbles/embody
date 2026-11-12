@@ -460,7 +460,7 @@ def populate(s):
     s.spawn("thing", landing, "Water casks", state={"portable": False, "water_source": True, "left": 6,
         "description": "Guild casks under a tarp, each one tallied. Ossa's eye is on them."})
     s.spawn("letter", landing, "Tally post", state={"portable": False,
-        "text": "GUILD TALLY. Water: one skin per shard. Glass: by weight, Guild's cut a third. Convoy south at the moon's turn. The Guild carries for whoever holds the gate."})
+        "text": "GUILD TALLY. Water: one skin per shard. Glass: by weight, Guild's cut a third. Convoy north at the moon's turn. The Guild carries for whoever holds the gate."})
 
     # the flats and the bones
     s.spawn("vein", flats, "Red vein", state={"ember": 3, "description": "A seam of dull red in the black glass, warm to the hand."})
