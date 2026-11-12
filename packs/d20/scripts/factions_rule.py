@@ -13,20 +13,39 @@ def on(ctx, event):
         return
     if t is None or by is None or by.id == t.id:
         return
+    if k == "given" and came_back(ctx, event.payload.get("item"), t):
+        return
     f = faction_of(ctx, t)
     if f is None or by.state.faction == f.name:
         return
+    # one who keeps their side secret does not give it away: the faction counts the deed without naming itself
+    quiet = "faction" in (t.state.secret or [])
     if k == "hit":
-        shift_standing(ctx, by, f, -2, "struck " + t.name)
+        shift_standing(ctx, by, f, -2, "struck " + t.name, quiet)
     elif k == "killed":
-        shift_standing(ctx, by, f, -5, "killed " + t.name)
+        shift_standing(ctx, by, f, -5, "killed " + t.name, quiet)
     elif k == "cowed":
-        shift_standing(ctx, by, f, -1, "threatened " + t.name)
+        shift_standing(ctx, by, f, -1, "threatened " + t.name, quiet)
     elif k == "agreed":
-        shift_standing(ctx, by, f, 2, "terms with " + t.name)
+        shift_standing(ctx, by, f, 2, "terms with " + t.name, quiet)
     elif k == "given":
         # a gift is something they keep: a trade (the thing is gone by now) or a return (they gave it first) is not one
         item = ctx.get(event.payload.get("item"))
         if item is None or item.parent is None or item.parent.id != t.id or item.state.given_before_by == t.id:
             return
-        shift_standing(ctx, by, f, 1, "a gift to " + t.name)
+        shift_standing(ctx, by, f, 1, "a gift to " + t.name, quiet)
+        lent = dict(f.state.lent or {})
+        lent[item.id] = {"by": by.id, "quiet": quiet}
+        keep_secret(ctx, f, {"lent": dict(list(lent.items())[-50:])})
+
+def came_back(ctx, item_id, giver):
+    # a gift handed back to the one who gave it was a loan: the standing it bought goes again
+    for f in ctx.find(type="faction", limit=20):
+        lent = dict(f.state.lent or {})
+        rec = lent.get(item_id)
+        if rec and rec.get("by") == giver.id:
+            lent.pop(item_id)
+            keep_secret(ctx, f, {"lent": lent})
+            shift_standing(ctx, giver, f, -1, "lent, not given: it came back", rec.get("quiet"))
+            return True
+    return False

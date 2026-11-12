@@ -14,6 +14,8 @@ The numbers, so a narrator can explain a roll:
   leans on one stat: blade, brawl, climb on body; stealth, survival, lore, lockpick on wits; parley, resolve on will.
   lockpick is the locks pack's: `pick` adds the best of lockpick, stealth or craft.
 - A check is d20 + stat + skill against a difficulty (`dc`, default 12). Wounded costs 2, thirsty costs 2.
+  A skill neither the pack nor the body knows is an untrained roll on wits, and the result says so (`untrained`,
+  `note` with the skills there are).
 - An attack is opposed: d20 + body + blade (+ the weapon's bonus) against the defender's d20 + body + blade
   (+3 if braced). Ties go to the defender. A hit does the weapon's `damage` (bare hands 1) to `vigor`.
 - A `ward` that is switched on hardens against anything fast: a normal attack cannot reach through it. A slow
@@ -66,7 +68,10 @@ The numbers, so a narrator can explain a roll:
   thirst (water 3) or their own next deed wakes them (`woke`, with `by` and `why`). Sleep where nobody would rob you.
 - A gift (`given`) is worth 1 with the receiver's faction only if they keep it: something they trade away on
   the spot, or something that was theirs to begin with (`given_by` on the thing names who handed it over),
-  moves nothing.
+  moves nothing, and a gift handed back to its giver was a loan: the 1 goes again ("lent, not given").
+- A deed to someone who keeps `faction` in their `secret` list still counts with that faction, but quietly: the
+  faction keeps it in its own secret `unseen`, and the doer gets no `standing` event and no edge that names the
+  side. Standing is the readable edge plus `unseen`; at -4 the faction still outlaws them, openly.
 - Deep sand (`deep_sand` on a place) keeps a `tremor` count: each loud arrival adds 1, each harvest adds 2, a
   quiet arrival adds nothing. Two minutes of quiet and the count drops by one, down to zero, when a `tremor`
   event says the dune is still. At 3 the thresher is thirty seconds away. When it surfaces everyone there

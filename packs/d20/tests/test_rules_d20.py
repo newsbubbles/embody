@@ -46,9 +46,16 @@ def test_check_rolls_against_a_difficulty_and_says_so():
     assert res["success"] == (res["total"] >= 10)
     ev = [e for e in r["events"] if e["kind"] == "checked"][0]["payload"]
     assert ev["skill"] == "lore" and ev["dc"] == 10 and ev["margin"] == res["total"] - 10
-    # no dc: twelve; an unknown skill rolls on wits
+    assert "untrained" not in res
+    # no dc: twelve; an unknown skill rolls on wits, untrained, and says so
     r = you.act("check", params={"skill": "juggling"})
     assert r["result"]["dc"] == 12 and r["result"]["mod"] == 3
+    assert r["result"]["untrained"] is True and "no skill 'juggling'" in r["result"]["note"]
+    assert "lore" in r["result"]["note"] and [e for e in r["events"] if e["kind"] == "checked"][0]["payload"]["untrained"]
+    # a skill the body has of its own is trained, whatever the pack's list says
+    gm.patch("Reeve Ansel Varrick", {"skills": {"lore": 1, "juggling": 2}})
+    r = you.act("check", params={"skill": "juggling"})
+    assert r["result"]["mod"] == 5 and "untrained" not in r["result"]
 
 
 def test_attack_needs_a_standing_foe_here_and_not_yourself():
@@ -648,3 +655,30 @@ def test_tend_gets_the_down_up_and_medicine_heals_anyone_hurt():
     gm.spawn("medicine", "Reeve Ansel Varrick", "More salve", state={"doses": 2})
     you.act("tend", "Reeve Ansel Varrick")  # yourself, with medicine
     assert state(gm, "Reeve Ansel Varrick")["vigor"] == 5
+
+
+def test_a_secret_side_is_not_given_away_and_a_loan_is_not_a_gift():
+    eng, gm, you = reach()
+    me = gm.inspect("Reeve Ansel Varrick")["id"]
+    here = gm.inspect(me)["parent"]
+    dreyer = [f for f in gm.find(type="faction") if f["name"] == "House Dreyer"][0]["id"]
+    seen = lambda: {e["target"]: e["data"]["value"] for e in gm.world.edges(me, "standing", "out")}.get(dreyer, 0)
+    unseen = lambda: (state(gm, "House Dreyer").get("unseen") or {}).get(me, 0)
+    before = seen()
+    gm.spawn("fighter", here, "Drifter", state={"faction": "House Dreyer", "secret": ["faction"]})
+    gm.spawn("thing", me, "Blank leaf", state={"portable": True})
+    # a gift to one who hides their side: the faction counts it, the giver is told nothing about whose it is
+    r = you.act("give", "Drifter", {"item": "Blank leaf"})
+    assert not any(e["kind"] == "standing" for e in r["events"]) and "House Dreyer" not in str(r)
+    assert seen() == before and unseen() == 1
+    assert {"unseen", "lent"} <= set(gm.world.get(dreyer)["state"]["secret"])  # no body reads them on its card
+    # handed straight back: a loan, not a gift
+    gm.act_as("Drifter", "give", "Reeve Ansel Varrick", {"item": "Blank leaf"})
+    assert seen() == before and unseen() == 0
+    # the same with one who wears the side openly: the giver reads it both ways
+    gm.spawn("fighter", here, "Sworn man", state={"faction": "House Dreyer"})
+    r = you.act("give", "Sworn man", {"item": "Blank leaf"})
+    assert [e["payload"]["delta"] for e in r["events"] if e["kind"] == "standing"] == [1] and seen() == before + 1
+    r = gm.act_as("Sworn man", "give", "Reeve Ansel Varrick", {"item": "Blank leaf"})
+    back = [e["payload"] for e in r["events"] if e["kind"] == "standing" and e["target"] == me]
+    assert back and back[0]["delta"] == -1 and back[0]["why"].startswith("lent") and seen() == before

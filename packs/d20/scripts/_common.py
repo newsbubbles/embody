@@ -177,18 +177,42 @@ def faction_of(ctx, who):
             return f
     return None
 
-def standing(ctx, who, faction):
+def seen_standing(ctx, who, faction):
+    # what the person can read: their out-edge to the faction
     for e in ctx.edges(who, "standing", "out"):
         if e["target"] == faction.id:
             return int(e["data"].get("value") or 0)
     return 0
 
-def shift_standing(ctx, who, faction, delta, why):
-    # an out-edge from the person, so they can read where they stand; hostility is kept on the faction
-    value = standing(ctx, who, faction) + delta
-    ctx.unlink(who, faction, "standing")
-    ctx.link(who, faction, "standing", {"value": value, "public": True})
-    ctx.emit("standing", target=who, reach=0, faction=faction.name, value=value, delta=delta, why=why)
+def standing(ctx, who, faction):
+    # where the person stands: what they can read, plus what the faction keeps to itself (`unseen`)
+    return seen_standing(ctx, who, faction) + int((faction.state.unseen or {}).get(who.id) or 0)
+
+def keep_secret(ctx, thing, changes):
+    # patch keys on a thing and list them in its `secret`, so no body reads them on its card
+    secret = list(thing.state.secret or [])
+    for k in changes:
+        if k not in secret:
+            secret.append(k)
+    changes = dict(changes)
+    changes["secret"] = secret
+    ctx.patch(thing, changes)
+
+def shift_standing(ctx, who, faction, delta, why, quiet=False):
+    # an out-edge from the person, so they can read where they stand; hostility is kept on the faction.
+    # quiet: the deed was done to someone who keeps their faction secret. The faction still counts it, in its own
+    # secret `unseen`, and the person's edge and feed name no side they cannot know.
+    seen = seen_standing(ctx, who, faction)
+    unseen = dict(faction.state.unseen or {})
+    if quiet:
+        unseen[who.id] = int(unseen.get(who.id) or 0) + delta
+        keep_secret(ctx, faction, {"unseen": unseen})
+    else:
+        seen = seen + delta
+        ctx.unlink(who, faction, "standing")
+        ctx.link(who, faction, "standing", {"value": seen, "public": True})
+        ctx.emit("standing", target=who, reach=0, faction=faction.name, value=seen, delta=delta, why=why)
+    value = seen + int(unseen.get(who.id) or 0)
     hostile = dict(faction.state.hostile or {})
     if value <= -4 and not hostile.get(who.id):
         hostile[who.id] = True

@@ -6,6 +6,8 @@ The version in `pyproject.toml` is 0.1.0 until the first release; until then ent
 
 ## Unreleased
 
+- d20 factions keep a secret side secret. A gift, blow, threat or terms to someone whose `secret` lists `faction` still moves the doer's standing, but the faction keeps it in its own secret `unseen`: no `standing` event, no edge naming the side (before, "a gift to X" told the giver X's hidden allegiance). A gift handed back to its giver is a loan and takes its 1 back.
+- d20 `check` with a skill neither the pack nor the body knows ("faith") still rolls on wits, and now says so: the result carries `untrained` and a `note` listing the skills there are, so a player does not take it for a real skill.
 - A refused act is logged for the hosts: an `act_refused` event on the body (verb, target, the target as typed, trimmed params, the reason and hint), reach 0, silent to listeners, never in another body's feed or the body's own, never news. Owners, authors and observers read it with `history(kinds=["act_refused"])`: the friction players meet, which no one saw before. An identical retry is logged once; world meta `refused_per_hour` caps it per body (default 20, 0 turns it off).
 - A hidden place's way (`hidden: true`) shows in perceive's exits and affordances only to a body its `known_to` names, by id or faction, string or list (`World.knows_way`); before, every body saw the exit to a secret place.
 - `define_script` expands `use("x")` lines the way the loader does (the world's scripts, then the packs' include files), so a script file defines live as it builds; a script that does not parse is refused with the reason and line, not a bare tool error.

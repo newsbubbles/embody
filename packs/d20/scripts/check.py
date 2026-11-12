@@ -8,8 +8,17 @@ def apply(ctx):
     mod = bonus(ctx.actor, skill)
     total = roll + mod
     ok = total >= dc
+    # a skill nobody here has heard of is still a roll, an untrained one on wits, and the result says so plainly
+    untrained = bool(skill) and skill not in SKILLS and skill not in (ctx.actor.state.skills or {})
+    note = None
+    if untrained:
+        note = "no skill '" + skill + "' here: an untrained roll on wits (skills: " + ", ".join(sorted(SKILLS)) + ")"
     here = ctx.actor.parent
     ctx.emit("checked", target=ctx.actor, reach=1, by=ctx.actor.id, place=here.id if here is not None else None,
-             skill=skill, roll=roll, mod=mod, total=total, dc=dc, success=ok, margin=total - dc)
-    ctx.log(skill + ": d20 " + str(roll) + " + " + str(mod) + " = " + str(total) + " vs " + str(dc) + (" pass" if ok else " fail"))
-    return {"roll": roll, "mod": mod, "total": total, "dc": dc, "success": ok}
+             skill=skill, roll=roll, mod=mod, total=total, dc=dc, success=ok, margin=total - dc, untrained=untrained)
+    ctx.log(skill + ": d20 " + str(roll) + " + " + str(mod) + " = " + str(total) + " vs " + str(dc) + (" pass" if ok else " fail") + (" (" + note + ")" if note else ""))
+    out = {"roll": roll, "mod": mod, "total": total, "dc": dc, "success": ok}
+    if note:
+        out["untrained"] = True
+        out["note"] = note
+    return out
