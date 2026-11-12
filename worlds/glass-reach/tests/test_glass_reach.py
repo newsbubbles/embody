@@ -184,6 +184,13 @@ def test_ossa_trades_a_full_skin_for_emberglass_and_nothing_for_trinkets():
     assert gm.inspect("Ossa the Carrier")["state"]["ember_bought"] == 1
     r = you.act("give", "Ossa the Carrier", {"item": "Waterskin"})
     assert any("Keep your trinkets" in (e["payload"].get("text") or "") for e in r["events"] if e["kind"] == "say")
+    # with a mind in her seat the table keeps quiet about gifts: the mind answers (2026-11-12, skins taken as shards)
+    ossa = eng.session("ossa")
+    ossa.join("glass-reach", "Ossa the Carrier")
+    gm.spawn("waterskin", me, "Second skin", state={"left": 0})
+    r = you.act("give", "Ossa the Carrier", {"item": "Second skin"})
+    assert not any("Keep your trinkets" in (e["payload"].get("text") or "") for e in r["events"] if e["kind"] == "say")
+    ossa.leave()
     # and her tongue loosens about Dram once she has taken glass
     r = you.act("talk", "Ossa the Carrier", {"about": "Hollis"})
     assert any("no clerk of mine" in (e["payload"].get("text") or "") for e in r["events"] if e["kind"] == "say")

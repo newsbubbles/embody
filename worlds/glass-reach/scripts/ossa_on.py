@@ -18,5 +18,7 @@ def on(ctx, event):
         ctx.say(("Fair glass. A full skin, and no questions where you dug it." if n == 1 else
                  "Fair glass. " + str(n) + " full skins, a shard each, and no questions where you dug it."), to=buyer.id)
         ctx.emit("traded", target=buyer, reach=1, by=ctx.self.id, got="Guild waterskin", gave="Emberglass")
-    else:
+    elif not ctx.embodied(ctx.self):
+        # a mind in her seat answers a gift itself (a skin taken as a shard on a line, 2026-11-12); the table only
+        # speaks for her when nobody does
         ctx.say("I take glass, friend. Keep your trinkets.", to=buyer.id)
