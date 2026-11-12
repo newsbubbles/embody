@@ -1198,6 +1198,65 @@ def test_the_wall_works_raise_a_course_and_the_moon_counts_it():
     assert st["reckoning"]["wall"] == standing + bows + 1  # the course stands as a man
 
 
+
+def test_the_mason_chalks_a_kiln_that_burns_stone_and_brake_thorn_into_lime():
+    eng, gm = hosted()
+    chapter_one_done(gm)
+    gm.patch(gm.inspect("Story")["id"], {"dreyer_came": True, "guild_came": True})
+    to_next(gm, "dawn")
+    yard = gm.inspect("The Gate Yard")["id"]
+    load_world(gm, "glass-reach", upgrade=True)  # the chalk is the mason's: it comes once he is in the yard
+    load_world(gm, "glass-reach", upgrade=True)
+    assert [e["name"] for e in gm.find(name="The kiln chalk")] == ["The kiln chalk"]
+    assert gm.inspect("The kiln chalk")["parent"] == yard
+    assert "Tessel" in gm.world.get(gm.inspect("Jory Flint")["id"])["state"]["dialog"]["lime|kiln|burn|thorn|glassthorn|brake"]
+    ruhl = eng.session("ruhl")
+    ruhl.join("glass-reach", "Captain Ruhl")
+    gm.move("Captain Ruhl", yard)
+    ruhl.act("build", "The kiln chalk")
+    works = gm.find(type="project")[0]["id"]
+    for _ in range(2):
+        gm.spawn("thing", works, "Dressed stone", state={"kind": "dressed stone", "portable": True, "bulk": 2})
+    gm.spawn("thing", works, "Emberglass", state={"kind": "ember", "portable": True})
+    ruhl.act("hire", works, {"who": "Jory Flint", "role": "mason"})
+    hold = gm.inspect("Scar Gate, the Hold")["id"]
+    hand = [e["id"] for e in gm.find(type="fighter", parent=hold) + gm.find(type="person", parent=hold)
+            if gm.world.get(e["id"])["state"].get("faction") == "House Varrick"
+            and not gm.world.embodied(e["id"]) and e["name"] not in ("Captain Ruhl", "Reeve Ansel Varrick")][0]
+    ruhl.act("assign", works, {"who": hand, "role": "hand"})
+    for _ in range(6 * 5):
+        gm.clock(step=600)
+    kiln = gm.inspect("The lime kiln")
+    assert kiln["parent"] == yard and kiln["type"] == "kiln"
+    me = newcomer(eng, gm, "guard", "Bram")
+    for c in gm.inspect("Bram")["contents"]:
+        gm.move(c["id"], yard)
+    with pytest.raises(Rejected) as ex:
+        gm.move("Bram", yard)
+        me.act("fire", "The lime kiln")
+    assert "glassthorn" in str(ex.value) or "Scar stone" in str(ex.value)
+    gm.move("Bram", "The Thornbrake")
+    for _ in range(2):
+        me.act("cut", "Glassthorn stand")
+        gm.clock(step=1801)
+    assert len([c for c in gm.inspect("Bram")["contents"] if c["name"] == "Glassthorn bundle"]) == 2
+    gm.move("Bram", yard)
+    gm.spawn("thing", gm.inspect("Bram")["id"], "Dressed stone", state={"kind": "dressed stone", "portable": True, "bulk": 2})
+    me.act("fire", "The lime kiln")
+    gm.clock(step=601)
+    assert gm.inspect("The lime kiln")["state"]["burning_until"] is not None
+    assert not [c for c in gm.inspect("Bram")["contents"] if c["name"] in ("Glassthorn bundle", "Dressed stone")]
+    with pytest.raises(Rejected) as ex:
+        me.act("draw", "The lime kiln")
+    assert "still burning" in str(ex.value)
+    gm.clock(step=21600)
+    gm.move("Bram", yard)
+    me.act("draw", "The lime kiln")
+    gm.clock(step=61)
+    sack = [c for c in gm.inspect("Bram")["contents"] if c["name"] == "Sack of lime"]
+    assert len(sack) == 1 and gm.inspect(sack[0]["id"])["state"]["kind"] == "lime"
+
+
 def test_the_notice_by_the_cistern_was_the_hosts_and_a_flask_on_the_ridge_says_so():
     eng, gm = hosted()
     flask = gm.inspect("A Crown flask")

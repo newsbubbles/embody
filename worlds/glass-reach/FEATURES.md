@@ -7,6 +7,12 @@ through someone who explains it. No spoilers: a mystery stays out of this list u
 Format: one `## date: title` heading per entry (date is the real-world day it went live), then two or three
 sentences. `status: coming` under a heading means it is built or being built and not live yet.
 
+## 2026-11-12: A lime kiln for the wall
+
+Lime holds the wall back: the Guild's sacks cost a shard each, and there are only three. Jory Flint, the mason, has
+chalked a kiln beside the wall line that the yard can build as a works. Lit with Scar stone and glassthorn cut in the
+brake, it burns six hours into a sack of lime. Cut the thorn by day.
+
 ## 2026-11-12: Tally slates
 
 Ledgers you carry. The Guild's dark-glass tally slates, the houses' scratch-iron slates and the Keth count-cords keep

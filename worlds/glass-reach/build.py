@@ -374,6 +374,15 @@ def define(s):
                     state={"portable": False, "stone": 0},
                     actions={"dress": {"script": "dress", "doc": "Square a block out of the pile (half an hour, loud); "
                                                                  "the wall works take dressed stone", "duration": 1800}})
+    s.define_schema("kiln", extends="thing", doc="A lime kiln: Scar stone and glassthorn in, lime out (scripts/kiln.py).",
+                    state={"portable": False, "burning_until": None},
+                    actions={"fire": {"script": "kiln", "doc": "Lay a dressed stone and two bundles of glassthorn you carry into "
+                                                               "the kiln and light it; it burns six hours", "duration": 600},
+                             "draw": {"script": "kiln", "doc": "Rake out the sack of lime when the burn is done", "duration": 60}})
+    s.define_schema("thornstand", extends="thing", doc="A stand of glassthorn. Cut a bundle for the kiln (half an hour).",
+                    state={"portable": False, "bundles": 0},
+                    actions={"cut": {"script": "cut_thorn", "doc": "Cut a bundle of glassthorn (half an hour; it burns "
+                                                                    "white-hot, and the lime kiln wants two a burn)", "duration": 1800}})
     s.define_schema("speaker", extends="thing", doc="A Guild speaker: a slab of dark glass that, woken with ember, stands up a "
                     "hologram in its sister slabs anywhere in the Reach (scripts/speaker.py).",
                     state={"portable": True, "line": "", "contacts": [], "inbox": [], "charge": 0, "sent": 0, "primed": [],
@@ -1263,6 +1272,59 @@ def keep_works(s, names):
                 remembers=list(MASON_REMEMBERS))
     s.patch(story, {"mason_sent": True})
 
+
+
+# The lime kiln (Nate 2026-11-12: the Guild's three sacks are the only lime in the Reach, and lime is what holds the
+# wall back; a kiln, built as a works, makes it from the Reach's own stone). Jory Flint chalks it beside the wall line:
+# two dressed stones, a mason and a hand. Lit with a dressed stone and two bundles of glassthorn, it burns six hours
+# into a sack of lime. Glassthorn is cut in the Thornbrake by day (the thornbacks have it at night), and Jory's word
+# about the brake is the way to Tessel's steading and the dew still in its cupboard. Patrons: the Hold, and the Guild
+# wright who has been asking after lime.
+KILN_PLAN = {
+    "portable": False, "patrons": ["House Varrick", "Binx"], "hours": None,
+    "description": "Beside the wall line, a squat round kiln chalked on the flags in a mason's quick hand: a stoke-hole at "
+                   "its foot and two stones marked for its footing.",
+    "text": "Jory's chalk: a kiln of two dressed stones on the old footing, a mason to set it and a hand to fetch. Burn "
+            "Scar stone in it hot, with glassthorn from the brake, two bundles a stone, six hours, and rake out a sack "
+            "of lime. No shard to the Guild, if you have the hands and the nerve for the thorn.",
+    "begun_scene": "The kiln works begin: the chalk circle is swept, the footing stones set, and Jory squints at the wind.",
+    "stages": [{"name": "the kiln", "labour": 6, "needs": {"Dressed stone": 2}, "roles": {"mason": 1, "hand": 1},
+                "scene": "Jory sets the last stone of the kiln's throat and slaps it. 'She'll draw. Stone and thorn.'"}],
+    "becomes": {"type": "kiln", "name": "The lime kiln",
+                "state": {"portable": False, "description": "A squat round kiln of dressed Scar stone beside the wall "
+                          "line, a stoke-hole at its foot. Scar stone and glassthorn go in; lime comes out."},
+                "scene": "The lime kiln stands beside the wall line, squat and round, its throat waiting for stone and "
+                         "thorn. The works come down."},
+}
+KILN_SCENE = ("Jory Flint crouches beside the wall line with his chalk and draws a squat round kiln on the flags. 'Guild "
+              "lime's a shard a sack,' he says to nobody in particular. 'Or it's Scar stone burned hot.'")
+KILN_KNOW = ("Jory Flint chalked a lime kiln beside the wall line in the Gate Yard: two dressed stones to build, then Scar "
+             "stone burned six hours with glassthorn from the brake makes a sack of lime, no shard to the Guild.")
+THORNSTAND = {"portable": False, "bundles": 10,
+              "description": "A stand of old glassthorn at the brake's edge, its spines glazed to glass by the blown "
+                             "sand. Cut, it burns white-hot."}
+JORY_KILN = ("'Lime's a shard a sack off the Guild, or it's Scar stone burned hot. I chalked you a kiln by the wall line: "
+             "two dressed stones and an afternoon. Glassthorn burns hottest: cut two bundles a stone in the brake, through "
+             "the postern, and by day, because the thornbacks have it at night. There's an old farm in the thick of it, "
+             "Tessel's. A man who farmed out here knew some trick for water. Six hours in the fire, and rake it out.'")
+JORY_KILN_REMEMBERS = ("I chalked a lime kiln beside the wall line in the Gate Yard so the Hold need not buy every sack "
+                       "from the Guild: Scar stone and glassthorn from the brake. Ossa's Guild once carried seed to an old "
+                       "farmer in that brake, Tessel, who knew some trick for water.")
+
+
+def keep_kiln(s, names):
+    """Jory's kiln chalk beside the wall line once he is in the Gate Yard, his word on lime, kilns and the brake, and the
+    glassthorn stand in the Thornbrake. Each by name, once."""
+    yard, jory, brake = names.get("The Gate Yard"), names.get(MASON_NAME), names.get("The Thornbrake")
+    if brake and "Glassthorn stand" not in names:
+        s.introduce("thornstand", brake, "Glassthorn stand", how="always_there", state=dict(THORNSTAND), known_by={})
+    if yard is None or jory is None or "The kiln chalk" in names:
+        return
+    know = [n for n in ("Captain Ruhl", "Reeve Ansel Varrick", "Binx") if n in names]
+    s.introduce("blueprint", yard, "The kiln chalk", how="built", by=jory, state=dict(KILN_PLAN), scene=KILN_SCENE,
+                known_by={n: KILN_KNOW for n in know})
+    s.patch(jory, {"dialog": {"lime|kiln|burn|thorn|glassthorn|brake": JORY_KILN}})
+    s.remember(JORY_KILN_REMEMBERS, entity=jory)
 
 # Who nailed the notice by the cistern (Nate 2026-11-11: explained in the world, and discoverable). The Host: the Crown's
 # sworn water-wardens, who ride the Reach by night under the closed-eye seal (the seal on the back gate) and keep the
@@ -2320,6 +2382,7 @@ def keep_canon(s):
     keep_pointers(s, names_of(s))
     keep_riders(s, names_of(s))
     keep_wild(s, names_of(s))
+    keep_kiln(s, names_of(s))  # after the brake, for its glassthorn
     keep_lockpicks(s, names_of(s))
     keep_stacks(s)
     keep_corins_file(s, names_of(s))
