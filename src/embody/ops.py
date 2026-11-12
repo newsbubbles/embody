@@ -24,7 +24,8 @@ from .grants import (HOST_MARK, LINK_HOURS, link_for, request_origin, new_code, 
 from . import layout as geo
 from .script import Script, ScriptError
 from .store import Store
-from .world import LIMITS_HEAD, Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
+from . import access as acl
+from .world import ALWAYS_SECRET, LIMITS_HEAD, Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
 from .workspace import Workspace, restore_world, save_world
 
 AUTHOR = "author"
@@ -40,7 +41,7 @@ _SAY_WINDOW = 60.0
 # State keys only the entity itself (its mind) and authors ever see.
 # State keys nobody but the host reads: a mind's memory, its brief and goals, and the host's plan for the world
 # (`policy` on the root). The `secret` list on an entity adds its own.
-_ALWAYS_SECRET = frozenset({"memory", "brief", "goals", "policy"})
+_ALWAYS_SECRET = ALWAYS_SECRET
 # Of a template on the root, what a newcomer may read: enough to pick one. The brief and the state are the host's.
 _TEMPLATE_PUBLIC = ("type", "place", "doc")
 # Relations whose edge data is world structure, readable by anyone who sees the edge.
@@ -312,12 +313,92 @@ class Session:
         raise Rejected(f"this op needs the {cap!r} capability; you have {self.capabilities or 'none'}",
                        hint="connect with --as author to build worlds; embodied principals act through act()")
 
+    def _staff(self) -> bool:
+        """The owner and author roles pass every access check on the authoring ops (docs/ACCESS.md)."""
+        return self.role in (OWNER, AUTHOR_ROLE)
+
+    def _subjects(self) -> set[str]:
+        """Who this principal is to an access check: its id, and the body it holds."""
+        p = self.world.principal(self.pid) if self.world_id else None
+        return {self.pid} | ({p["entity_id"]} if p and p.get("entity_id") else set())
+
+    def _access_allows(self, eid: str, bit: str) -> bool | None:
+        """The entity's access for this principal (r, w or x), or None when it has none."""
+        w = self.world
+        acc = acl.of(w.get(eid))
+        return None if acc is None else acl.allows(acc, self._subjects(), w.get(w.root_id), bit)
+
+    def _plot(self) -> set[str] | None:
+        """The ids a limited grant reads in full: its `under` and all below. None for a grant with no `under`."""
+        under = self.limits.get("under")
+        if not under:
+            return None
+        return set(self.world.subtree_ids(under)) if self.world.get(under) else set()
+
+    def _sees(self, eid: str, plot: set[str] | None = None) -> bool:
+        """A privileged reader reads this entity in full: everywhere without limits, else inside its plot or where
+        the entity's access gives it r."""
+        if not self.limits.get("under"):
+            return True
+        if eid in (plot if plot is not None else (self._plot() or set())):
+            return True
+        return bool(self._access_allows(eid, "r"))
+
+    def _readable(self, e: dict[str, Any]) -> bool:
+        """Another body reads this thing's state and contents unless its access keeps r from them."""
+        acc = acl.of(e)
+        return acc is None or acl.allows(acc, self._subjects(), self.world.get(self.world.root_id), "r")
+
+    def _access_hold(self, op: str, args: dict[str, Any]) -> None:
+        """Access on the authoring ops, for every role but owner and author: a write on a thing with access needs its
+        w (as a parent too: spawn into it, move into it); chmod and chown need its owner. Access itself changes only
+        through chmod and chown, and what such a principal spawns is its own."""
+        w = self.world
+
+        def need_w(*refs: Any, any_: bool = False) -> None:
+            res = []
+            for r in refs:
+                if r is None:
+                    continue
+                eid = self._resolve(r)
+                ids = w.subtree_ids(eid) if op == "destroy" else [eid]
+                res.append(all(self._access_allows(i, "w") is not False for i in ids))
+            if res and not (any(res) if any_ else all(res)):
+                raise Rejected("its access keeps that from you (no w)", hint="ask its owner to chmod it, or to chown it to you")
+
+        if op in ("patch", "spawn", "introduce") and acl.KEY in ((args.get("changes") if op == "patch" else args.get("state")) or {}):
+            raise Rejected("access changes through chmod and chown", hint=acl.HINT)
+        if op in ("chmod", "chown"):
+            eid = self._resolve(args["entity"])
+            acc = acl.of(w.get(eid)) or {}
+            if acc.get("owner"):
+                if str(acc["owner"]) not in self._subjects():
+                    raise Rejected(f"{w.need(eid)['name'] or eid} is not yours to {op}", hint="its owner, or the world's owner, can")
+            elif not (self.limits.get("under") and w.within(eid, self.limits["under"])):
+                raise Rejected(f"{w.need(eid)['name'] or eid} has no owner; only the world's owner or author gives it one",
+                               hint="a builder may claim what is in its own plot")
+            return
+        if op in ("patch", "rename", "destroy", "act_as", "say_as", "set_rule", "clear_rule"):
+            need_w(args["entity"])
+        elif op in ("remember", "intend", "schedule"):
+            need_w(args.get("entity"))
+        elif op in ("spawn", "introduce"):
+            need_w(args["parent"])
+            args["state"] = {**(args.get("state") or {}), acl.KEY: {"owner": self.pid, "mode": acl.DEFAULT_MODE}}
+        elif op == "move":
+            need_w(args["entity"])
+            need_w(args["parent"])
+        elif op in ("link", "unlink"):
+            need_w(args["source"], args["target"], any_=True)
+        elif op == "connect":
+            need_w(args["a"], args["b"], any_=True)
+
     def _hold(self, op: str, args: dict[str, Any]) -> None:
         """Canon and limits, before a write runs. Canon: an entity whose state says `canon` is the owner's; no other
         role patches, moves or destroys it, and only the owner sets or lifts the mark. Limits (a grant's `under`,
         `types`, `scripts`): the write lands inside them, and a script it defines carries them in its first line."""
         w = self.world
-        ent = args.get("entity") if op in ("patch", "rename", "move", "destroy") else None
+        ent = args.get("entity") if op in ("patch", "rename", "move", "destroy", "chmod", "chown") else None
         if ent is not None:
             eid = self._resolve(ent)
             hit = [x for x in (w.subtree_ids(eid) if op == "destroy" else [eid]) if (w.get(x) or {}).get("state", {}).get("canon")]
@@ -325,6 +406,8 @@ class Session:
                 raise Rejected(f"{w.need(hit[0])['name']} is canon: the owner's to change", hint="build beside it, or ask the owner")
         if "canon" in ((args.get("changes") if op == "patch" else args.get("state") if op in ("spawn", "introduce") else None) or {}):
             raise Rejected("canon is the owner's mark", hint="only the world's owner sets or lifts canon")
+        if not self._staff():
+            self._access_hold(op, args)
         lim = self.limits
         if not lim:
             return
@@ -332,7 +415,9 @@ class Session:
         where = w.need(under)["name"] if under and w.get(under) else "nowhere"
 
         def need(*refs: Any, any_: bool = False) -> None:
-            ok = [r is not None and (not under or w.within(self._resolve(r), under)) for r in refs]
+            # a thing with access is decided by its w (checked in _access_hold); without it, by the plot
+            ok = [r is not None and (not under or w.within(self._resolve(r), under)
+                                     or bool(self._access_allows(self._resolve(r), "w"))) for r in refs]
             if not (any(ok) if any_ else all(ok)):
                 raise Rejected(f"your grant reaches only under {where}", hint=f"work inside it: find(under='{where}')")
 
@@ -875,6 +960,8 @@ class Session:
             if not self._privileged():
                 raise Rejected("perceiving from another entity needs the author, narrator or observer role")
             me = self._resolve(from_entity)
+            if not self._sees(me):
+                raise Rejected("your grant reads only its own part of the world", hint="perceive from someone under it")
             p = None
         else:
             me = self._me()
@@ -1258,6 +1345,8 @@ class Session:
         return out[:30]
 
     def _visible_state(self, e: dict[str, Any], full: bool = False) -> dict[str, Any]:
+        if not full and acl.KEY in e["state"] and not self._readable(e):
+            return {}
         secret = set(e["state"].get("secret", [])) | _ALWAYS_SECRET
         out = {}
         for k, v in e["state"].items():
@@ -1286,6 +1375,8 @@ class Session:
         if e["state"].get("asleep"):
             card["asleep"] = True  # it hears only what is loud or done to it, and wakes to a hand or a noise
         kids = w.children(e["id"])
+        if not full and acl.KEY in e["state"] and not self._readable(e):
+            kids = []
         if w.locked_by(e["id"]) is not None:
             card["locked"] = True
             if e["state"].get("holds") is not None and not full:
@@ -1350,9 +1441,10 @@ class Session:
         w = self.world
         eid = self._resolve(entity)
         e = w.need(eid)
-        full = self._privileged()
+        priv = self._privileged()
+        full = priv and self._sees(eid)  # a limited grant reads its own plot in full, the rest as anyone would
         me = None
-        if not full:
+        if not priv:
             me = self._me()
             ok, why = w.reachable(me, eid)
             if not ok and eid not in w.ancestors(me):
@@ -1362,13 +1454,16 @@ class Session:
         card["schema_chain"] = [s["id"] for s in w.schema_chain(e["type"])]
         card["doc"] = w.schema(e["type"])["doc"]
         card["contents"] = [self._card(c) for c in w.children(eid) if full or not c["state"].get("hidden")]
+        if not full and not self._readable(e):
+            card["contents"] = []  # its access keeps r from you: what it is, not what is in it
         rels = self._relations(eid)
         own = full or eid == me or eid in self.scope
         if not own:
             # whom someone knows, what they think of them and what passed between them is theirs: another body sees
             # the groups held in the open or that it is part of, and whether it has met them
             rels = [r for r in rels if _seen_relation(r, me)]
-            card["met"] = any(x["target"] == eid for x in w.edges(me, "knows", "out"))
+            if me:
+                card["met"] = any(x["target"] == eid for x in w.edges(me, "knows", "out"))
         card["relations"] = rels
         card["actions"] = {v: {"doc": a.get("doc", ""), "targets": a.get("targets"), "params": a.get("params", {})}
                            for v, a in w.schema_actions(e["type"]).items() if full or not a.get("hidden")}
@@ -1398,7 +1493,8 @@ class Session:
             under = under or scope
         rows = w.find(type=type, name=name, under=self._resolve(under) if under else None,
                       parent=self._resolve(parent) if parent else None, state=state, limit=None)
-        rows = [r for r in rows if self._privileged() or not r["state"].get("hidden")]
+        plot = self._plot()
+        rows = [r for r in rows if not r["state"].get("hidden") or (self._privileged() and self._sees(r["id"], plot))]
         return [self._card(r) for r in rows[offset:offset + limit]]
 
     def history(self, since: int = 0, until: int | None = None, kinds: list[str] | None = None,
@@ -1907,6 +2003,8 @@ class Session:
                 raise Rejected("recalling from another entity needs the author or observer capability",
                                hint="recall() works from the entity you embody")
             me = self._resolve(entity)
+            if not self._sees(me):
+                raise Rejected("your grant reads only its own part of the world", hint="recall someone under it")
         else:
             me = self._me()
         limit = max(1, min(int(limit), 100))
@@ -1948,7 +2046,7 @@ class Session:
         notes = [n for n in (ent["state"].get("memory") or []) if name and name in str(n.get("text", "")).lower()]
         goals = [g for g in (ent["state"].get("goals") or [])
                  if name and (name in str(g.get("text", "")).lower() or name in str(g.get("why") or "").lower())]
-        return {"entity": me, "about": self._card(o, full=full), "edges": mine, "groups": shared,
+        return {"entity": me, "about": self._card(o, full=full and self._sees(o["id"])), "edges": mine, "groups": shared,
                 "exchanges": [{"t": x["t"], "who": x["actor"], "kind": x["kind"],
                                "text": x["payload"].get("text") or x["payload"].get("about")}
                               for x in w.exchanges(me, them, limit=min(limit, 10))],
@@ -2094,7 +2192,7 @@ class Session:
                     e = w.get(self._resolve(name))
                 except Rejected:
                     return {}
-                return json.loads(json.dumps(self._visible_state(e, full=True), default=str)) if e else {}
+                return json.loads(json.dumps(self._visible_state(e, full=self._sees(e["id"])), default=str)) if e else {}
             return {}
 
         view = {k: v for k, v in data.items() if k != "cards"}
@@ -2228,6 +2326,37 @@ class Session:
         out = self._card(self.world.need(eid), full=True)
         out["was"] = old
         return out
+
+    def chmod(self, entity: str, mode: str, verb: str | None = None) -> dict[str, Any]:
+        """Set who may read (r), change (w) and use (x) a thing: mode rwxr-x---, octal 750, or symbolic g+w, o-rwx
+        (comma separated), for its owner, its group and everyone else. With verb=..., mode names the classes that
+        may do that one verb to it (u, ug, a, "" for nobody; "default" drops the rule). A thing with no owner gets
+        you as its owner when you are not the world's owner or author (docs/ACCESS.md)."""
+        self._need(AUTHOR)
+        eid = self._resolve(entity)
+        self._record("chmod", entity=entity, mode=mode, verb=verb)
+        claim = self.pid if not self._staff() and not (acl.of(self.world.get(eid)) or {}).get("owner") else None
+        acc = self.world.set_access(eid, mode=mode, verb=verb, owner=claim, actor=self._actor_or_none())
+        return {"ok": True, "entity": eid, "access": acc}
+
+    def chown(self, entity: str, owner: str | None = None, group: str | None = None) -> dict[str, Any]:
+        """Give a thing to an owner (an entity, or a principal id from grants() or seats()) and/or set its group
+        ("" clears it). Group members are listed on the root under access_groups: {"masons": [ids]}."""
+        self._need(AUTHOR)
+        eid = self._resolve(entity)
+        who = None
+        if owner is not None:
+            try:
+                who = self._resolve(owner)
+            except Rejected:
+                w = self.world
+                known = w.principal(owner) or w.store.query("grants", "world_id=? AND principal_id=?", (w.id, owner), limit=1)
+                if not known and owner != self.pid:
+                    raise Rejected(f"no entity or principal {owner!r}", hint="an entity id or name, or a principal id") from None
+                who = owner
+        self._record("chown", entity=entity, owner=owner, group=group)
+        acc = self.world.set_access(eid, owner=who, group=group, actor=self._actor_or_none())
+        return {"ok": True, "entity": eid, "access": acc}
 
     def move(self, entity: str, parent: str, pos: list[float] | None = None) -> dict[str, Any]:
         self._need(AUTHOR)
@@ -2442,6 +2571,7 @@ OPS = [
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
     "measure", "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
+    "chmod", "chown",
 ]
 
 
@@ -2471,7 +2601,7 @@ def allowed_ops(role: str) -> frozenset[str]:
 # Ops that write where canon and a grant's limits are checked before they run (Session._hold).
 _HELD = frozenset({"spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "schedule", "layout",
                    "unschedule", "act_as", "say_as", "remember", "intend", "set_rule", "clear_rule", "define_script",
-                   "define_schema", "clock", "create_world", "fork_world", "save", "restore", "mirror"})
+                   "define_schema", "clock", "create_world", "fork_world", "save", "restore", "mirror", "chmod", "chown"})
 
 
 def _guard(name: str, fn: Callable[..., Any]) -> Callable[..., Any]:

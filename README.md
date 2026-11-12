@@ -86,6 +86,7 @@ CHANGELOG.md says what changed in the engine, by date. ROADMAP.md tracks what ex
 - `worlds/` your own worlds, the workspace's folder (git ignores it, all but `glass-reach/`, the hosted world)
 - `packs/` shared verbs and rules a world `requires` (`village/`, `d20/`, `locks/`, `works/`, `vehicles/`, `ledgers/`)
 - `docs/SCRIPTING.md` the scripting reference (also the `guide()` tool)
+- `docs/ACCESS.md` owners, groups and modes on things (`chmod`, `chown`), and what a limited grant reads
 - `DESIGN.md` the design, authoritative
 - `tests/` run with `uv run pytest -q` (the worlds' and packs' own tests run with it)
 

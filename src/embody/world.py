@@ -14,6 +14,7 @@ from typing import Any, Iterable
 
 from .script import Script, ScriptError, ScriptObject
 from .store import Store
+from . import access as acl
 
 ROOT_TYPE = "world"
 BASE_TYPE = "entity"
@@ -56,6 +57,8 @@ class StateView(ScriptObject):
         if name == "keys":
             return self.keys
         ent = self._w.get(self._id)
+        if name in _sealed(self._w, ent):
+            return None  # a limited grant's script reads secrets of its own plot only
         return ent["state"].get(name)
 
     def _script_set(self, name: str, value: Any) -> None:
@@ -64,13 +67,28 @@ class StateView(ScriptObject):
             ctx._hold(self._id)
             if name == "canon":
                 raise Rejected("canon is the owner's mark", hint="only the world's owner marks or lifts canon")
+            if name in (acl.KEY, acl.GROUPS):
+                raise Rejected("access changes through ctx.chmod and ctx.chown", hint=acl.HINT)
         self._w.patch(self._id, {name: value})
 
     def get(self, key: str, default: Any = None) -> Any:
-        return self._w.get(self._id)["state"].get(key, default)
+        ent = self._w.get(self._id)
+        return default if key in _sealed(self._w, ent) else ent["state"].get(key, default)
 
     def keys(self) -> list[str]:
-        return list(self._w.get(self._id)["state"].keys())
+        ent = self._w.get(self._id)
+        sealed = _sealed(self._w, ent)
+        return [k for k in ent["state"].keys() if k not in sealed]
+
+
+def _sealed(world: "World", ent: dict[str, Any] | None) -> set[str]:
+    """The secret keys the running script may not read on this entity: a script defined under a grant's limits reads
+    secrets only under its `under` (memory, brief and the entity's own `secret` list)."""
+    ctx = world._running[-1] if world._running else None
+    under = (ctx._limits or {}).get("under") if ctx is not None else None
+    if not under or ent is None or world.within(ent["id"], under):
+        return set()
+    return set(ent["state"].get("secret") or []) | ALWAYS_SECRET
 
 
 class EntityView(ScriptObject):
@@ -214,7 +232,7 @@ class Ctx(ScriptObject):
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
         "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "embodied", "event_at", "locked", "remember",
-        "count", "split", "merge", "transfer", "bulk", "load",
+        "count", "split", "merge", "transfer", "bulk", "load", "may", "member", "chmod", "chown", "rename",
     )
 
     def __init__(self, world: "World", *, actor: str | None, target: str | None, owner: str | None,
@@ -298,6 +316,8 @@ class Ctx(ScriptObject):
              state: dict[str, Any] | None = None, limit: int = 50) -> list[EntityView]:
         rows = self._w.find(type=type, under=_ev(self._w, under), parent=_ev(self._w, parent), name=name,
                             state=state, limit=limit)
+        if state and self._limits:
+            rows = [r for r in rows if not set(state) & _sealed(self._w, r)]  # no probing secrets outside its plot
         return [EntityView(self._w, r["id"]) for r in rows]
 
     def children(self, id: Any, type: str | None = None) -> list[EntityView]:
@@ -338,6 +358,33 @@ class Ctx(ScriptObject):
             return None  # a limited grant's script reads the log of its own plot only
         return _event_view(rows[0])
 
+    def may(self, who: Any, what: str, thing: Any) -> bool:
+        """May `who` (a body) do `what` to `thing`: "r", "w", "x" or a verb name, by the thing's access. A thing with
+        no access lets everyone (docs/ACCESS.md)."""
+        return self._w.may(_ev(self._w, who), str(what), _ev(self._w, thing))
+
+    def member(self, who: Any, group: str) -> bool:
+        """Is `who` (a body, or the principal holding it) in the group (`access_groups` on the root)."""
+        return bool(self._w.subjects(_ev(self._w, who)) & set(acl.members(self._w.get(self._w.root_id), group)))
+
+    def rename(self, id: Any, name: str) -> str:
+        """Give a thing a new name (a written leaf, a sworn guard); refused when someone else already has it. The
+        room hears `renamed`. Returns the old name."""
+        self._hold(id)
+        return self._w.rename(_ev(self._w, id), name, actor=self._actor, caused_by=self._caused_by)
+
+    def chmod(self, thing: Any, mode: Any, verb: str | None = None) -> dict[str, Any]:
+        """Set a thing's mode (rwxr-x---, 750, g+w), or with `verb` the classes that may do that verb to it."""
+        self._hold(thing)
+        return self._w.set_access(_ev(self._w, thing), mode=mode, verb=verb, actor=self._actor,
+                                  caused_by=self._caused_by)
+
+    def chown(self, thing: Any, owner: Any = None, group: str | None = None) -> dict[str, Any]:
+        """Give a thing to an owner (a body, or a principal id) and/or set its group ("" clears it)."""
+        self._hold(thing)
+        return self._w.set_access(_ev(self._w, thing), owner=_ev(self._w, owner), group=group, actor=self._actor,
+                                  caused_by=self._caused_by)
+
     def locked(self, id: Any) -> EntityView | None:
         """What keeps a box, a door or a place shut (its own `locked`, or a lock attached to it), or None."""
         e = self._w.locked_by(_ev(self._w, id))
@@ -350,6 +397,8 @@ class Ctx(ScriptObject):
         self._hold(id)
         if self._limits and "canon" in ch:
             raise Rejected("canon is the owner's mark", hint="only the world's owner marks or lifts canon")
+        if self._limits and (acl.KEY in ch or acl.GROUPS in ch):
+            raise Rejected("access changes through ctx.chmod and ctx.chown", hint=acl.HINT)
         self._w.patch(_ev(self._w, id), ch, actor=self._actor, caused_by=self._caused_by)
 
     def spawn(self, type: str, parent: Any, name: str = "", state: dict[str, Any] | None = None,
@@ -360,6 +409,8 @@ class Ctx(ScriptObject):
             raise Rejected(f"this script may not spawn a {type}", hint="spawn a type its grant's limits list")
         if lim and "canon" in (state or {}):
             raise Rejected("canon is the owner's mark", hint="only the world's owner marks or lifts canon")
+        if lim and acl.KEY in (state or {}):
+            raise Rejected("access changes through ctx.chmod and ctx.chown", hint=acl.HINT)
         eid = self._w.spawn(type, _ev(self._w, parent), name=name, state=state, pos=pos,
                             actor=self._actor, caused_by=self._caused_by)
         return EntityView(self._w, eid)
@@ -725,6 +776,35 @@ class World:
     def within(self, id: str, under: str) -> bool:
         """id is under (or is) the entity `under`."""
         return id == under or under in self.ancestors(id)
+
+    def subjects(self, entity_id: str | None) -> set[str]:
+        """Who a body is to an access check: itself and the principal that holds it."""
+        if not entity_id:
+            return set()
+        p = self.embodied(entity_id)
+        return {entity_id, p["id"]} if p else {entity_id}
+
+    def may(self, who: str | None, what: str, thing: str) -> bool:
+        """May the body `who` do `what` ("r", "w", "x" or a verb) to `thing`, by its access (docs/ACCESS.md)."""
+        e = self.get(thing)
+        acc = acl.of(e)
+        if acc is None:
+            return True
+        root = self.get(self.root_id)
+        if what in ("r", "w", "x"):
+            return acl.allows(acc, self.subjects(who), root, what)
+        own = self.schema_actions(e["type"]).get(what)
+        return acl.may_verb(acc, self.subjects(who), root, what, own=bool(own) and own.get("targets") is None)
+
+    def set_access(self, id: str, *, mode: Any = None, verb: str | None = None, owner: Any = None,
+                   group: str | None = None, actor: str | None = None, caused_by: int | None = None) -> dict[str, Any]:
+        """chmod and chown: the thing's access after the change, written whole."""
+        try:
+            acc = acl.changed(acl.of(self.need(id)), mode=mode, verb=verb, owner=owner, group=group)
+        except acl.AccessError as x:
+            raise Rejected(str(x), hint=acl.HINT) from None
+        self.patch(id, {acl.KEY: acc}, actor=actor, caused_by=caused_by, replace=True)
+        return acc
 
     def may_spawn(self, type: str, limits: dict[str, Any]) -> bool:
         """What a limited grant may make: any type when its limits list none, else one that is_a a listed type, or
@@ -1451,6 +1531,12 @@ class World:
                                    hint="move closer first")
         elif target_id and reach == "self" and target_id != actor_id:
             raise Rejected(f"{verb} can only target yourself")
+        acc = acl.of(self.get(target_id)) if target_id and target_id != actor_id else None
+        if acc is not None and not acl.may_verb(acc, self.subjects(actor_id), self.get(self.root_id), verb,
+                                                own=owner == target_id):
+            name = self.need(target_id)["name"] or target_id
+            raise Rejected(f"{name} does not answer {verb} from you: that is for {acl.who_may(acc, verb, owner == target_id)}",
+                           hint="its owner can chmod or chown it; or find another way")
         s = self.script(adef["script"])
         if not s.has("apply"):
             raise Rejected(f"script {adef['script']!r} has no apply(ctx)", hint="actions need def apply(ctx)")
@@ -2067,6 +2153,8 @@ _SILENT_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "sc
                            "tick", "script_error", "finished", "opinion", "remembered", "intended", "merged"})
 # Events only the entity they target (its mind) and authors ever see.
 _PRIVATE_KINDS = frozenset({"remembered", "intended"})
+# State keys no other body reads, whatever the entity's own `secret` list says.
+ALWAYS_SECRET = frozenset({"memory", "brief", "goals", "policy"})
 # Events hidden from the public stream (perceive, act results). Primitive mutations stay in the log.
 _INTERNAL_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "scheduled", "unscheduled", "tick"})
 

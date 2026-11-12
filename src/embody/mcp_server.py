@@ -511,6 +511,21 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
+    def chmod(entity: str, mode: str, verb: str | None = None) -> dict[str, Any]:
+        """(author) Who may read (r), change (w) and use (x) a thing, for its owner, its group and everyone else:
+        mode rwxr-x---, octal 750, or symbolic g+w, o-rwx. With verb=..., mode names the classes that may do that
+        verb to it (u, ug, a, "" for nobody, "default" drops the rule). See docs/ACCESS.md."""
+        return s.chmod(entity, mode, verb=verb)
+
+    @tool()
+    @_wrap
+    def chown(entity: str, owner: str | None = None, group: str | None = None) -> dict[str, Any]:
+        """(author) Give a thing to an owner (an entity, or a principal id) and/or set its group ("" clears it).
+        Group members are listed on the root under access_groups: {"masons": [ids]}."""
+        return s.chown(entity, owner=owner, group=group)
+
+    @tool()
+    @_wrap
     def move(entity: str, parent: str, pos: list[float] | None = None) -> dict[str, Any]:
         """(author) Reparent an entity (teleport, hand over, put inside)."""
         return s.move(entity, parent, pos=pos)
