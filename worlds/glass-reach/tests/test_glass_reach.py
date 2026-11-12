@@ -1639,3 +1639,51 @@ def test_a_keeper_gives_its_key_only_to_whom_it_is_for_and_passes_word_once_and_
     gm.act_as(wright, "read", book)
     mem = [m["text"] for m in gm.inspect(wright)["state"]["memory"]]
     assert mem.count("I read A kept book. Words that stay.") == 1
+
+
+def test_a_witness_says_more_to_proof_a_keepers_book_matches_hands_and_a_charge_opens_a_hidden_way_to_the_accuser():
+    eng, gm, you = reach()
+    yard = gm.find(name="The Guild Yard")[0]["id"]
+    for sid in ("testimony", "keepers_compare", "keepers_charge"):
+        gm.define_script(sid, (REPO / "worlds/glass-reach/scripts" / f"{sid}.py").read_text(encoding="utf-8"))
+    story = gm.find(type="story")[0]["id"]
+    gm.patch(story, {"test_matched": []})
+    asker = gm.spawn("person", yard, "The asker")["id"]
+    culprit = gm.spawn("person", yard, "The culprit")["id"]
+    vault = gm.spawn("place", gm.summary()["root"], "A sealed vault", state={"hidden": True, "known_to": []})["id"]
+    w = gm.spawn("person", yard, "A witness", state={"dialog": {"night": ""}, "testimony": [
+        {"topics": "night", "line": "You found it, then.", "private": True, "needs": {"holds": ["A token"]},
+         "then": {"reveal": vault, "reveal_from": yard, "remember": "The witness showed me the vault."}},
+        {"topics": "night", "line": "I saw nothing."}]})["id"]
+    gm.set_rule(w, "testimony", kinds=["talked"])
+    said = lambda r: [e["payload"]["text"] for e in r["events"] if e["kind"] in ("say", "scene")]  # noqa: E731
+    assert said(gm.act_as(asker, "talk", w, {"about": "that night"})) == ["I saw nothing."]
+    assert not any("vault" in str(x) for x in you.perceive().get("exits", []))  # no way named before it is shown
+    gm.spawn("thing", asker, "A token", state={"portable": True})
+    r = gm.act_as(asker, "talk", w, {"about": "that night"})
+    assert said(r) == ["You found it, then."] and all(e["payload"].get("reach", 0) == 0 for e in r["events"] if e["kind"] == "scene")
+    assert gm.inspect(vault)["state"]["known_to"] == [asker]
+    assert "The witness showed me the vault." in str(gm.inspect(asker)["state"]["memory"])
+    with pytest.raises(Rejected, match="do not know the way"):
+        gm.act_as("Garran Teague", "go", vault)
+    gm.act_as(asker, "go", vault)
+    gm.act_as(asker, "go", yard)
+    paper = gm.spawn("letter", yard, "A notice", state={"text": "Pay up.", "hands": [culprit]})["id"]
+    gm.spawn("letter", yard, "A tally", state={"text": "Oil 1.", "hands": [culprit]})
+    gm.spawn("letter", yard, "A count", state={"text": "Forty.", "hands": [asker]})
+    book = gm.spawn("keepers_book", asker, "A test book", state={
+        "match_marks": [{"paper": paper, "hand": culprit, "mark": "test_matched"}], "charge_at": [yard],
+        "charges": {culprit: {"needs": {"marks": ["test_matched"]}, "proved": {"scene": "{by} names {who}.", "patch": {"held": True}},
+                              "unproved": {"scene": "No proof."}}},
+        "otherwise": {"scene": "{who} laughs.", "mark": "test_wrong"}})["id"]
+    assert "two hands" in gm.act_as(asker, "compare", book, {"a": "A notice", "b": "A count"})["result"]
+    assert gm.find(type="story")[0]["state"]["test_matched"] == []
+    assert gm.act_as(asker, "charge", book, {"who": "The culprit"})["result"]["way"] == "unproved"
+    assert "one hand" in gm.act_as(asker, "compare", book, {"a": "A notice", "b": "A tally"})["result"]
+    assert gm.find(type="story")[0]["state"]["test_matched"] == [asker]
+    assert gm.act_as(asker, "charge", book, {"who": "Garran Teague"})["result"]["way"] == "otherwise"
+    r = gm.act_as(asker, "charge", book, {"who": "The culprit"})
+    assert r["result"] == {"charged": "The culprit", "way": "proved", "heard": "The asker names The culprit."}
+    assert gm.inspect(culprit)["state"]["held"] is True
+    with pytest.raises(Rejected, match="cannot charge yourself"):
+        gm.act_as(asker, "charge", book, {"who": "The asker"})

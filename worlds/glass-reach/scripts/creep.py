@@ -1,3 +1,10 @@
+def knows_way(ctx, place):
+    # a hidden place is known to a faction (the Keth's well), or to a list of the ones who were shown it
+    kt = place.state.known_to
+    if isinstance(kt, list):
+        return ctx.actor.id in kt or ctx.actor.state.faction in kt
+    return kt is not None and kt == ctx.actor.state.faction
+
 def shut(ctx, x):
     # a door or a place a lock keeps shut (the locks pack), with the way to open it
     lk = ctx.locked(x)
@@ -16,7 +23,7 @@ def check(ctx):
         return str(ctx.actor.state.pinned_by or "the weather") + " has you pinned: nobody walks in it; wait it out" + left
     for e in ctx.edges(here, "connects_to", "out"):
         if e["target"] == ctx.target.id:
-            if ctx.target.state.hidden and ctx.target.state.known_to != ctx.actor.state.faction:
+            if ctx.target.state.hidden and not knows_way(ctx, ctx.target):
                 return "you do not know the way"
             via = e["data"].get("via")
             if via and shut(ctx, ctx.get(via)):

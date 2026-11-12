@@ -395,6 +395,7 @@ def define(s):
                     },
                     listeners=[{"script": "speaker", "kinds": ["taken", "slab_handed"]}])
     keep_slate_schemas(s)
+    keep_keeper_book_schema(s)
     s.define_schema("beast", extends="creature", doc="An animal of the Reach: the d20 blows land on it and it strikes back; it does not drink, talk or carry.",
                     state={"beast": True, "body": 2, "wits": 1, "will": 1, "skills": {}, "vigor": 6, "max_vigor": 6})
     s.define_schema("nest", extends="thing", doc="A swarm's nest. Everyone in its place loses a point of vigor a minute, to one, until it is smoked.",
@@ -2197,6 +2198,23 @@ def keep_slate_schemas(s):
                                    + "; nothing hidden",
                             "params": {"ledger": "the ledger to write the count into (default scans)"}}
         s.define_schema(kind, extends="ledger", doc=spec["doc"], state=dict(spec["state"]), actions=acts)
+
+
+# The Keeper's book (Nate 2026-11-12, an inquiry for the Hold's Keeper of the Count): a clerk's book with a reading glass.
+# `compare` lays two papers under the glass and says whether one hand wrote both (scripts/keepers_compare.py); `charge`
+# names, before the Hold, who did a thing (scripts/keepers_charge.py). Who did what, and what follows a charge, is on
+# the book's state and set live: none of it is here.
+def keep_keeper_book_schema(s):
+    s.define_schema("keepers_book", extends="thing",
+                    doc="A Keeper's book: a Crown clerk's book with a reading glass on a cord. Compare two papers' hands "
+                        "under the glass; lay a charge before the Hold.",
+                    state={"portable": True},
+                    actions={"compare": {"script": "keepers_compare", "duration": 60,
+                                         "doc": "Lay two papers under the glass: one hand wrote both, or two",
+                                         "params": {"a": "a paper you hold or that lies here", "b": "another"}},
+                             "charge": {"script": "keepers_charge", "duration": 30,
+                                        "doc": "Name before the Hold who did it, aloud; what follows is the Hold's",
+                                        "params": {"who": "the one you charge, by name"}}})
 
 
 def keep_tally_slates(s, names):

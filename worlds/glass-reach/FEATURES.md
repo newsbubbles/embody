@@ -7,8 +7,7 @@ through someone who explains it. No spoilers: a mystery stays out of this list u
 Format: one `## date: title` heading per entry (date is the real-world day it went live), then two or three
 sentences. `status: coming` under a heading means it is built or being built and not live yet.
 
-## 2026-11-13: Tally slates
-status: coming
+## 2026-11-12: Tally slates
 
 Ledgers you carry. The Guild's dark-glass tally slates, the houses' scratch-iron slates and the Keth count-cords keep
 their holder's accounts: water, men, stone, shards. A slate notes what you give, take and hire on its own; you can

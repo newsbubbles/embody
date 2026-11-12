@@ -66,7 +66,7 @@ def books(ctx, st):
         for c in ctx.children(ctx.get(pid)):
             cs = c.state
             if cs.faction == "House Varrick" and not cs.dead and not cs.down:
-                if cs.turncoat:
+                if cs.turncoat and cs.bought_by:  # a man the house paid; a hand it keeps unpaid stays hidden
                     bought.append(c.name)
                 else:
                     men.append(c.name)
