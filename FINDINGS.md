@@ -141,3 +141,16 @@ the gap). Hosted worlds step in small increments, so it never showed there.
 
 **Taught.** Anything that accrues per tick (labour, thirst) must be tested the way a running clock passes time, in
 small steps, or it reads wrong.
+
+## 2026-11-12: Full hands, and a refusal nobody else could see
+
+**Seen.** Binx found hauler fourteen's log at the Crawler's Lee and spent a night reading it, rolling checks on it
+and telling Ossa he was handing it over. It never left the ground. Ossa, Marr, Wick and the host all told him to
+take it.
+
+**Why.** His hands were full: a skin (2), a knife, a hammer, three shards and a key make 8 of his carry of 8, and a
+letter weighed 1. A take was refused with "your hands are full", but refusals are not in the event log, so the host
+reading the history saw only checks and reads and could not tell that he had tried.
+
+**Taught.** Paper weighs nothing now (the Reach's letter schema, bulk 0). A refused act should leave a trace the
+host can read, or the host diagnoses a guest by guesswork.
