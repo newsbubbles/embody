@@ -1201,7 +1201,7 @@ WALL_PLAN = {
     "begun_scene": "The wall works begin: the chalk line is scraped clean, the old footing swept, a lime trough set "
                    "down by the broken stretch.",
     "stages": [course(1, "first"), course(2, "second"), course(3, "third")],
-    "becomes": {"type": "thing", "name": "The raised wall",
+    "becomes": {"type": "thing", "name": "The raised wall", "works_name": "Works on the raised wall",
                 "state": {"portable": False, "wall_men": 3,
                           "description": "The broken stretch of the yard wall, raised again in three courses of new stone, "
                                          "pale against the old. The riders will count it."},
@@ -1291,7 +1291,7 @@ KILN_PLAN = {
     "stages": [{"name": "kiln", "labour": 6, "needs": {"Dressed stone": 2}, "roles": {"mason": 1, "hand": 1},
                 "scene": "The last stone goes into the kiln's throat. Jory, watching, slaps the warm side of it: 'She'll "
                          "draw. Stone and thorn.'"}],
-    "becomes": {"type": "kiln", "name": "The lime kiln",
+    "becomes": {"type": "kiln", "name": "The lime kiln", "works_name": "Works on the lime kiln",
                 "state": {"portable": False, "description": "A squat round kiln of dressed Scar stone beside the wall "
                           "line, a stoke-hole at its foot. Scar stone and glassthorn go in; lime comes out."},
                 "scene": "The lime kiln stands beside the wall line, squat and round, its throat waiting for stone and "
