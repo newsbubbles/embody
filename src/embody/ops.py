@@ -2446,11 +2446,13 @@ OPS = [
 # What a chronicle leaves out of its beats: the bookkeeping of building and moving. Travel is told on its own.
 # A day's upkeep: what bodies do every beat. Counted under routine, never news.
 _CHRONICLE_ROUTINE = frozenset({"mended", "sweated", "drank", "filled", "thirsty", "parched", "quenched", "merged",
-                                "opinion", "woke", "slept", "embodied", "released", "reclaimed", "finished"})
+                                "opinion", "woke", "slept", "embodied", "released", "reclaimed", "finished",
+                                "passing", "approaching", "repairing", "refuelled"})
 # The kinds that are news wherever they happen (a world adds its own with `chronicle_news` in its meta).
 _NEWS_KINDS = frozenset({"found", "downed", "killed", "outlawed", "yielded", "truce_broken", "dishonor", "lock_broken",
                          "lock_picked", "lifted", "caught", "renamed", "destroyed", "burned", "works_done", "stage_done",
-                         "challenged", "agreed", "spoiled", "wounded", "rose", "searched"})
+                         "challenged", "agreed", "spoiled", "wounded", "rose", "searched", "stopped",
+                         "broke_down", "struck"})
 _CHRONICLE_QUIET = frozenset({"spawned", "patched", "linked", "unlinked", "related", "unrelated", "laid_out", "moved",
                               "left", "chronicled", "scene", "say", "unscheduled"})
 
