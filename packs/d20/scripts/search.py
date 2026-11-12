@@ -6,14 +6,15 @@ def room(ctx, who):
     return float(who.state.carry) - ctx.load(who)
 
 def fitting(ctx, it, free):
-    # how many of it fit in the hands: all of it, as many of a stack as fit, or none
+    # how many of it fit in the hands: all of it, as many of a stack as fit, or none. What weighs nothing always fits,
+    # even in hands already over their carry
     have = ctx.count(it)
-    if free is None or ctx.bulk(it) <= free:
+    if free is None or ctx.bulk(it) <= max(free, 0):
         return have
     each = ctx.bulk(it) / have
     if it.state.count is None or each <= 0:
         return 0
-    return min(have, int(free / each))
+    return min(have, int(max(free, 0) / each))
 
 def check(ctx):
     if ctx.target.parent.id != ctx.actor.parent.id:

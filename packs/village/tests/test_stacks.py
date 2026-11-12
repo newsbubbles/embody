@@ -158,3 +158,19 @@ def test_unlike_things_do_not_join(yard):
     for c in [c for c in ada.perceive()["present"] if c["name"] == "Emberglass"]:
         ada.act("take", c["id"])
     assert sorted(n for _, n in glass(eng, "Ada")) == [5, 60]
+
+
+def test_what_weighs_nothing_fits_in_hands_already_over_their_carry(yard):
+    eng, gm, ada, bel = yard
+    # a world script left Ada at 6 of her 5; a letter still goes into her hands, taken or given
+    gm.spawn("thing", gm.inspect("Ada")["id"], "Stone", state={"portable": True, "bulk": 6})
+    gm.spawn("thing", gm.inspect("Yard")["id"], "Leaf", state={"portable": True, "bulk": 0})
+    gm.spawn("thing", gm.inspect("Bel")["id"], "Letter", state={"portable": True, "bulk": 0})
+    ada.act("take", "Leaf")
+    bel.act("give", "Ada", params={"item": "Letter"})
+    held = {c["name"] for c in ada.perceive()["holding"]}
+    assert {"Stone", "Leaf", "Letter"} <= held
+    # what weighs something is still refused
+    with pytest.raises(Rejected) as r:
+        bel.act("give", "Ada", params={"item": "Emberglass", "count": 1})
+    assert "hands are full" in r.value.reason

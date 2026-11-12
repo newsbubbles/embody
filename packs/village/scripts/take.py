@@ -17,7 +17,7 @@ def check(ctx):
     if n is not None and (n < 1 or n > have):
         return "there are " + str(have) + " of " + ctx.target.name + ": take 1 to " + str(have) + ", or leave count out for all of it"
     weight = ctx.bulk(ctx.target) * (n if n is not None else have) / have
-    if ctx.actor.state.carry and ctx.load(ctx.actor) + weight > float(ctx.actor.state.carry):
+    if ctx.actor.state.carry and weight > 0 and ctx.load(ctx.actor) + weight > float(ctx.actor.state.carry):
         return "your hands are full (" + str(ctx.load(ctx.actor)) + " of " + str(ctx.actor.state.carry) + "): drop, put or give something first, or take fewer"
     return True
 

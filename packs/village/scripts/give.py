@@ -21,7 +21,9 @@ def check(ctx):
     have = ctx.count(it)
     if n < 1 or n > have:
         return "you hold " + str(have) + " of " + it.name + ": give 1 to " + str(have) + ", or leave count out for all of it"
-    if ctx.target.state.carry and ctx.load(ctx.target) + ctx.bulk(it) * n / have > float(ctx.target.state.carry):
+    # what weighs nothing (a letter) always fits, even in hands already over their carry
+    weight = ctx.bulk(it) * n / have
+    if ctx.target.state.carry and weight > 0 and ctx.load(ctx.target) + weight > float(ctx.target.state.carry):
         return "their hands are full: they cannot take it until they put something down"
     return True
 

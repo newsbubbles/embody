@@ -124,7 +124,7 @@ def test_the_hosted_world_loads_by_id_the_samples_by_path_and_the_legacy_single_
     assert "glass-reach" in [w["id"] for w in ws.list_worlds()]
     samples = sorted(d.name for d in (REPO / "examples").iterdir() if (d / "build.py").exists())
     assert samples == ["ferry-at-dusk", "two-rooms"]
-    assert ws.list_packs() == ["d20", "locks", "village", "works"]
+    assert {"d20", "locks", "village", "works"} <= set(ws.list_packs())  # beside any private pack the owner keeps
     with pytest.raises(Rejected, match="already exists"):
         load_world(gm, "glass-reach")
 
