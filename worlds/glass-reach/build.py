@@ -168,7 +168,9 @@ BRIEFING = (
     "The rules are on the table (d20 plus stat plus skill against a difficulty; a ward stops the fast blade and the slow one "
     "passes it; the ring in the yard holds by old law). The Reach keeps things hidden: where something looks off, a "
     "check with search, survival or lore may turn it up. You carry what your hands hold (a skin counts two). The Guild's "
-    "wardens keep a post on the Salt Road and take their toll on glass. The engine rolls; you decide; your agent tells it.")
+    "wardens keep a post on the Salt Road and take their toll on glass. Ask perceive for the layout and it gives where you "
+    "stand and how far, and which way, each way out lies; the hall map in the Hold shows the rest as the Hold believes it. "
+    "The engine rolls; you decide; your agent tells it.")
 
 # What a newcomer carries in (the template's kit): a skin of their own and an edge. No house marks on a Dreyer man's.
 KNIFE = {"weapon": True, "damage": 1, "bonus": 0, "portable": True, "description": "A plain short knife, the edge kept."}
@@ -412,12 +414,18 @@ def populate(s):
     s.patch(root, {"policy": POLICY, "ambient": AMBIENT, "briefing": BRIEFING, "templates": TEMPLATES})
 
     hold = s.spawn("place", root, "Scar Gate, the Hold", state={
-        "description": "A squat stone hold wedged into the only gap in the Scar. A cracked cistern under the floor, a hall "
-                       "with a map nobody trusts, and the gate yard beyond the inner door."})["id"]
+        "description": "A squat stone hold wedged into the only gap in the Scar, the wall of rock that shuts off the west. "
+                       "A cracked cistern under the floor, a hall with a map nobody trusts, and the gate yard beyond the "
+                       "inner door. The Salt Road begins at the yard gate: the Hold is its south end, and no road goes on "
+                       "west through the Scar."})["id"]
     yard = s.spawn("place", root, "The Gate Yard", state={"ring": True,
-        "description": "Packed sand inside the gate, a ring scratched in it by old law. Guards drill in the shade of the wall."})["id"]
+        "description": "Packed sand inside the gate, a ring scratched in it by old law. Guards drill in the shade of the wall. "
+                       "The yard gate opens north onto the Salt Road; the inner door leads back into the Hold."})["id"]
     road = s.spawn("place", root, "The Salt Road", state={"open": True,
-        "description": "The one road out, white with salt, running north between the Scar and the glass. Convoy ruts, a dead crawler, wind."})["id"]
+        "description": "The one road out, white with salt. It starts at the Hold's yard gate, its south end, and runs north "
+                       "between the Scar and the glass: the Carriers' Landing lies most of an hour up it and the old salt "
+                       "pans beyond that, and the Glass Flats open east of it a short way past the gate. Convoy ruts, a "
+                       "dead crawler, wind."})["id"]
     flats = s.spawn("place", root, "The Glass Flats", state={"open": True, "deep_sand": True, "tremor": 0,
         "description": "Black glass underfoot, red dunes walking across it. Veins of dull red where the dunes have pulled back. Every step rings."})["id"]
     ridge = s.spawn("place", root, "Red Ridge", state={
@@ -1090,7 +1098,11 @@ BOOKS = [
 ]
 HALL_MAP = {"portable": False,
             "description": "A big map on hide, nailed up in the hall. Nobody trusts it.",
-            "text": "The Reach is drawn well: the road, the Landing, the ridge, the Flats. West of the Scar the ink has "
+            "text": "The Reach is drawn well, with walking times inked along the lines in a clerk's hand. The Hold sits at "
+                    "the bottom, in the gap of the Scar. The Salt Road runs straight north from its yard gate: the Landing "
+                    "most of an hour up it, the salt pans past that. East of the road the Glass Flats spread wide; Red "
+                    "Ridge stands an hour and more across them, north by east, and the Bone Field lies south-east over "
+                    "the glass. South of the Bone Field the hide is blank. West of the Scar the ink has "
                     "been scraped away down to bare hide, carefully, all of it. At the scraped edge, where the gap would "
                     "come out, a few strokes were missed: the end of one word, '...ashe', and part of a line that might "
                     "be a river."}
