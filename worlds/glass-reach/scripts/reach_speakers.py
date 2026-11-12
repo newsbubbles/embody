@@ -28,6 +28,8 @@ QUIST_TALK = {
         "a brown thumbprint from there.'",
     "speaker|slab|hologram|call": "'The slabs are sisters, cut from one crystal on the High Landing. The ember is what "
         "makes them speak; the crystal is why they can hear each other.'",
+    "ear|seam|metal|wrist|inlaid|implant|chrome": "She touches the seam behind her ear, once. 'The reckoning halls cut "
+        "deeper than ink.' She says no more about it.",
 }
 SENN_TALK = {
     "speaker|slab|hologram|call|message": "'A Guild speaker. Wake it with a shard and it puts your face and your words "
@@ -51,7 +53,8 @@ SENN = {"faction": "the Carriers", "factor": True, "body": 2, "wits": 4, "will":
                  "who is given one: what they are, how they work, what they cost. Never take a side aloud."}
 QUIST = {"faction": "the Carriers", "reckoner": True, "body": 2, "wits": 5, "will": 5, "vigor": 6, "max_vigor": 6,
          "water": 10, "max_water": 10, "carry": 6,
-         "description": "A small woman with a shaved head and Guild tally marks inked in a ring around one wrist, sitting "
+         "description": "A small woman with a shaved head, a seam of dull metal behind her left ear, and Guild tally "
+                        "marks inlaid in a ring around one wrist, sitting "
                         "very still, as if listening to numbers nobody else can hear.",
          "default_line": "Reckoner Quist opens her eyes. 'A shard, and a question.'",
          "secret": ["dialog", "gives", "gave", "word_left", "brief"],
