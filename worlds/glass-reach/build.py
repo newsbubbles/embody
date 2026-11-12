@@ -354,7 +354,8 @@ def define(s):
                     behaviors=[{"script": "fighter_tick", "every": 6}])
     s.define_schema("carrier", extends="person", doc="Trades glass for water.",
                     listeners=[{"script": "ossa_on", "kinds": ["given"]}])
-    s.define_schema("letter", extends="thing", doc="Something with writing on it.", state={"text": "", "portable": True},
+    s.define_schema("letter", extends="thing", doc="Something with writing on it. Paper rides in a pocket: no bulk.",
+                    state={"text": "", "portable": True, "bulk": 0},
                     actions={"read": {"script": "read", "doc": "Read what is written"}})
     s.define_schema("ward", extends="thing", doc="A belt ward. On, it hardens against anything fast.",
                     state={"portable": True, "ward": True, "on": True,
@@ -2067,6 +2068,14 @@ def keep_high_landing(s, names):
     s.patch(story, {"high_landing_lore": True})
 
 
+def keep_paper(s):
+    """Letters, logs and notes weigh nothing in the hands (a full-handed wright could not take hauler fourteen's log,
+    2026-11-12): letters made before the schema said so get bulk 0 once."""
+    for e in s.world.find(type="letter", limit=None):
+        if e["state"].get("bulk") is None:
+            s.patch(e["id"], {"bulk": 0})
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -2121,6 +2130,7 @@ def keep_canon(s):
     keep_stacks(s)
     keep_corins_file(s, names_of(s))
     keep_high_landing(s, names_of(s))
+    keep_paper(s)
     keep_carry(s)
     if st.get("garrison"):
         return

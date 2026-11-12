@@ -999,6 +999,11 @@ def test_hands_hold_what_they_hold():
     with pytest.raises(Rejected) as ex:
         me.act("take", pot)
     assert "hands are full" in str(ex.value)
+    # paper is not a load: full hands still take a letter (Binx and hauler fourteen's log, 2026-11-12)
+    gm.spawn("letter", gm.inspect("Enzo")["parent"], name="Loose page", state={"text": "x"})
+    me.act("take", "Loose page")
+    assert "Loose page" in {c["name"] for c in gm.inspect("Enzo")["contents"]}
+    assert all(e["state"].get("bulk") == 0 for e in gm.find(type="letter", limit=100))  # the old ones too
 
 
 def test_each_dawn_the_hold_hears_how_the_moon_leans():
