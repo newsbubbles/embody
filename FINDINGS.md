@@ -184,3 +184,16 @@ its first turn, as a player looking for leverage would.
 is the fastest audit of a world's rules: give a faction a director and it walks straight into whatever the rules
 let it do. The rule now strains only on a Hold man's dig (a bought man in a Varrick coat included), and any other
 dig is a grudge the Keth keep against the digger's side.
+
+## 2026-11-12: A player stood next to his quest for days and did not know he had one
+
+**Seen:** Corin's player said he did not know what to do. He was standing at the Deepwell beside Elder Taan, whose
+council has offered Keth bows on the wall for proof of Dreyer's hand since chapter two began. Two proofs still lay
+hidden, and Ruhl had a file of three men set aside for him.
+
+**Why:** every hook was there but indirect. The offer was on a posted notice, the pointers were in minds' memories,
+and the file waited for Corin to talk to Ruhl first. Nothing turned to him by name and said "this is yours".
+
+**Taught:** a hook is not an offer. When a player goes idle, a mind who holds a hook for them should put it to them
+directly, by name, with where to go and what it changes. The night check should look for idle players as well as
+idle minds.
