@@ -16,7 +16,6 @@ search its records, and total them with averages and spreads. What is on it is f
 sees only that you checked it. Guild slates can count a room at a glance and send word through the Counting House.
 
 ## 2026-11-12: Hauler Nine drives the road
-status: coming
 
 The Guild's crawler is a real vehicle now. Climb aboard in the Guild Yard, and whoever holds the wheel drives it
 down the Salt Road, past the stops, with everyone aboard riding along. Hear it coming before you see it.
