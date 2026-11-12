@@ -51,7 +51,7 @@ WORLD = {
     "name": "The Glass Reach",
     "seed": 23,
     "description": "A desert fief, a cracked cistern, a people with the water, a blade left behind. Rules on the table.",
-    "requires": ["d20", "village", "works", "locks"],
+    "requires": ["d20", "village", "works", "locks", "vehicles"],
 }
 
 # ---- what there is ---------------------------------------------------------------------
@@ -336,8 +336,6 @@ def define(s):
                         "follow": {"script": "follow", "doc": "Go where they go, until you stay", "targets": "creature", "scope": "here"},
                         "stay": {"script": "stay", "doc": "Stop following"},
                         "watch": {"script": "watch", "doc": "Look into the next place without stepping in: who and what is there now", "targets": "place", "scope": "exits", "duration": 5},
-                        "drive": {"script": "guild_drive", "doc": "Drive a hauler you stand in to another stop on the road: params {\"to\": a stop's name}; the wheel says which stops",
-                                  "targets": "thing", "scope": "here", "duration": 900, "params": {"to": "the stop to drive to"}},
                         "spoil": {"script": "spoil", "doc": "Spoil water you stand by: cut a tank's seams or foul it with salt and sand (two minutes; quiet if your hand is steady, heard if not)",
                                   "targets": "thing", "scope": "here", "duration": 120},
                         "free": {"script": "free", "doc": "Cut loose someone here who is tied (a minute at the knots; heard if you fumble)",
@@ -621,7 +619,6 @@ PLACES = [
     {"entity": "The Guild Yard", "at": [520, 3500, 0], "size": [120, 80], "note": "the Guild's walled yard east of the Landing"},
     {"entity": "The Yard Bunkhouse", "at": [565, 3555, 0], "size": [24, 10], "note": "along the yard's north wall"},
     {"entity": "The Counting House", "at": [565, 3445, 0], "size": [12, 10], "note": "brick, one door, on the yard's south side"},
-    {"entity": "Hauler Nine", "at": [480, 3530, 0], "size": [14, 5, 4], "note": "a Guild crawler; it moves along the road"},
     {"entity": "The yard tank", "at": [520, 3500, 0], "radius": 2},
     {"entity": "The Guild strongbox", "at": [565, 3445, 0], "size": [1.5, 1, 1]},
     {"entity": "The Thornbrake", "at": [420, -1150, 0], "radius": 320, "note": "glassthorn and barrel cactus in the Scar's lee, south of the Hold"},
@@ -647,7 +644,6 @@ ROUTES = [
     {"a": "The Carriers' Landing", "b": "The Guild Yard", "route": [[450, 3500], [460, 3500]]},
     {"a": "The Guild Yard", "b": "The Yard Bunkhouse", "route": [[540, 3530], [560, 3550]]},
     {"a": "The Guild Yard", "b": "The Counting House", "route": [[540, 3470], [560, 3450]]},
-    {"a": "The Guild Yard", "b": "Hauler Nine", "route": [[500, 3515], [480, 3530]]},
     {"a": "The Gate Yard", "b": "The Thornbrake", "route": [[40, -15], [60, -300], [420, -1150]]},
     {"a": "The Thornbrake", "b": "Tessel's Steading", "route": [[440, -1200], [465, -1255]]},
     {"a": "Tessel's Steading", "b": "The root cellar", "route": [[470, -1260, 0], [472, -1262, -3]]},
@@ -1348,6 +1344,13 @@ HAULER_NAME = "Hauler Nine"
 HAULER = ("The cab and bed of a Guild crawler: eight broad wheels of woven steel, a canvas hood over the bed, casks "
           "lashed down, and a wheel at the front worn bright by hands. It smells of pitch and hot iron.")
 HAULER_STOPS = ["The Guild Yard", "The Salt Road", "The Gate Yard", "The Crawler's Lee", "The Old Salt Works"]
+# Hauler Nine on the vehicles pack (2026-11-12): a vehicle standing in the place it is at, seen there as a thing;
+# board it, drive it (or its wheel) to a stop, and it rolls through the places between, where it can be seen and stopped.
+HAULER_STATE = {"description": HAULER, "hauler": True, "guild": True, "stops": list(HAULER_STOPS), "direct": True,
+                "leg_time": 900, "loud": True, "seats": 6,
+                "scenes": {"depart": "{vehicle} coughs awake, its eight woven wheels bite, and it grinds out onto the road.",
+                           "arrive": "{vehicle} grinds in off the road in a cloud of salt dust and stands ticking, its "
+                                     "engine cooling."}}
 WHEEL = {"portable": False, "wheel": True,
          "description": "Hauler Nine's wheel, iron rimmed, the grips wrapped in old cord. Drive it to a stop on the road: "
                         "the Guild Yard, the Salt Road post, the Gate Yard, the Crawler's Lee or the Old Salt Works. "
@@ -1454,11 +1457,9 @@ def keep_guild(s, names):
         s.spawn("thing", rack, "Guild crossbow", state=dict(CROSSBOW))
         s.spawn("thing", rack, "Spare Guild spear", state=dict(GUILD_SPEAR))
     if HAULER_NAME not in names:
-        hauler = s.spawn("place", root, HAULER_NAME, state={"description": HAULER, "hauler": True, "guild": True,
-                                                          "stops": list(HAULER_STOPS), "at": yard})["id"]
+        hauler = s.spawn("vehicle", yard, HAULER_NAME, state=dict(HAULER_STATE))["id"]
         names[HAULER_NAME] = hauler
-        s.connect(yard, hauler)
-        s.spawn("thing", hauler, "Hauler Nine's wheel", state=dict(WHEEL))
+        s.spawn("wheel", hauler, "Hauler Nine's wheel", state=dict(WHEEL))
         for _ in range(2):
             s.spawn("thing", hauler, "Guild cask", state={"portable": False, "water_source": True, "left": 6,
                                                           "description": "A Guild cask lashed down in the hauler's bed."})
@@ -2120,6 +2121,30 @@ def keep_house_skins(s, names):
     s.patch(story, {"house_skins_laid": True})
 
 
+def keep_hauler_vehicle(s):
+    """Hauler Nine was a place whose road links a script rewired (guild_drive). On the vehicles pack it is a vehicle
+    standing in the place it was at: its riders and load move aboard the new one, a new wheel replaces the old, and the
+    old shell goes. An entity's type cannot change, so it is a new entity with the same name."""
+    w = s.world
+    old = next((e for e in w.find(name=HAULER_NAME, limit=None) if e["name"] == HAULER_NAME and e["type"] != "vehicle"), None)
+    if old is None:
+        return
+    st = w.get(old["id"])["state"]
+    names = {e["name"]: e["id"] for e in w.find(limit=None)}
+    at = st.get("at") or names.get("The Guild Yard")
+    new = s.spawn("vehicle", at, HAULER_NAME, state=dict(HAULER_STATE))["id"]
+    for c in w.find(parent=old["id"], limit=None):
+        if c["name"] == "Hauler Nine's wheel":
+            s.destroy(c["id"])
+        else:
+            s.move(c["id"], new)
+    s.spawn("wheel", new, "Hauler Nine's wheel", state=dict(WHEEL))
+    for ed in w.edges(old["id"], "connects_to", "both"):
+        a, b = ed["source"], ed["target"]
+        s.unlink(a, b, "connects_to")
+    s.destroy(old["id"])
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -2177,6 +2202,7 @@ def keep_canon(s):
     keep_paper(s)
     keep_leaves(s, names_of(s))
     keep_house_skins(s, names_of(s))
+    keep_hauler_vehicle(s)
     keep_carry(s)
     if st.get("garrison"):
         return

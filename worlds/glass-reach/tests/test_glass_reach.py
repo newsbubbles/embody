@@ -460,7 +460,8 @@ def test_hosted_bodies_thirst_at_the_pace_of_the_day():
                 out.setdefault(p["payload"]["script"], set()).add(p["every"])
         return out
 
-    assert beats() == {"thirst": {8640}, "quench": {600}, "mend": {21600}, "fighter_tick": {6}, "wasp_tick": {60}}
+    assert beats() == {"thirst": {8640}, "quench": {600}, "mend": {21600}, "fighter_tick": {6}, "wasp_tick": {60},
+                       "vehicle_tick": {15}}  # Hauler Nine rolls on the vehicles pack
     kit = eng.session_for_token(gm.invite("player", label="Kit")["token"])
     kit.join(template="guard", name="Kit")
     assert beats("Kit") == {"thirst": {8640}, "quench": {600}, "mend": {21600}}
@@ -524,7 +525,7 @@ def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_
     m = gm.map(depth=2)
     rows = {e["name"]: e for e in m["entities"]}
     places = [e for e in m["entities"] if e["type"] == "place"]
-    assert len(places) == 22 and all(e["own"] for e in places)  # thirteen, the Guild Yard, its two rooms, Hauler Nine,
+    assert len(places) == 21 and all(e["own"] for e in places)  # thirteen, the Guild Yard, its two rooms,
     # the Riders' Hollow, the Thornbrake, Tessel's Steading and its cellar, and Weeping Rock
     assert rows["The Keth jars"]["own"] and rows["The Hold's ration cask"]["own"]  # spawned by the routines, placed after
     assert len(m["paths"]) >= 7 and all(p["drawn"] for p in m["paths"])
@@ -1249,21 +1250,45 @@ def test_the_guild_yard_keeps_its_counting_house_fills_its_tank_and_its_hauler_d
     gm.patch(tank, {"left": 3})
     to_next(gm, "crawler")
     assert gm.inspect("The yard tank")["state"]["left"] == 30
-    # Tam climbs into Hauler Nine and drives it to the Salt Road, and steps out there
-    gm.move("Tam", "Hauler Nine")
-    me.act("drive", "Hauler Nine's wheel", params={"to": "the salt road"})
-    gm.clock(step=901)
-    hauler = gm.inspect("Hauler Nine")
-    assert hauler["state"]["at"] == gm.inspect("The Salt Road")["id"] and kinds("hauled") == 1
-    me.act("go", "The Salt Road")
+    # Tam boards Hauler Nine, drives it to the Salt Road (the vehicles pack: a quarter hour on the road), and alights
+    gm.move("Tam", gm.inspect("Hauler Nine")["parent"])
+    me.act("board", "Hauler Nine")
+    me.act("drive", "Hauler Nine's wheel", params={"to": "The Salt Road"})
+    for _ in range(70):
+        gm.clock(step=15)
+    assert gm.inspect("Hauler Nine")["parent"] == gm.inspect("The Salt Road")["id"] and kinds("pulled_in") == 1
+    me.act("alight", "Hauler Nine")
     assert gm.inspect("Tam")["parent"] == gm.inspect("The Salt Road")["id"]
-    with pytest.raises(Rejected, match="keeps to the road"):
-        gm.move("Tam", "Hauler Nine")
+    me.act("board", "Hauler Nine")
+    with pytest.raises(Rejected):  # it keeps to its stops: never onto the glass
         me.act("drive", "Hauler Nine's wheel", params={"to": "The Glass Flats"})
     errs = gm.world.store.query("event", "world_id=? AND kind='script_error'", (gm.world.id,))
     assert not errs, errs[:2]
     load_world(gm, "glass-reach", upgrade=True)  # a reboot builds no second yard
     assert len([e for e in gm.find(name="Mira Ost") if e["name"] == "Mira Ost"]) == 1
+
+
+def test_the_old_hauler_place_becomes_a_vehicle_with_its_riders_and_casks_aboard_on_a_reboot():
+    eng, gm = hosted()
+    root = gm.summary()["root"]
+    road = gm.inspect("The Salt Road")["id"]
+    new = gm.inspect("Hauler Nine")["id"]
+    for c in gm.world.find(parent=new, limit=None):
+        gm.destroy(c["id"])
+    gm.destroy(new)
+    old = gm.spawn("place", root, "Hauler Nine", state={"hauler": True, "stops": ["The Salt Road"], "at": road})["id"]
+    gm.connect(road, old)
+    gm.spawn("thing", old, "Hauler Nine's wheel", state={"wheel": True, "portable": False})
+    gm.spawn("thing", old, "Guild cask", state={"portable": False, "water_source": True, "left": 6})
+    gm.move("Garran Teague", old)
+    load_world(gm, "glass-reach", upgrade=True, hosted=True)
+    hauls = [e for e in gm.find(name="Hauler Nine") if e["name"] == "Hauler Nine"]
+    assert len(hauls) == 1 and hauls[0]["type"] == "vehicle"
+    h = gm.inspect(hauls[0]["id"])
+    assert h["parent"] == road
+    aboard = {c["name"]: c["type"] for c in gm.world.find(parent=h["id"], limit=None)}
+    assert aboard.get("Garran Teague") and aboard.get("Guild cask") and aboard.get("Hauler Nine's wheel") == "wheel"
+    assert not gm.world.edges(road, "connects_to", "out") or all(e["target"] != old for e in gm.world.edges(road, "connects_to", "out"))
 
 
 def test_the_strongbox_opens_to_its_key_or_the_code_and_the_counting_house_to_miras_key():
