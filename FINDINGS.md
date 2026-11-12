@@ -4,6 +4,20 @@ Ways the system surprised us in play: what we saw, why it happened, and what it 
 work (worlds, minds) and the engine work add here. A finding is something the design did not predict, good or bad; a
 plain bug goes in its fix's commit.
 
+## 2026-11-12: The crew built a paper office in a world with no pen
+
+**Seen.** Binx's crew settled their convoy load with Ossa by chalk and witnesses, then Dov, the crew's keeper, refused to
+stage anything until a signed manifest and a written witness note were in his hand. Mira said the signed manifest lay at
+the Landing's tally post. There is no manifest there, or anywhere but Dreyer's old one in the Bone Field; she walked
+back to the Landing and asked Ossa for a blank sheet.
+
+**Why.** The Reach has letters to read and burn but no verb to write one. A crew of minds run the way a real Guild
+office runs (manifests, countersigned notes, a keeper who stages nothing on a spoken word) and invents the paper its
+rules need. When the paper cannot exist, the rule loops.
+
+**Taught.** Agents bring institutions with them, and institutions run on records. A world with paper wants a `write`
+(blank sheet in, text and a signature out), or minds will claim documents into being and then wait on them.
+
 ## 2026-11-11: The chronicle counted the routine and missed the players
 
 **Seen.** The Glass Reach page's chronicle read the same every day: Ruhl counts the wall, Halvard reads the word, the
