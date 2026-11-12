@@ -378,6 +378,202 @@ def lean(ctx, st):
     scene(ctx, ctx.get(st.landing) if st.landing else None, road + left + ".")
     ctx.emit("moon_leans", target=ctx.root(), reach=-1, way=way)
 
+
+# The moon coming, felt (Nate 2026-11-12: "like stores before a holiday, you see it coming a month out"). Each dawn
+# the Reach changes a little by how many days are left (OMENS), the three posted notices are rewritten from the
+# facts the moon will count, and the bodies without minds talk about it: a moon line by days left, and one rumour
+# each, a little wrong, about what has happened (RUMOURS). `moon_word` does the notices and the talk without a dawn.
+OMENS = {
+    9: [("landing", "Carriers who meant to sit out the moon at the Landing are packing instead. Crates stand roped on "
+                    "the pan for the wheels north."),
+        ("deepwell", "Haro brings the bows down from the dry niche and sits with a pot of fat, oiling them one by one. "
+                     "He does not say who for.")],
+    8: [("salt_works", "Two more men came up the road in the night and sat down in the shed's shade with the others. "
+                       "Word gets around: somebody is buying arms at the Salt Works."),
+        ("hold", "Ruhl moves the count to dawn and dusk both. Nobody argues.")],
+    7: [("flats", "Fewer diggers on the Flats today. The glass will keep; nobody is sure the riders will."),
+        ("landing", "Ossa chalks a new line under the tally, looks at it, and rubs it out again.")],
+    6: [("ridge", "The dust to the south hangs in the air at noon now, as if something large stands under it."),
+        ("dry_camp", "Brisk rides out before light and comes back after it, and Halvard reads what he brings twice.")],
+    5: [("hold", "The nine sharpen what they have. Pip asks the oldest of them what a siege is like and gets no answer."),
+        ("dry_camp", "Mother Sallow counts the camp's water and puts a second cask under canvas.")],
+    4: [("landing", "The Landing lays its odds out loud now, and writes them on the crates."),
+        ("deepwell", "The Keth take the cups off their cords at night and keep them inside.")],
+    3: [("salt_works", "The drifters stop haggling with each other. Whoever comes now, they will hear him out."),
+        ("hold", "Someone has chalked a tally of days on the inside of the gate. Three marks left.")],
+    2: [("landing", "Convoy masters walk the pan checking straps. The wheels go north at the moon, ready or not."),
+        ("bones", "Hoofprints in the Bone Field at first light, a lot of them, and nobody saw them made.")],
+    1: [("hold", "Nobody in the Hold talks about tomorrow. Everybody checks the gate bar."),
+        ("deepwell", "The Keth bank the cookfire low and keep the children below the broken step.")],
+}
+RUMOUR_KEY = "news|rumour|rumor|rumours|heard|gossip|word|saying|talk"
+MOON_KEY = "moon|coming|days|soon|ready|siege"
+# one rumour each, about what really happened, a little wrong (the truth is in the comment)
+RUMOURS = {
+    "Pip": "'Hollis told the reeve everything. Dreyer's whole plan, the night and the hour. They keep it quiet so the "
+           "house won't change it.'",  # he said who sent him and what he counted; his count went nowhere
+    "Hobb": "'That wedge in the cistern? Keth work. Who else goes down in the wet dark?'",  # it bears Dreyer's mark
+    "Tobin Marsh": "'Forty riders, Brisk told a carrier. Forty horses and a ram on wheels.'",  # far fewer, no ram
+    "Edric Fane": "'The convoy goes south to meet the riders and sell them our water. Ossa's chalk said so.'",  # north; a slip of chalk
+    "The oldest of the nine": "'Last time the moon turned with Dreyer in the dunes, the Keth shut the step and the Hold "
+                              "drank sand for a month. Don't count on the jars.'",  # the Keth keep terms while the Hold does
+    "Wen of the Keth": "'Taan says the Host rides at the moon. Not the house's men: the old riders who keep the water "
+                       "law. That is who comes.'",  # it is Dreyer's riders; the Host is an old name
+    "Haro of the Keth": "'The Guild crew's glass went into Ossa's hand and came out as water. The Hold digs now, through "
+                        "the Guild, and calls it trade.'",  # the crew's shards were their own; no Hold man dug
+    "Kell Daro": "'Rook's crawler carries twenty draws, and he'll sell to the house, because the house pays double.'",  # eight, first to pay
+    "Tavish Orme": "'The reeve has no glass at all. He pays his mason in promises, and the mason walks at the next "
+                   "dawn.'",  # nearly: two unpaid dawns
+    "Nell Saye": "'You've seen the slow star before dawn? Guild folk say that's where the convoy really goes.'",  # the High Landing; the convoy goes up the road
+    "Dunmore": "'The Hold pays a shard a man. The house pays three, and you keep your boots.'",  # one shard either side
+    "Lark": "'The Keth take the Hold's side at the moon. They were promised the gate for it.'",  # bows only for proof, no gate
+    "Merrow": "'There's a log out of a dead crawler that says the Guild sold hauler fourteen to the riders.'",  # riders took it
+    "Joss": "'Hollis? Hanged off the gate two nights back. Or that's what they say up the road.'",  # alive, under guard
+    "Cass the Salter": "'That cistern broke on its own. Old stone. The wedge is the reeve's story, to blame the house.'",  # a wedge was driven
+    "Brisk": "'The Hold has thirty men behind that wall now, and a mason raising it every night.'",  # about ten; no course laid
+    "Mother Sallow": "'Hollis talked, they say. Every word. If he did, the plan's no good.'",  # nobody knows
+    "Jory Flint": "'They say the riders pay masons double to take a wall down. I only put them up.'",
+}
+MOON_TALK = {
+    "hold": ["'{d} to the moon. Ruhl has us counting arrows twice a day.'",
+             "'{d}. You can feel it in the yard. Nobody sleeps past the count.'",
+             "'{d}. Ask me after.'"],
+    "keth": ["'{d} to the moon. The Elder says watch the south and keep the terms.'",
+             "'{d}. The bows are oiled. Whose wall they stand on is the council's word.'",
+             "'{d}. Stay below the step after dark.'"],
+    "road": ["'{d} to the moon. Wheels go north when it turns, and I mean to be on them.'",
+             "'{d}. The odds at the Landing move every hour.'",
+             "'{d}. Whoever holds the gate after, the Guild carries for them. That's all I know.'"],
+    "works": ["'{d} to the moon. Somebody will want arms before then. We wait.'",
+              "'{d}. A shard and I walk to whoever paid it.'",
+              "'{d}. Pay now or don't bother.'"],
+    "camp": ["'{d} to the moon. The house is patient.'",
+             "'{d}. The fires to the south are ours. Count them if you like.'",
+             "'{d}. Tomorrow or the next, the herald rides.'"],
+}
+TALKERS = {"hold": ["Pip", "Hobb", "Tobin Marsh", "Edric Fane", "The oldest of the nine"],
+           "keth": ["Wen of the Keth", "Haro of the Keth"],
+           "road": ["Kell Daro", "Tavish Orme", "Nell Saye", "Jory Flint"],
+           "works": ["Dunmore", "Lark", "Merrow", "Joss", "Cass the Salter"],
+           "camp": ["Brisk", "Mother Sallow"]}
+BOARDS = [("hold_call", "yard", "The captain's notice", "Captain Ruhl nails a notice to the post at the Gate Yard, where "
+           "everyone coming up the road has to pass it."),
+          ("guild_notices", "landing", "Guild notices", "Ossa nails a board of Guild notices beside the tally post."),
+          ("house_word", "dry_camp", "The house's word", "Halvard has a board stood up by the water tank, and the house's "
+           "word written on it.")]
+
+def days_left(ctx, st):
+    return int(max(0, (st.moon_due or ctx.t) - ctx.t) / 86400 + 0.5)
+
+def say_days(d):
+    return "Tonight" if d == 0 else (str(d) + (" day" if d == 1 else " days"))
+
+def omen(ctx, st):
+    for key, text in OMENS.get(days_left(ctx, st), []):
+        pid = st.get(key)
+        scene(ctx, ctx.get(pid) if pid else None, text)
+
+def drifter_counts(ctx):
+    hired = 0
+    bought = 0
+    waiting = 0
+    for b in ctx.find(type="person", limit=500):
+        bs = b.state
+        if not bs.drifter or bs.dead:
+            continue
+        if bs.turncoat:
+            bought = bought + 1
+        elif bs.hired:
+            hired = hired + 1
+        else:
+            waiting = waiting + 1
+    return hired, bought, waiting
+
+def board_texts(ctx, st):
+    d = say_days(days_left(ctx, st))
+    hired, bought, waiting = drifter_counts(ctx)
+    lime = 0
+    for it in ctx.find(name="Sack of lime", limit=50):
+        if it.parent is not None and it.parent.id == st.ossa:
+            lime = lime + 1
+    laid = 0
+    for b in ctx.children(st.yard):
+        laid = laid + courses(b)
+    if st.keth_proof:
+        proof = "The council has spoken: proof given, Keth bows on the wall if the terms hold to the moon."
+    elif st.keth_proof_pending:
+        proof = "Proof is in Elder Taan's hands and the council sits on it."
+    else:
+        proof = "None brought yet."
+    if st.convoy_to == "House Varrick":
+        water = "Bellan Rook's load is the Hold's."
+    elif st.convoy_to == "House Dreyer":
+        water = "Bellan Rook's load went to the house."
+    elif st.rook:
+        water = "Bellan Rook's crawler is on the Landing pan: eight draws to whoever pays him three shards first."
+    else:
+        water = "Bellan Rook's convoy crawler is on the road, due at the Landing, eight draws for sale."
+    hold = ("POSTED AT THE GATE BY THE CAPTAIN'S ORDER. " + d + " to the moon. When it turns, House Dreyer's riders come "
+            "up from the south. Before then the Hold wants:\n"
+            "HANDS ON THE WALL. Drifters at the Old Salt Works, up the road past the Landing, sign for a shard of glass "
+            "or a skin with water in it, one a day. Signed for the Hold so far: " + str(hired) + ". Still waiting there: "
+            + str(waiting) + ".\n"
+            "THE YARD WALL. Jory Flint lays a course a day for a shard at dawn, and each course wants a sack of lime. "
+            + str(lime) + " sack" + ("" if lime == 1 else "s") + " of lime wait on Ossa's pan, a shard each. Courses "
+            "standing: " + str(min(laid, 3)) + " of 3.\n"
+            "PROOF FOR THE KETH. Elder Taan will put Keth bows on the wall for proof of the house's hand, in the "
+            "house's own mark. " + proof + "\n"
+            "WATER. " + water + "\n"
+            "THE TRUCE. Nobody digs on the Flats without a Keth beside him.\n"
+            "Bring what you have to the captain.")
+    guild = ("GUILD NOTICES. The convoy goes north up the Salt Road at the moon's turn: " + d + ". Loads chalked on "
+             "Ossa's pan ride with it, and leave the hands that hold them only at the wheels.\n"
+             + water + "\n"
+             "Men at the Old Salt Works sell their arms. The Guild does not ask to whom.\n"
+             "Hauler fourteen was taken by riders off the south dunes, the log says. Word of its driver, Sel Amory, to "
+             "Ossa at the Landing.\n"
+             "The Guild carries for whoever holds the gate.")
+    if st.pitch_curing:
+        pitch = "The pitch in the Hold's cistern is still soft; a knife in it undoes the mend."
+    else:
+        pitch = "The Hold's cistern is mended and the pitch is set hard."
+    house = ("THE HOUSE'S WORD. " + d + " to the moon. The riders come up at its turn.\n"
+             "Men at the Old Salt Works take a shard to sign. One signed for the house walks into the Hold as a Varrick "
+             "man and opens what he is told on the night. Signed for the house: " + str(bought) + ".\n"
+             + pitch + "\n"
+             "The writ: the herald asks for it at the gate the day before the moon.\n"
+             "Hollis is held in the Hold. What he told them, nobody here knows. Find out.\n"
+             "Bring word to Halvard.")
+    return {"hold_call": hold, "guild_notices": guild, "house_word": house}
+
+def boards(ctx, st):
+    texts = board_texts(ctx, st)
+    for key, where, name, posted in BOARDS:
+        b = by_name(ctx, name)
+        if b is None:
+            pid = st.get(where)
+            place = ctx.get(pid) if pid else None
+            if place is None:
+                continue
+            b = ctx.spawn("letter", place, name=name, state={"portable": False, "bulk": 0, "text": texts[key]})
+            scene(ctx, place, posted)
+        elif b.state.text != texts[key]:
+            ctx.patch(b, {"text": texts[key]})
+
+def talk(ctx, st):
+    d = days_left(ctx, st)
+    tier = 0 if d >= 7 else (1 if d >= 4 else 2)
+    for group in TALKERS:
+        for name in TALKERS[group]:
+            p = by_name(ctx, name)
+            if p is None or p.state.dead:
+                continue
+            dialog = dict(p.state.dialog or {})
+            dialog[MOON_KEY] = MOON_TALK[group][tier].replace("{d}", say_days(d))
+            if name in RUMOURS:
+                dialog[RUMOUR_KEY] = RUMOURS[name]
+            ctx.patch(p, {"dialog": dialog})
+
 def on(ctx, event):
     story = story_of(ctx)
     st = story.state
@@ -386,11 +582,19 @@ def on(ctx, event):
     if k in ["convoy_word", "rook_arrives", "riders_fires", "herald_comes"]:
         if st.chapter == 2 and not st.moon_turned:
             beat(ctx, k, st)
+            boards(ctx, story_of(ctx).state)  # the notices name Rook on the pan, the herald at the gate
         return
     if st.chapter != 2 or st.moon_turned:
         return
     if k == "dawn":
         lean(ctx, st)
+        omen(ctx, st)
+        boards(ctx, story_of(ctx).state)
+        talk(ctx, st)
+        return
+    if k == "moon_word":
+        boards(ctx, st)
+        talk(ctx, st)
         return
     if k == "convoy_closes":
         rook = ctx.get(st.rook) if st.rook else None

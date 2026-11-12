@@ -1022,6 +1022,47 @@ def test_each_dawn_the_hold_hears_how_the_moon_leans():
     assert any("to the moon" in t and "Ruhl counts the wall" in t for t in scenes(gm.history(kinds=["scene"], limit=40, newest=True)))
 
 
+
+def test_the_moon_comes_on_posted_notices_and_in_the_talk_of_the_bodies_without_minds():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    to_next(gm, "dawn")
+    call = gm.inspect("The captain's notice")
+    assert call["parent"] == gm.inspect("The Gate Yard")["id"]
+    assert "to the moon" in call["state"]["text"] and "Courses standing: 0 of 3" in call["state"]["text"]
+    assert "convoy goes north" in gm.inspect("Guild notices")["state"]["text"]
+    assert gm.inspect("The house's word")["parent"] == gm.inspect("The Dry Camp")["id"]
+    me = newcomer(eng, gm, "guard", "Bram")
+    gm.move("Bram", gm.inspect("Scar Gate, the Hold")["id"])
+    bram = gm.inspect("Bram")["id"]
+    assert any("Hollis told the reeve" in x for x in said(me.act("talk", "Pip", {"about": "any news?"}), bram))
+    assert any("to the moon" in x for x in said(me.act("talk", "Hobb", {"about": "how many days till the moon?"}), bram))
+    left = gm.inspect("The captain's notice")["state"]["text"]
+    gm.schedule(1, "moon_word", entity=gm.summary()["root"])
+    gm.clock(step=2)
+    assert len(gm.find(name="The captain's notice")) == 1 and gm.inspect("The captain's notice")["state"]["text"] == left
+
+
+def test_a_blank_leaf_takes_writing_and_a_signature_and_the_bone_field_shows_the_wreck():
+    eng, gm = hosted()
+    assert [c["name"] for c in gm.inspect("Ossa the Carrier")["contents"]].count("A blank leaf") == 3
+    assert gm.inspect("The burned house crawler")["parent"] == gm.inspect("The Bone Field")["id"]
+    me = newcomer(eng, gm, "guard", "Bram")
+    hold = gm.inspect("Scar Gate, the Hold")["id"]
+    gm.move("Bram", hold)
+    leaf = [c["id"] for c in gm.inspect(hold)["contents"] if c["name"] == "A blank leaf"][0]
+    with pytest.raises(Rejected):
+        me.act("write", leaf, {"text": "Not in my hands yet."})
+    me.act("take", leaf)
+    me.act("write", leaf, {"text": "Manifest: lime three sacks, glass three shards, north at the moon."})
+    me.act("write", leaf, {"text": "Bram"})
+    st = gm.inspect(leaf)["state"]
+    assert st["text"].endswith("north at the moon.\nBram") and st["hands"] == [gm.inspect("Bram")["id"]]
+    r = me.act("read", leaf)
+    assert any("Manifest" in str(e["payload"]) for e in r["events"])
+    load_world(gm, "glass-reach", upgrade=True)  # a reboot lays no second set
+    assert len(gm.find(name="A blank leaf", limit=100)) == 10 and len(gm.find(name="The burned house crawler")) == 1
+
 def test_west_of_the_scar_is_only_rumour_and_torn_pages():
     eng, gm = hosted()
     hold = gm.inspect("Scar Gate, the Hold")["id"]

@@ -232,7 +232,7 @@ ROUTINE_KINDS = ["keth_run", "crawler"]
 # Chapter two (scripts/reach_chapter.py): the dawn that starts it, what strains the truce, the moon.
 CHAPTER_KINDS = ["dawn", "harvested", "downed", "killed", "given", "moon_turns", "chapter_two_begins"]
 # Chapter two's middle (scripts/reach_moon.py): the beats on the calendar and the four contests the moon counts.
-MOON_KINDS = ["convoy_word", "rook_arrives", "riders_fires", "herald_comes", "given", "talked", "checked", "dawn",
+MOON_KINDS = ["convoy_word", "rook_arrives", "riders_fires", "herald_comes", "given", "talked", "checked", "dawn", "moon_word",
               "keth_council", "convoy_closes", "pitch_sets"]
 # The Guild's road wardens on the Salt Road (scripts/reach_wardens.py).
 WARDEN_KINDS = ["arrived", "talked", "given", "dawn", "dusk"]
@@ -356,7 +356,10 @@ def define(s):
                     listeners=[{"script": "ossa_on", "kinds": ["given"]}])
     s.define_schema("letter", extends="thing", doc="Something with writing on it. Paper rides in a pocket: no bulk.",
                     state={"text": "", "portable": True, "bulk": 0},
-                    actions={"read": {"script": "read", "doc": "Read what is written"}})
+                    actions={"read": {"script": "read", "doc": "Read what is written"},
+                             "write": {"script": "write", "doc": "Write on a paper in your hands: params {\"text\": the words}. "
+                                       "Each writing adds a line; sign it by writing your name",
+                                       "duration": 20, "params": {"text": "the words"}}})
     s.define_schema("ward", extends="thing", doc="A belt ward. On, it hardens against anything fast.",
                     state={"portable": True, "ward": True, "on": True,
                            "description": "A belt plate with a thumb-switch. A faint hum when it is on.",
@@ -2076,6 +2079,29 @@ def keep_paper(s):
             s.patch(e["id"], {"bulk": 0})
 
 
+LEAF = {"text": "", "blank": True, "burnable": True, "description": "A leaf of coarse Guild paper, blank, the wheel-and-scale pressed faint "
+                                                  "in one corner."}
+LEAVES = [("Ossa the Carrier", 3), ("Scar Gate, the Hold", 3), ("The Counting House", 4)]
+WRECK = ("A house crawler burned down to its frame in the Bone Field, a pennant pole still standing on it with a scrap "
+         "of grey cloth: a well and a bar. Its strongbox sits open where it was bolted, the lid sprung. Whatever it "
+         "carried went somewhere across the bones.")
+
+
+def keep_leaves(s, names):
+    """Blank paper where people looked for it (the crews wanted manifests, the Hold a copy, 2026-11-12), and the burned
+    house crawler in the Bone Field that points at the manifest thrown clear of it. Once, by a mark on the story."""
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    if s.world.get(story)["state"].get("leaves_laid"):
+        return
+    for where, n in LEAVES:
+        if where in names:
+            for _ in range(n):
+                s.spawn("letter", names[where], "A blank leaf", state=dict(LEAF))
+    if "The Bone Field" in names and "The burned house crawler" not in names:
+        s.spawn("thing", names["The Bone Field"], "The burned house crawler", state={"portable": False, "description": WRECK})
+    s.patch(story, {"leaves_laid": True})
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -2131,6 +2157,7 @@ def keep_canon(s):
     keep_corins_file(s, names_of(s))
     keep_high_landing(s, names_of(s))
     keep_paper(s)
+    keep_leaves(s, names_of(s))
     keep_carry(s)
     if st.get("garrison"):
         return
@@ -2164,7 +2191,7 @@ def keep_routines(s, root):
         names["Iska of the Keth"] = s.spawn("person", st["deepwell"], "Iska of the Keth", state=BEARER)["id"]
     if "The Keth jars" not in names:
         names["The Keth jars"] = s.spawn("thing", st["hold"], "The Keth jars", state={"portable": False, "water_source": True, "left": 0,
-            "description": "Two tall Keth jars by the dry cistern, sealed with wax. What the bearer pours at dusk, while the terms hold."})["id"]
+            "description": "Two tall Keth jars beside the cistern, sealed with wax. What the bearer pours at dusk, while the terms hold."})["id"]
     if "The Hold's ration cask" not in names:
         names["The Hold's ration cask"] = s.spawn("thing", st["hold"], "The Hold's ration cask", state={"portable": False, "water_source": True, "left": 0,
             "description": "A Guild cask stencilled with the Varrick mark. The crawler rolls a full one off at dawn; the writ pays."})["id"]
