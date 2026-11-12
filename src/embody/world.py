@@ -2220,9 +2220,11 @@ def _loud(ev: dict[str, Any]) -> bool:
 # Events that exist for the log, not for listeners.
 _SILENT_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "scheduled", "patched", "linked", "unlinked",
                            "related", "unrelated", "spawned", "destroyed", "left", "moved", "embodied", "released",
-                           "tick", "script_error", "finished", "opinion", "remembered", "intended", "merged"})
+                           "tick", "script_error", "finished", "opinion", "remembered", "intended", "merged", "act_refused"})
 # Events only the entity they target (its mind) and authors ever see.
-_PRIVATE_KINDS = frozenset({"remembered", "intended"})
+_PRIVATE_KINDS = frozenset({"remembered", "intended", "act_refused"})
+# Events only the hosts (owner, author, observers) see, not even the body they are about: an act the world refused.
+_HOST_KINDS = frozenset({"act_refused"})
 # State keys no other body reads, whatever the entity's own `secret` list says.
 ALWAYS_SECRET = frozenset({"memory", "brief", "goals", "policy"})
 # Events hidden from the public stream (perceive, act results). Primitive mutations stay in the log.

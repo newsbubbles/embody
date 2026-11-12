@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, unquote
 
 # Bookkeeping that is not something happening: "last_event_ago" skips it.
 QUIET_KINDS = {"patched", "spawned", "destroyed", "linked", "unlinked", "related", "unrelated", "embodied", "released",
-               "left", "joined", "intended", "remembered", "clock", "scheduled", "unscheduled", "tick", "opinion"}
+               "left", "joined", "intended", "remembered", "clock", "scheduled", "unscheduled", "tick", "opinion", "act_refused"}
 TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
          ".json": "application/json", ".svg": "image/svg+xml", ".mp4": "video/mp4", ".vtt": "text/vtt; charset=utf-8",
          ".woff2": "font/woff2", ".woff": "font/woff", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",

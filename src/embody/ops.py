@@ -26,7 +26,7 @@ from . import layout as geo
 from .script import Script, ScriptError
 from .store import Store
 from . import access as acl
-from .world import ALWAYS_SECRET, LIMITS_HEAD, Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event, own_verbs
+from .world import ALWAYS_SECRET, LIMITS_HEAD, Rejected, World, _HOST_KINDS, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event, own_verbs
 from .workspace import USE_LINE, Workspace, read_scripts, resolve_uses, restore_world, save_world
 
 AUTHOR = "author"
@@ -1307,7 +1307,7 @@ class Session:
             return holders[eid]
 
         for e in rows:
-            if e["kind"] in _INTERNAL_KINDS:
+            if e["kind"] in _INTERNAL_KINDS or (not full and e["kind"] in _HOST_KINDS):
                 continue
             if not full and e["target_id"] != me:
                 if e["kind"] in _PRIVATE_KINDS:
@@ -1837,14 +1837,41 @@ class Session:
         self._acted()
         p = self._principal()
         since = p["cursor_seq"] if p else self.world.store.next_seq(self.world.id) - 1
-        tid = self._resolve_for(me, target, verb, params) if target else None
-        r = self.world.act(me, verb, tid, params, principal_id=self.pid)
+        tid = None
+        try:
+            tid = self._resolve_for(me, target, verb, params) if target else None
+            r = self.world.act(me, verb, tid, params, principal_id=self.pid)
+        except Rejected as why:
+            self._refused(me, verb, target, tid, params, why)
+            raise
         r = self._turn(r)
         w = self.world
         r["events"] = self._events_for(me, w.events(since=since, touching=me, limit=200))
         r["cursor"] = w.store.next_seq(w.id) - 1
         w.set_cursor(self.pid, r["cursor"])
         return r
+
+    def _refused(self, me: str, verb: str, asked: str | None, tid: str | None, params: dict[str, Any] | None,
+                 why: Rejected) -> None:
+        """A refused act goes in the log for the hosts, so they see the friction a player meets: an `act_refused` event
+        on the body, reach 0, read by owners, authors and observers through history(kinds=["act_refused"], touching=...).
+        No other body perceives it, no listener hears it, it is never news, and the body's own feed leaves it out
+        (it already had the refusal). An identical retry is logged once; at most `refused_per_hour` (meta, default
+        20; 0 logs none) per body per world hour, the last one marked `capped`."""
+        w = self.world
+        cap = int(w.meta().get("refused_per_hour", 20) or 0)
+        if cap <= 0:
+            return
+        rows = w.store.query("event", "world_id=? AND target_id=? AND kind='act_refused' AND t>?", (w.id, me, w.t - 3600),
+                             order="seq DESC", limit=cap)
+        pay: dict[str, Any] = {"verb": verb, "target": tid, "asked": asked, "params": _trimmed(params),
+                               "reason": str(why.reason)[:300], "hint": str(why.hint)[:200] if why.hint else None}
+        if len(rows) >= cap or (rows and all((rows[0]["payload"] or {}).get(k) == pay[k]
+                                             for k in ("verb", "target", "asked", "reason"))):
+            return
+        if len(rows) == cap - 1:
+            pay["capped"] = True
+        w.emit("act_refused", actor=me, target=me, reach=0, payload=pay)
 
     def _turn(self, r: dict[str, Any]) -> dict[str, Any]:
         """Turn-based play: with the clock paused and meta.turn_seconds set, each act of an embodied principal
@@ -2774,6 +2801,15 @@ _NEWS_KINDS = frozenset({"found", "downed", "killed", "outlawed", "yielded", "tr
                          "lock_picked", "lifted", "caught", "renamed", "destroyed", "burned", "works_done", "stage_done",
                          "challenged", "agreed", "spoiled", "wounded", "rose", "searched", "stopped",
                          "broke_down", "struck"})
+def _trimmed(params: dict[str, Any] | None, n: int = 160) -> dict[str, Any]:
+    """An act's params for the log: at most 8 keys, each value cut to n characters of its JSON."""
+    out: dict[str, Any] = {}
+    for k, v in list((params or {}).items())[:8]:
+        j = json.dumps(v, ensure_ascii=False, default=str)
+        out[str(k)[:40]] = v if len(j) <= n else j[:n - 3] + "..."
+    return out
+
+
 _CHRONICLE_QUIET = frozenset({"spawned", "patched", "linked", "unlinked", "related", "unrelated", "laid_out", "moved",
                               "left", "chronicled", "scene", "say", "unscheduled", "ledger_received"})
 
