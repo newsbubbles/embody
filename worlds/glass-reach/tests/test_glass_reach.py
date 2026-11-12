@@ -190,6 +190,15 @@ def test_ossa_trades_a_full_skin_for_emberglass_and_nothing_for_trinkets():
     gm.spawn("waterskin", me, "Second skin", state={"left": 0})
     r = you.act("give", "Ossa the Carrier", {"item": "Second skin"})
     assert not any("Keep your trinkets" in (e["payload"].get("text") or "") for e in r["events"] if e["kind"] == "say")
+    # nor does glass turn to water in her hand: handed load stays load, and she sells on purpose
+    gm.spawn("thing", me, "Emberglass", state={"kind": "ember", "portable": True, "count": 3})
+    you.act("give", "Ossa the Carrier", {"item": "Emberglass"})
+    held = lambda: [c["name"] for c in you.perceive()["holding"]]
+    assert held().count("Guild waterskin") == 1 and gm.inspect("Ossa the Carrier")["state"]["ember_bought"] == 1
+    assert ossa.act("sell", "Reeve Ansel Varrick", {"count": 2})["result"]["sold"] == 2
+    assert held().count("Guild waterskin") == 3 and gm.inspect("Ossa the Carrier")["state"]["ember_bought"] == 3
+    with pytest.raises(Rejected, match="you hold 1 shard"):
+        ossa.act("sell", "Reeve Ansel Varrick", {"count": 2})
     ossa.leave()
     # and her tongue loosens about Dram once she has taken glass
     r = you.act("talk", "Ossa the Carrier", {"about": "Hollis"})

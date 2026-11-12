@@ -351,6 +351,10 @@ def define(s):
     s.define_schema("fighter", extends="person", doc="A person who fights without a mind: in a duel, or against the outlawed.",
                     behaviors=[{"script": "fighter_tick", "every": 6}])
     s.define_schema("carrier", extends="person", doc="Trades glass for water.",
+                    actions={"sell": {"script": "ossa_sell", "doc": "Sell Guild water to someone here for glass you hold: "
+                                      "a full skin a shard. Glass handed to you is yours to keep until you sell",
+                                      "targets": "creature", "scope": "here", "duration": 2,
+                                      "params": {"count": "how many skins (a shard each, from the glass you hold)"}}},
                     listeners=[{"script": "ossa_on", "kinds": ["given"]}])
     s.define_schema("letter", extends="thing", doc="Something with writing on it. Paper rides in a pocket: no bulk.",
                     state={"text": "", "portable": True, "bulk": 0},

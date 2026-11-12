@@ -6,6 +6,8 @@ def on(ctx, event):
     buyer = ctx.get(event.payload.get("by"))
     if item is None or buyer is None:
         return
+    if item.state.kind == "ember" and ctx.embodied(ctx.self):
+        return  # a mind in her seat decides: the glass stays in her hand, and she sells with `sell` if it was for water
     if item.state.kind == "ember":
         n = ctx.count(item)
         ctx.destroy(item)
