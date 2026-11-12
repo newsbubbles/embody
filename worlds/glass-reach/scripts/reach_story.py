@@ -104,7 +104,8 @@ def on(ctx, event):
             scene(ctx, ctx.get(who).parent, "Something falls out of Dram's coat as he goes down: a folded letter under a seal the color of old blood.")
             ctx.spawn("letter", ctx.get(who).parent, name="Sealed letter", state={
                 "text": "H. The reeve in the ring, before the moon turns. Keep the Keth thirsty: no truce, whatever it costs. The Flats are ours when the Hold is empty. Burn this. D.",
-                "description": "Folded twice, sealed in dark red wax with a sigil of a well and a bar across it."})
+                "description": "Folded twice, sealed in dark red wax with a sigil of a well and a bar across it.",
+                "hands": [h.id for h in ctx.find(name="Halvard Dreyer", limit=5) if h.name == "Halvard Dreyer"]})  # D. wrote it: the glass can say so
             finish_if_done(ctx, story)
         elif who == st.ansel and k == "killed" and not st.reeve_dead:
             ctx.patch(story, {"reeve_dead": True, "done": True})

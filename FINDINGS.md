@@ -211,3 +211,17 @@ that is fine, but for an act a player will test later, the words and the world c
 log. When a mind says it did something a verb exists for, the host either makes the world match (this time the
 leaf was patched to hold Hollis's line in his hand) or corrects the mind. The engine could also flag a `say` that
 narrates an act from the speaker's verb list with no matching act in the same turn.
+
+## 2026-11-12: The wright's signed word could not move a key
+
+**Seen:** Binx, the Guild wright, wrote and signed a leaf: "Hask Orrin gives Pell Harrow the Shelf Room key."
+Dov carried it to Pell, Ost witnessed it, and Pell read it aloud to Hask and showed it to him. Hask is a keeper with
+no mind. His rule gives the key only to the wright, Ossa or Rook in person, so the key did not move.
+
+**Why:** the keeper rule checked who asked, never what they carried. The players had just built a written chain of
+authority with the new `write` verb, signature and witness included, and the world could not read it.
+
+**Taught:** once a world has writing, anything that checks a person should also accept a paper that person wrote.
+A keeper now honors a leaf held by the asker that names the asker and is written in the hand of someone the thing is
+kept for. A `"letters": false` setting turns this off. Hask handed over the key live, and the sealed case's number
+stays the wright's to give.

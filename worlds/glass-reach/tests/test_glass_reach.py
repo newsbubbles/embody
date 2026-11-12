@@ -149,6 +149,7 @@ def test_downing_dram_drops_the_letter_and_with_the_truce_the_hold_stands():
     r = you.act("attack", "Dram Hollis", {"slow": True})
     assert "downed" in kinds(r) and story(gm)["dram_done"] is True
     assert gm.inspect("Sealed letter")["parent"] == gm.inspect("The Gate Yard")["id"]
+    assert gm.inspect("Sealed letter")["state"]["hands"] == [gm.inspect("Halvard Dreyer")["id"]]  # D.'s hand, for the glass
     you.act("take", "Sealed letter")
     r = you.act("read", "Sealed letter")
     assert "Keep the Keth thirsty" in r["result"] if isinstance(r["result"], str) else True
@@ -1693,12 +1694,47 @@ def test_a_keeper_gives_its_key_only_to_whom_it_is_for_and_passes_word_once_and_
     assert said(gm.act_as(wright, "talk", k, {"about": "the key"})) == ["Yours."]
     assert [c["name"] for c in gm.find(parent=wright)] == ["A test key"]
     assert said(gm.act_as("Garran Teague", "talk", k, {"about": "key"})) == ["Given."]
+    # a written word in the hand of one it is kept for, naming the asker, is that one asking
+    gm.act_as(wright, "give", k, {"item": "A test key"})
+    leaf = gm.spawn("letter", gm.inspect("Garran Teague")["id"], "A test leaf", state={"portable": True})["id"]
+    assert said(gm.act_as("Garran Teague", "talk", k, {"about": "key"})) == ["Not yours."]
+    gm.patch(leaf, {"text": "The key goes to Garran Teague.", "hands": [wright]})
+    assert said(gm.act_as("Garran Teague", "talk", k, {"about": "key"})) == ["Yours."]
     book = gm.spawn("letter", yard, "A kept book", state={"portable": True, "text": "Words that stay.", "keeps_in_mind": True})["id"]
     gm.set_rule(book, "read_keeps", kinds=["read"])
     gm.act_as(wright, "read", book)
     gm.act_as(wright, "read", book)
     mem = [m["text"] for m in gm.inspect(wright)["state"]["memory"]]
     assert mem.count("I read A kept book. Words that stay.") == 1
+
+
+def test_a_candle_lights_from_a_tinderbox_or_a_fire_snuffs_and_burns_down():
+    eng, gm, you = reach()
+    hold = gm.find(name="Scar Gate, the Hold")[0]["id"]
+    gate = gm.find(name="The Gate Yard")[0]["id"]
+    me = gm.inspect("Reeve Ansel Varrick")["id"]
+    gm.move(me, gate)
+    c = gm.spawn("lamp", gate, "A candle stub", state={"fuel": 600, "desc_lit": "Lit.", "desc_dark": "Dark.",
+                                                       "desc_spent": "Spent."})["id"]
+    with pytest.raises(Rejected, match="nothing to light it from"):
+        you.act("light", c)
+    box = gm.spawn("thing", me, "A tinderbox", state={"portable": True, "kindles": True})["id"]
+    you.act("light", c)
+    st = gm.inspect(c)["state"]
+    assert st["lit"] is True and st["description"] == "Lit."
+    gm.clock(step=120)
+    you.act("snuff", c)
+    st = gm.inspect(c)["state"]
+    assert st["lit"] is False and st["description"] == "Dark." and 450 < st["fuel"] < 490
+    gm.destroy(box)
+    you.act("take", c)
+    gm.move(me, hold)  # the hall's hearth is a fire
+    you.act("light", c)
+    gm.clock(step=600)
+    st = gm.inspect(c)["state"]
+    assert st["lit"] is False and st["fuel"] == 0 and st["description"] == "Spent."
+    with pytest.raises(Rejected, match="burned down"):
+        you.act("light", c)
 
 
 def test_a_witness_says_more_to_proof_a_keepers_book_matches_hands_and_a_charge_opens_a_hidden_way_to_the_accuser():

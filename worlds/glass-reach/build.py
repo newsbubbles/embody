@@ -2290,6 +2290,20 @@ def keep_keeper_book_schema(s):
                              "charge": {"script": "keepers_charge", "duration": 30,
                                         "doc": "Name before the Hold who did it, aloud; what follows is the Hold's",
                                         "params": {"who": "the one you charge, by name"}}})
+    keep_lamp_schema(s)
+
+
+# A light (scripts/light.py): a candle, lamp or torch you light from a fire, another light or a tinderbox in hand, and
+# snuff; it burns down while lit. A tinderbox is any thing with `kindles` on its state.
+def keep_lamp_schema(s):
+    s.define_schema("lamp", extends="thing",
+                    doc="A light: a candle, lamp or torch. Light it from a fire, another light, or a tinderbox in your "
+                        "hands; snuff it to save what is left.",
+                    state={"portable": True, "lit": False, "fuel": 7200},
+                    actions={"light": {"script": "light", "duration": 5,
+                                       "doc": "Light it: from a fire or a light here or in your hands, or a tinderbox you hold"},
+                             "snuff": {"script": "light", "duration": 1, "doc": "Put it out and keep what is left of it"}},
+                    listeners=[{"script": "light", "kinds": ["light_out"]}])
 
 
 def keep_tally_slates(s, names):
