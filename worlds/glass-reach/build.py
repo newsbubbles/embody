@@ -2103,6 +2103,23 @@ def keep_leaves(s, names):
     s.patch(story, {"leaves_laid": True})
 
 
+HOUSE_SKIN = {"capacity": 4, "left": 4, "house": "House Dreyer",
+              "description": "A house skin, the Dreyer mark burned into the neck, filled at the tank and marked on Mother "
+                             "Sallow's slate. Out for the house's business: it comes back, or it buys a man."}
+
+
+def keep_house_skins(s, names):
+    """House Dreyer's pay (2026-11-12): drifters sign for a shard or a skin with water in it, and the Dry Camp had an
+    endless tank and nothing to carry it in, so the house could not sign a man before the riders' paychest. Three skins,
+    out of Sallow's chest. Once, by a mark on the story."""
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    if s.world.get(story)["state"].get("house_skins_laid") or "The Dry Camp" not in names:
+        return
+    for _ in range(3):
+        s.spawn("waterskin", names["The Dry Camp"], "House skin", state=dict(HOUSE_SKIN))
+    s.patch(story, {"house_skins_laid": True})
+
+
 def keep_canon(s):
     """The Low Well (a place off the Flats and the ridge, with its dry poisoned well-head and the four Keth cairns), the
     bows on the Hold's wall, the Crawler's Lee off the Salt Road with Wick the Dreyer runner in it, House Dreyer's
@@ -2159,6 +2176,7 @@ def keep_canon(s):
     keep_high_landing(s, names_of(s))
     keep_paper(s)
     keep_leaves(s, names_of(s))
+    keep_house_skins(s, names_of(s))
     keep_carry(s)
     if st.get("garrison"):
         return

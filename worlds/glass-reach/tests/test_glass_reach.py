@@ -854,6 +854,21 @@ def test_one_drifter_a_day_signs_with_each_house():
     hold.act("give", "Joss", params={"item": glass})
     assert where(gm, "Joss") == "Scar Gate, the Hold" and not gm.inspect("Joss")["state"].get("turncoat")
 
+def test_the_house_has_skins_to_buy_a_man_with_before_the_riders_come():
+    eng, gm = hosted(truce=True)
+    chapter_two_now(gm)
+    camp = gm.inspect("The Dry Camp")["id"]
+    skins = [e for e in gm.find(name="House skin") if gm.inspect(e["id"])["parent"] == camp]
+    assert len(skins) == 3 and all(gm.inspect(e["id"])["state"]["left"] == 4 for e in skins)
+    spy = newcomer(eng, gm, "dreyer", "Vey")
+    gm.move(skins[0]["id"], "Vey")
+    gm.move("Vey", "The Old Salt Works")
+    spy.act("give", "Lark", params={"item": skins[0]["id"]})
+    assert gm.inspect("Lark")["state"].get("turncoat") and where(gm, "Lark") == "Scar Gate, the Hold"
+    load_world(gm, "glass-reach", upgrade=True, hosted=True)  # a reboot does not lay the skins again
+    assert len(gm.find(name="House skin")) == 3
+
+
 def test_pitch_mends_the_cistern_once_the_wedge_is_out_and_the_mended_cistern_counts():
     eng, gm = hosted(truce=True)
     chapter_two_now(gm)
