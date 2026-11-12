@@ -1,5 +1,5 @@
 SKILLS = {"blade": "body", "brawl": "body", "climb": "body", "stealth": "wits", "survival": "wits", "lore": "wits", "lockpick": "wits",
-          "parley": "will", "resolve": "will"}
+          "aim": "wits", "parley": "will", "resolve": "will"}
 
 def stat_for(skill):
     return SKILLS.get(skill, "wits")
@@ -122,7 +122,7 @@ def sweat(ctx, who, key):
 def strike(ctx, me, t, slow):
     # one blow: the opposed roll, the ward, the damage, the conditions. Used by attack and by fighters' ticks.
     sweat(ctx, me, "fight")
-    weapon = held(me, "weapon")
+    weapon = melee(me)
     wname = weapon.name if weapon else "bare hands"
     ward = held(t, "ward")
     if not t.state.yielded and t.state.attacked_by != me.id:
@@ -146,7 +146,7 @@ def strike(ctx, me, t, slow):
     if slow:
         a_mod = a_mod - 2
     d_roll = ctx.rand.roll("1d20")
-    d_mod = bonus(t, "blade" if held(t, "weapon") and not asleep else "brawl")
+    d_mod = bonus(t, "blade" if melee(t) and not asleep else "brawl")
     if t.state.braced and not asleep:
         d_mod = d_mod + 3
     attack = a_roll + a_mod
@@ -167,6 +167,143 @@ def strike(ctx, me, t, slow):
         ctx.patch(me, {"braced": False})
     ctx.log(("hit for " + str(dmg) if hit else "miss") + " (" + str(attack) + " vs " + str(defence) + ")")
     return {"hit": hit, "dmg": dmg, "attack": attack, "defence": defence}
+
+def melee(who):
+    # the first weapon held that is not one that fires: what a blow is struck with
+    for it in who.children():
+        if it.state.weapon and not it.state.ranged:
+            return it
+    return None
+
+def ranged(who):
+    # the first weapon held that fires (`ranged` on its state); `ammo` names the kind it takes
+    for it in who.children():
+        if it.state.weapon and it.state.ranged:
+            return it
+    return None
+
+def ammo_for(who, weapon):
+    # what the weapon fires from the shooter's hands: a held thing whose `ammo` or `kind` is the weapon's `ammo`
+    # (a stack of arrows, a pouch of glass for a sling). A weapon with no `ammo` needs none.
+    kind = weapon.state.ammo
+    for it in who.children():
+        if kind and it.id != weapon.id and (it.state.ammo == kind or it.state.kind == kind):
+            return it
+    return None
+
+def can_fire(who, weapon):
+    # why it will not fire now, or None: a weapon that must be loaded (`loaded` false) and one out of ammo
+    if weapon.state.loaded is False:
+        return weapon.name + " is not loaded"
+    if weapon.state.ammo and ammo_for(who, weapon) is None:
+        return "you have no " + str(weapon.state.ammo) + " left"
+    return None
+
+def in_sight(ctx, me, t):
+    # someone here, or one way over that the eye can follow: a way you know with no shut door on it
+    here = me.parent
+    there = t.parent
+    if here is None or there is None:
+        return False
+    if there.id == here.id:
+        return True
+    if t.state.hidden:
+        return False
+    for e in ctx.edges(here, "connects_to", "out"):
+        if e["target"] == there.id:
+            via = ctx.get(e["data"].get("via")) if e["data"].get("via") else None
+            if via is not None and not via.state.open:
+                return False
+            return ctx.knows_way(me, there)
+    return False
+
+def cover(place):
+    # `cover` on a place: true is +2 to the defence of whoever stands in it, a number is that much
+    c = place.state.cover if place is not None else None
+    if c is True:
+        return 2
+    if c:
+        return int(c)
+    return 0
+
+def ring_blocks(ctx, a, t):
+    # the ring holds against shots too: one in a duel shoots only the other, nobody shoots into a duel
+    for d in ctx.relations(a, "duel"):
+        if t.id not in d["participants"]:
+            return "you are in a duel: your aim is for your opponent"
+    for d in ctx.relations(t, "duel"):
+        if a.id not in d["participants"]:
+            return "the ring holds: " + t.name + " is in a duel"
+    return None
+
+def shot(ctx, me, t, weapon):
+    # one shot from a weapon that fires, at someone in sight (in_sight). The hook a world's own fire verbs call (a
+    # crossbow that is loaded, a sling): d20 + wits + aim + the weapon's bonus, -2 one way over, against d20 + wits
+    # + the cover where they stand. A ward on stops it: a shot is fast. The ammo is spent and lands where they
+    # stand, hit or miss, a pile anyone there can take; a loaded weapon is unloaded.
+    ammo = ammo_for(me, weapon)
+    far = t.parent.id != me.parent.id
+    wname = weapon.name
+    if weapon.state.loaded is not None:
+        ctx.patch(weapon, {"loaded": False})
+    if not t.state.yielded and t.state.attacked_by != me.id:
+        ctx.patch(t, {"attacked_by": me.id})
+    if t.state.yielded == me.id:
+        ctx.emit("dishonor", target=me, reach=-1, against=t.id)
+    extra = int(ammo.state.damage or 0) if ammo is not None else 0
+    if ammo is not None:
+        ctx.transfer(ammo, t.parent, 1 if ammo.state.count is not None else None)
+    if far:
+        ctx.emit("shot", target=me, reach=1, by=me.id, at=t.id, weapon=wname)  # the shooter's own place sees it fly
+    ward = held(t, "ward")
+    if ward and ward.state.on:
+        ctx.emit("warded", target=t, reach=1, by=me.id, weapon=wname, ranged=True)
+        ctx.log("the ward stops the shot")
+        return {"hit": False, "warded": True}
+    asleep = bool(t.state.asleep)
+    a_roll = ctx.rand.roll("1d20")
+    rolls = [a_roll]
+    if asleep:
+        rolls.append(ctx.rand.roll("1d20"))
+        a_roll = max(rolls)
+    a_mod = bonus(me, "aim") + int(weapon.state.bonus or 0) - (2 if far else 0)
+    d_roll = ctx.rand.roll("1d20")
+    d_mod = cover(t.parent) + (0 if asleep else bonus(t, "dodge"))  # wits, less the conditions
+    attack = a_roll + a_mod
+    defence = d_roll + d_mod
+    hit = attack > defence
+    dmg = 0
+    if hit:
+        dmg = int(weapon.state.damage or 1) + extra
+        vigor = int(t.state.vigor or 0) - dmg
+        ctx.patch(t, {"vigor": vigor, "braced": False})
+        ctx.emit("hit", target=t, reach=1, by=me.id, dmg=dmg, weapon=wname, attack=attack, defence=defence, vigor=vigor,
+                 rolls=rolls, asleep=asleep, ranged=True)
+        settle(ctx, t, me.id)
+    else:
+        ctx.emit("missed", target=t, reach=1, by=me.id, weapon=wname, attack=attack, defence=defence, rolls=rolls,
+                 asleep=asleep, ranged=True)
+    ctx.log(("hit for " + str(dmg) if hit else "miss") + " (" + str(attack) + " vs " + str(defence) + ")")
+    return {"hit": hit, "dmg": dmg, "attack": attack, "defence": defence, "far": far}
+
+def fight_beat(ctx):
+    return float(ctx.root().state.fight_beat or 0)
+
+def ready(ctx, me, foe):
+    # a seated foe (a player, a mind) gets a beat to answer: a fighter's next blow at them waits the world's
+    # `fight_beat` (world seconds, on the root; 0 or unset: no wait), or until they act (rules_guard clears it)
+    beat = fight_beat(ctx)
+    if beat <= 0 or not ctx.embodied(foe):
+        return True
+    at = (foe.state.beat_at or {}).get(me.id)
+    return at is None or ctx.t - float(at) >= beat
+
+def paced(ctx, me, foe):
+    # mark the blow on a seated foe, so the next waits its beat
+    if fight_beat(ctx) > 0 and ctx.embodied(foe):
+        b = dict(foe.state.beat_at or {})
+        b[me.id] = ctx.t
+        ctx.patch(foe, {"beat_at": b})
 
 def faction_of(ctx, who):
     name = who.state.faction

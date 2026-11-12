@@ -246,7 +246,7 @@ class Ctx(ScriptObject):
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
-        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "embodied", "event_at", "locked", "remember",
+        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "embodied", "event_at", "locked", "remember",
         "count", "split", "merge", "transfer", "bulk", "load", "may", "member", "chmod", "chown", "rename",
     )
 
@@ -370,6 +370,11 @@ class Ctx(ScriptObject):
     def embodied(self, id: Any) -> bool:
         """Someone (a mind, a player) holds this body: it acts for itself, so a rule should not drive it."""
         return self._w.embodied(_ev(self._w, id)) is not None
+
+    def knows_way(self, who: Any, place: Any) -> bool:
+        """Whether a body knows the way to a place: any place not `hidden`, a hidden one only when its `known_to`
+        names the body or its faction (World.knows_way). A rule that walks or looks along ways asks this."""
+        return self._w.knows_way(_ev(self._w, who), _ev(self._w, place))
 
     def event_at(self, seq: Any) -> EventView | None:
         """One event of the log by its number (the deed a record came from), or None. Notes and intents stay their
@@ -1673,6 +1678,19 @@ class World:
                 "events": [_public_event(e) for e in evs if e["kind"] not in _INTERNAL_KINDS], "logs": logs,
                 **({"maker": s.limits["frame"], "untrusted": True} if (s.limits or {}).get("frame") else {})}
 
+    def in_sight(self, actor_id: str) -> list[str]:
+        """The creatures one way over that a body can see (scope "sight": a bow, a thrown spear): through a way it
+        knows (knows_way), with no shut door on it (the passage's `via` open, or none), and not hidden."""
+        here = self.need(actor_id)["parent_id"]
+        out: list[str] = []
+        for e in self.edges(here, "connects_to", "out") if here else []:
+            via = self.get(e["data"].get("via")) if e["data"].get("via") else None
+            if (via is not None and not via["state"].get("open")) or not self.knows_way(actor_id, e["target"]):
+                continue
+            out.extend(c["id"] for c in self.children(e["target"])
+                       if not c["state"].get("hidden") and self.is_a(c["type"], "creature"))
+        return out
+
     def affordances(self, actor_id: str, target_id: str | None = None) -> list[dict[str, Any]]:
         """Every verb the actor could try on itself and on reachable entities, with preconditions evaluated."""
         actor = self.need(actor_id)
@@ -1710,19 +1728,21 @@ class World:
         here = actor["parent_id"]
         held = {c["id"] for c in self.children(actor_id)}
         exits = set(self.neighbors(here, "connects_to")) if here else set()
+        sight = self.in_sight(actor_id) if not target_id and any(
+            a.get("scope") == "sight" for a in actor_verbs.values()) else []
         for verb, adef in actor_verbs.items():
             tt = adef.get("targets")
             if tt is None:
                 add(verb, adef, None)
                 continue
             scope = adef.get("scope", "any")
-            for cid in candidates:
+            for cid in candidates + sight if scope == "sight" else candidates:
                 if cid == actor_id and adef.get("reach") != "self" and not adef.get("self"):
                     continue  # self is a target only for reach "self" verbs or verbs flagged self: true
                 # scope keeps the impossible pairs out of the list: drop what you do not hold, go where you stand
                 if scope == "held" and cid not in held:
                     continue
-                if scope == "here" and (cid in held or cid == here or cid in exits):
+                if scope in ("here", "sight") and (cid in held or cid == here or cid in exits):
                     continue
                 if scope == "exits" and cid not in exits:
                     continue

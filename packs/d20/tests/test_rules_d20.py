@@ -301,7 +301,8 @@ def test_search_the_downed_and_harvest_the_vein():
 
 
 def bulk_of(gm, name):
-    return sum(int(c["state"].get("bulk") or (2 if c["state"].get("capacity") else 1))
+    # as the engine counts it: `bulk` when set (0 weighs nothing: a slate, a leaf), else 2 with a capacity, else 1
+    return sum(int(c["state"]["bulk"] if c["state"].get("bulk") is not None else (2 if c["state"].get("capacity") else 1))
                for c in gm.find(parent=gm.inspect(name)["id"], limit=100))
 
 

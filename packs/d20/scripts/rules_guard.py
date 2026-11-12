@@ -11,6 +11,8 @@ def on(ctx, event):
         if a.state.down and verb not in ["yield", "drink", "crawl"]:
             ctx.reject("you are down: you can yield, drink or crawl", "act('yield', <who>), act('drink', <skin>) or act('crawl', <place>)")
     elif event.kind == "act":
+        if a.state.beat_at:
+            ctx.patch(a, {"beat_at": None})  # they answered: the fighters on them may strike again (fight_beat)
         if a.state.braced and verb != "brace":
             ctx.patch(a, {"braced": False})
         if a.state.asleep and verb not in ["sleep", "wake"]:
