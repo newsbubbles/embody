@@ -1106,6 +1106,7 @@ def test_a_blank_leaf_takes_writing_and_a_signature_and_the_bone_field_shows_the
     st = gm.inspect(leaf)["state"]
     assert st["text"].endswith("north at the moon.\nBram") and st["hands"] == [gm.inspect("Bram")["id"]]
     assert gm.inspect(leaf)["name"] == "A written leaf"  # written on, it is not blank any more
+    assert "blank" not in st["description"] and "inked in a hand" in st["description"]
     second = [c["id"] for c in gm.inspect(hold)["contents"] if c["name"] == "A blank leaf"][0]
     me.act("take", second)
     me.act("write", second, {"text": "A second page."})

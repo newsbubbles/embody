@@ -38,7 +38,10 @@ def apply(ctx):
     hands = list(it.state.hands or [])
     if ctx.actor.id not in hands:
         hands.append(ctx.actor.id)
-    ctx.patch(it, {"text": words if not text else text + "\n" + words, "hands": hands, "blank": False})
+    changes = {"text": words if not text else text + "\n" + words, "hands": hands, "blank": False}
+    if ", blank," in (it.state.description or ""):
+        changes["description"] = it.state.description.replace(", blank,", ", inked in a hand,")
+    ctx.patch(it, changes)
     if it.name == "A blank leaf":
         name = free_name(ctx, WRITTEN)
         if name:
