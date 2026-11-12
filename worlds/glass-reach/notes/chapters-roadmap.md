@@ -46,3 +46,17 @@ that in NPCs living their lives.
 - **Chapter 5:** a thousand players and five thousand NPCs is a hosting question as much as a world one: the minds'
   cost, the tick, and one world against many (the hosting conversation with the engine session).
 - **Every chapter:** places sized for the players it brings, and an introducer for every new place and thing.
+
+## Chapter three, planted in chapter two (2026-11-12)
+
+What the standoff now says about the Guild, which chapter three has to honour:
+
+- **Omens at dawn (scripts/reach_moon.py, OMENS):** a sealed Guild pouch for Ossa (9 days out), the slow star crossing
+  lower and brighter (7), a light falling off it behind the north road (5), the dawn driver repeating that a factor
+  is coming (3), the carriers sweeping the pan as if for an inspection (1).
+- **Guild notices:** from 7 days out, "after the moon the factor comes down to settle the Reach leg"; from 4, "the
+  Guild's cut on glass is to be looked at again at the moon's turn". **Chapter three owes a change to the cut.**
+- **Talk:** nine bodies answer about the Guild or the factor, some of it wrong (the factor sells the gate for
+  "ten shards, a hundred"; a Guild man asked who would sign for the Guild; the sky people want the water law).
+- **Minds:** Ossa and Marr know the true word (the factor names the holder, bribable at ten shards or more); Ruhl and
+  Halvard have hearsay.

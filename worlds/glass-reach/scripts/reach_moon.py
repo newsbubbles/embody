@@ -387,24 +387,32 @@ OMENS = {
     9: [("landing", "Carriers who meant to sit out the moon at the Landing are packing instead. Crates stand roped on "
                     "the pan for the wheels north."),
         ("deepwell", "Haro brings the bows down from the dry niche and sits with a pot of fat, oiling them one by one. "
-                     "He does not say who for.")],
+                     "He does not say who for."),
+        ("landing", "A Guild crawler comes down the road with no load and a sealed pouch for Ossa. She reads it twice "
+                    "and puts it inside her coat.")],
     8: [("salt_works", "Two more men came up the road in the night and sat down in the shed's shade with the others. "
                        "Word gets around: somebody is buying arms at the Salt Works."),
         ("hold", "Ruhl moves the count to dawn and dusk both. Nobody argues.")],
     7: [("flats", "Fewer diggers on the Flats today. The glass will keep; nobody is sure the riders will."),
-        ("landing", "Ossa chalks a new line under the tally, looks at it, and rubs it out again.")],
+        ("landing", "Ossa chalks a new line under the tally, looks at it, and rubs it out again."),
+        ("ridge", "Before dawn the slow star crosses lower than the oldest Keth remember it, and brighter.")],
     6: [("ridge", "The dust to the south hangs in the air at noon now, as if something large stands under it."),
         ("dry_camp", "Brisk rides out before light and comes back after it, and Halvard reads what he brings twice.")],
     5: [("hold", "The nine sharpen what they have. Pip asks the oldest of them what a siege is like and gets no answer."),
-        ("dry_camp", "Mother Sallow counts the camp's water and puts a second cask under canvas.")],
+        ("dry_camp", "Mother Sallow counts the camp's water and puts a second cask under canvas."),
+        ("landing", "Before dawn a light drops off the slow star, falls a long way slow, and goes out behind the north "
+                    "road. The carriers stop talking when they see it.")],
     4: [("landing", "The Landing lays its odds out loud now, and writes them on the crates."),
         ("deepwell", "The Keth take the cups off their cords at night and keep them inside.")],
     3: [("salt_works", "The drifters stop haggling with each other. Whoever comes now, they will hear him out."),
-        ("hold", "Someone has chalked a tally of days on the inside of the gate. Three marks left.")],
+        ("hold", "Someone has chalked a tally of days on the inside of the gate. Three marks left."),
+        ("yard", "The dawn crawler's driver says the Guild has a factor coming down after the moon, to settle who "
+                 "the Guild carries for. He says it to everyone, the way a man repeats what he was paid to.")],
     2: [("landing", "Convoy masters walk the pan checking straps. The wheels go north at the moon, ready or not."),
         ("bones", "Hoofprints in the Bone Field at first light, a lot of them, and nobody saw them made.")],
     1: [("hold", "Nobody in the Hold talks about tomorrow. Everybody checks the gate bar."),
-        ("deepwell", "The Keth bank the cookfire low and keep the children below the broken step.")],
+        ("deepwell", "The Keth bank the cookfire low and keep the children below the broken step."),
+        ("landing", "The carriers sweep the pan and stack the crates square, as if for an inspection.")],
 }
 RUMOUR_KEY = "news|rumour|rumor|rumours|heard|gossip|word|saying|talk"
 MOON_KEY = "moon|coming|days|soon|ready|siege"
@@ -433,6 +441,22 @@ RUMOURS = {
     "Brisk": "'The Hold has thirty men behind that wall now, and a mason raising it every night.'",  # about ten; no course laid
     "Mother Sallow": "'Hollis talked, they say. Every word. If he did, the plan's no good.'",  # nobody knows
     "Jory Flint": "'They say the riders pay masons double to take a wall down. I only put them up.'",
+}
+GUILD_KEY = "guild|factor|carriers|star|slow|landing"
+# chapter three, planted (notes/chapters-roadmap.md): the factor comes down after the moon and names who holds the gate,
+# the house the moon left there unless the other put ten shards or more in his hand (scripts/reach_speakers.py)
+GUILD_TALK = {
+    "Kell Daro": "'The factor comes down after the moon. Whoever holds the gate then pays him, or the convoy stops "
+                 "coming.'",  # he names the holder; paying him can change who
+    "Tavish Orme": "'They say the factor sells the gate. Ten shards, a hundred, nobody agrees.'",  # ten at least
+    "Nell Saye": "'The slow star is the Guild's own ground. They say it watches the road. I don't think it does.'",
+    "Dunmore": "'A Guild man came through asking who would sign for the Guild, if it came to that. Nobody laughed.'",
+    "Cass the Salter": "'The Guild doesn't take sides. It takes the side that's left.'",
+    "Pip": "'The Guild's sending someone down from the star to look at our gate. Nobody asked them to.'",
+    "Haro of the Keth": "'A light fell off the Guild's star. The Elder says the sky people want the water law for "
+                        "themselves.'",
+    "Brisk": "'The house will have a word with the Guild. After.'",
+    "Mother Sallow": "'The Guild carries for whoever holds the gate. Make sure it's us.'",
 }
 MOON_TALK = {
     "hold": ["'{d} to the moon. Ruhl has us counting arrows twice a day.'",
@@ -532,7 +556,11 @@ def board_texts(ctx, st):
              "Men at the Old Salt Works sell their arms. The Guild does not ask to whom.\n"
              "Hauler fourteen was taken by riders off the south dunes, the log says. Word of its driver, Sel Amory, to "
              "Ossa at the Landing.\n"
-             "The Guild carries for whoever holds the gate.")
+             "The Guild carries for whoever holds the gate."
+             + ("\nAfter the moon the Guild's factor comes down from up the road to settle the Reach leg: who holds "
+                "the gate, and on what terms the Guild carries for them." if days_left(ctx, st) <= 7 else "")
+             + ("\nBy the factor's word, the Guild's cut on glass is to be looked at again at the moon's turn."
+                if days_left(ctx, st) <= 4 else ""))
     if st.pitch_curing:
         pitch = "The pitch in the Hold's cistern is still soft; a knife in it undoes the mend."
     else:
@@ -572,6 +600,8 @@ def talk(ctx, st):
             dialog[MOON_KEY] = MOON_TALK[group][tier].replace("{d}", say_days(d))
             if name in RUMOURS:
                 dialog[RUMOUR_KEY] = RUMOURS[name]
+            if name in GUILD_TALK:
+                dialog[GUILD_KEY] = GUILD_TALK[name]
             ctx.patch(p, {"dialog": dialog})
 
 def on(ctx, event):

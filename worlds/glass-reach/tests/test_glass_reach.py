@@ -1037,6 +1037,7 @@ def test_the_moon_comes_on_posted_notices_and_in_the_talk_of_the_bodies_without_
     bram = gm.inspect("Bram")["id"]
     assert any("Hollis told the reeve" in x for x in said(me.act("talk", "Pip", {"about": "any news?"}), bram))
     assert any("to the moon" in x for x in said(me.act("talk", "Hobb", {"about": "how many days till the moon?"}), bram))
+    assert any("from the star" in x for x in said(me.act("talk", "Pip", {"about": "the factor"}), bram))
     left = gm.inspect("The captain's notice")["state"]["text"]
     gm.schedule(1, "moon_word", entity=gm.summary()["root"])
     gm.clock(step=2)
