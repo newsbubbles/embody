@@ -168,3 +168,19 @@ reading the history saw only checks and reads and could not tell that he had tri
 
 **Taught.** Paper weighs nothing now (the Reach's letter schema, bulk 0). A refused act should leave a trace the
 host can read, or the host diagnoses a guest by guesswork.
+
+## 2026-11-12: The first thing a faction director did was break the truce
+
+**Seen.** Within an hour of Halvard getting a standing brief (move the house's agenda every dawn) and Brisk getting
+a mind, Halvard worked out that shards were scarce and the Buried vein was the last with glass in it, and sent Brisk
+to dig it. The dig was the second strike on the Keth truce, and it broke. Taan blamed the Hold and stopped the dusk
+water. Both strikes had been Dreyer men: Arlo two days earlier, Brisk now.
+
+**Why.** The strain rule counted any non-Keth dig against the Hold's terms. While no Dreyer body acted on its own,
+nobody noticed, because the only outside digger was a guest who went quiet. A mind with an agenda found the gap on
+its first turn, as a player looking for leverage would.
+
+**Taught.** A rule that names one side's terms must check that side, not "anyone but the Keth". An agent with goals
+is the fastest audit of a world's rules: give a faction a director and it walks straight into whatever the rules
+let it do. The rule now strains only on a Hold man's dig (a bought man in a Varrick coat included), and any other
+dig is a grudge the Keth keep against the digger's side.
