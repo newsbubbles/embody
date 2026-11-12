@@ -1754,6 +1754,18 @@ def test_each_faction_keeps_a_store_at_home_that_opens_to_a_word_its_people_reme
         assert len([e for e in gm.find(name=name) if e["name"] == name]) == 1
 
 
+def test_a_keepers_book_opens_to_read_and_takes_a_book_of_writing():
+    eng, gm = hosted()
+    me = newcomer(eng, gm, "guard", "Tam")
+    gm.spawn("keepers_book", "Tam", "A Keeper's book", state={"text": "THE COUNT.", "room": 3000})
+    r = me.act("read", "A Keeper's book")
+    assert "THE COUNT." in json.dumps(r["events"])
+    me.act("write", "A Keeper's book", params={"text": "x" * 1500})  # more than a leaf holds
+    assert gm.inspect("A Keeper's book")["state"]["text"].endswith("x" * 1500)
+    with pytest.raises(Rejected, match="room for"):
+        me.act("write", "A Keeper's book", params={"text": "y" * 1500})
+
+
 def test_a_candle_lights_from_a_tinderbox_or_a_fire_snuffs_and_burns_down():
     eng, gm, you = reach()
     hold = gm.find(name="Scar Gate, the Hold")[0]["id"]

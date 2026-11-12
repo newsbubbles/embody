@@ -2369,7 +2369,13 @@ def keep_keeper_book_schema(s):
                                          "params": {"a": "a paper you hold or that lies here", "b": "another"}},
                              "charge": {"script": "keepers_charge", "duration": 30,
                                         "doc": "Name before the Hold who did it, aloud; what follows is the Hold's",
-                                        "params": {"who": "the one you charge, by name"}}})
+                                        "params": {"who": "the one you charge, by name"}},
+                             # a Keeper keeps his count in it (Wizard's Aaron, 2026-11-12: "shouldn't I be able to
+                             # open and write in this book?")
+                             "read": {"script": "read", "doc": "Open the book and read what is kept in it"},
+                             "write": {"script": "write", "duration": 20, "params": {"text": "the words"},
+                                       "doc": "Write in the book you hold: params {\"text\": the words}. Each writing "
+                                              "adds a line; sign it by writing your name"}})
     keep_lamp_schema(s)
 
 

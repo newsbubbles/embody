@@ -2,7 +2,7 @@
 # paper more than a hundred times, and the world had no pen. A leaf you hold takes what you write, a line at a time,
 # up to what fits; a signature is your name written on it. Nobody reading it sees whose hand wrote it unless the
 # writer signed it: the hands are kept on the paper's state, for whoever later learns to compare them.
-ROOM = 1200  # letters a leaf holds
+ROOM = 1200  # letters a leaf holds; a book says its own (`room`)
 WRITTEN = "A written leaf"  # what a blank leaf is called once written on; names are one to a world, so (2), (3)...
 
 def free_name(ctx, base):
@@ -26,9 +26,9 @@ def check(ctx):
     words = words_of(ctx)
     if not words:
         return "say what you write: params {\"text\": the words}"
-    left = ROOM - len(it.state.text or "")
+    left = int(it.state.room or ROOM) - len(it.state.text or "")
     if len(words) > left:
-        return "there is room for " + str(max(0, left)) + " more letters on it: write less, or take a fresh leaf"
+        return "there is room for " + str(max(0, left)) + " more letters on it: write less, or find fresh paper"
     return True
 
 def apply(ctx):
