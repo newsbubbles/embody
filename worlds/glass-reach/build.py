@@ -51,7 +51,7 @@ WORLD = {
     "name": "The Glass Reach",
     "seed": 23,
     "description": "A desert fief, a cracked cistern, a people with the water, a blade left behind. Rules on the table.",
-    "requires": ["d20", "village", "works", "locks", "vehicles"],
+    "requires": ["d20", "village", "works", "locks", "vehicles", "ledgers"],
 }
 
 # ---- what there is ---------------------------------------------------------------------
@@ -390,6 +390,7 @@ def define(s):
                                    "params": {"count": "how many shards"}},
                     },
                     listeners=[{"script": "speaker", "kinds": ["taken", "slab_handed"]}])
+    keep_slate_schemas(s)
     s.define_schema("beast", extends="creature", doc="An animal of the Reach: the d20 blows land on it and it strikes back; it does not drink, talk or carry.",
                     state={"beast": True, "body": 2, "wits": 1, "will": 1, "skills": {}, "vigor": 6, "max_vigor": 6})
     s.define_schema("nest", extends="thing", doc="A swarm's nest. Everyone in its place loses a point of vigor a minute, to one, until it is smoked.",
@@ -2104,6 +2105,14 @@ def keep_leaves(s, names):
     s.patch(story, {"leaves_laid": True})
 
 
+def keep_written_leaves(s):
+    """A leaf with writing on it is not blank (the owner, 2026-11-12): a script cannot rename a thing, so each boot
+    names what was written on since."""
+    for e in s.world.find(name="A blank leaf", limit=None):
+        if e["name"] == "A blank leaf" and (s.world.get(e["id"])["state"].get("text") or "").strip():
+            s.rename(e["id"], "A written leaf")
+
+
 HOUSE_SKIN = {"capacity": 4, "left": 4, "house": "House Dreyer",
               "description": "A house skin, the Dreyer mark burned into the neck, filled at the tank and marked on Mother "
                              "Sallow's slate. Out for the house's business: it comes back, or it buys a man."}
@@ -2119,6 +2128,81 @@ def keep_house_skins(s, names):
     for _ in range(3):
         s.spawn("waterskin", names["The Dry Camp"], "House skin", state=dict(HOUSE_SKIN))
     s.patch(story, {"house_skins_laid": True})
+
+
+# Tally slates (Nate 2026-11-12; the ledgers pack, packs/ledgers/README.md): accounts people carry that only their
+# holder reads. Three looks on one pack. The Guild's tally-slate is dark glass with chalk-white lines; it speaks through
+# the Counting House relay at the Landing, which writes down who wrote to whom and never what, and it scans a room at a
+# glance, hands and all. The house slate is slate and scratch-iron, Sallow's own work: it goes face to face, and its
+# scan is scratched by hand, slower, and leaves out what people carry. The Keth count-cord is knotted and read by the
+# fingers, face to face, and has no scan: the Keth count by hand. Each records its holder's gives, takes and hires on
+# its own. Who holds one, the seals, and the first day's counts read off the live world: scripts/reach_slates.py.
+SLATE_RECORDS = ["given", "taken", "hired"]
+SLATE_KINDS = {
+    "tally_slate": {"doc": "A Guild tally-slate: a palm of dark glass that keeps its holder's accounts in chalk-white lines, "
+                           "speaks through the Counting House, and counts a room at a glance (scan).",
+                    "state": {"records": SLATE_RECORDS, "default_ledger": "tally", "delivery": "relay",
+                              "relay": "The Counting House relay", "scan_hands": True, "day_seconds": 86400,
+                              "lines": {"default": "{who} glances down at {device}; chalk-white lines move in the dark glass."},
+                              "scan_line": "{who} holds {device} up and turns slowly; lines rise white in the glass, counting.",
+                              "description": "A tally-slate of the Carriers' Guild: a palm of dark glass in a brass rim, the "
+                                             "Guild's chain-and-wheel cut small in one corner. Lines of chalk-white script "
+                                             "rise in it for the hand that holds it and nobody else."},
+                    "scan": 10},
+    "house_slate": {"doc": "A house slate: slate and scratch-iron, kept by hand, read face to face; its scan counts the loose "
+                           "things and the bodies in a room, slowly.",
+                    "state": {"records": SLATE_RECORDS, "default_ledger": "house", "delivery": "face", "scan_hands": False,
+                              "day_seconds": 86400,
+                              "lines": {"default": "{who} tilts {device} to the light and reads the scratches."},
+                              "scan_line": "{who} looks the room over slowly, scratching marks into {device} with an iron point.",
+                              "description": "A house slate: a grey tablet in a wooden frame, a scratch-iron on a thong, the "
+                                             "well-and-bar burned into the frame. The marks on it are small and close, and "
+                                             "make sense only to whoever keeps it."},
+                    "scan": 120},
+    "count_cord": {"doc": "A Keth count-cord: knots on a cord, read by the fingers, passed face to face. It keeps accounts but "
+                          "cannot count a room: the Keth count by hand.",
+                   "state": {"records": SLATE_RECORDS, "default_ledger": "count", "delivery": "face", "day_seconds": 86400,
+                             "lines": {"default": "{who} runs {device} through their fingers, knot by knot."},
+                             "description": "A Keth count-cord: a long cord of plaited hide, knotted along its length in "
+                                            "shapes that mean things, coiled at the belt. The fingers read it in the dark."},
+                   "scan": None},
+}
+SLATE_RELAY = {"description": "A slab of dark glass set into the Counting House wall behind the tally desk, wired to "
+                              "nothing anyone can see. Every Guild slate in the Reach speaks through it, and a Guild clerk "
+                              "reads off it who spoke to whom."}
+SLATES_ISSUED = ("The sealed pouch the Guild sent me held tally-slates for the Reach leg, against the moon: one for me, "
+                 "one for Marr, one for Bellan Rook when he comes. The Hold bought two on the writ's credit, for the reeve "
+                 "and the captain. Sallow made two of her own kind for the house, and the Keth Elder knotted two "
+                 "count-cords the old way.")
+
+
+def keep_slate_schemas(s):
+    for kind, spec in SLATE_KINDS.items():
+        acts = {}
+        if spec["scan"]:
+            acts["scan"] = {"script": "scan", "duration": spec["scan"],
+                            "doc": "Count this room into a ledger: the loose things and the bodies here"
+                                   + (", and what each holds in the open" if spec["state"].get("scan_hands") else "")
+                                   + "; nothing hidden",
+                            "params": {"ledger": "the ledger to write the count into (default scans)"}}
+        s.define_schema(kind, extends="ledger", doc=spec["doc"], state=dict(spec["state"]), actions=acts)
+
+
+def keep_tally_slates(s, names):
+    """The Counting House relay, the rule that issues the slates (scripts/reach_slates.py), and one issuing, once by a
+    mark on the story; Rook's slate comes a minute after his crawler does."""
+    root = s.summary()["root"]
+    s.set_rule(root, "reach_slates", kinds=["slates_issue", "rook_arrives"])
+    if "The Counting House" in names and "The Counting House relay" not in names:
+        s.spawn("ledger_relay", names["The Counting House"], "The Counting House relay", state=dict(SLATE_RELAY))
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    st = s.world.get(story)["state"]
+    if st.get("slates_scheduled"):
+        return
+    s.schedule(after=5, kind="slates_issue", entity=root, payload={})
+    if names.get("Ossa the Carrier"):
+        s.remember(SLATES_ISSUED, entity=names["Ossa the Carrier"])
+    s.patch(story, {"slates_scheduled": True})
 
 
 def keep_hauler_vehicle(s):
@@ -2201,8 +2285,10 @@ def keep_canon(s):
     keep_high_landing(s, names_of(s))
     keep_paper(s)
     keep_leaves(s, names_of(s))
+    keep_written_leaves(s)
     keep_house_skins(s, names_of(s))
     keep_hauler_vehicle(s)
+    keep_tally_slates(s, names_of(s))
     keep_carry(s)
     if st.get("garrison"):
         return

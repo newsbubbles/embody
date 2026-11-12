@@ -1099,7 +1099,8 @@ def test_a_blank_leaf_takes_writing_and_a_signature_and_the_bone_field_shows_the
     r = me.act("read", leaf)
     assert any("Manifest" in str(e["payload"]) for e in r["events"])
     load_world(gm, "glass-reach", upgrade=True)  # a reboot lays no second set
-    assert len(gm.find(name="A blank leaf", limit=100)) == 10 and len(gm.find(name="The burned house crawler")) == 1
+    assert len(gm.find(name="A blank leaf", limit=100)) == 9 and len(gm.find(name="The burned house crawler")) == 1
+    assert gm.inspect(leaf)["name"] == "A written leaf"  # the reboot names what was written on
 
 
 def test_dressing_stone_counts_a_stack_of_glass_by_the_piece():
@@ -1545,3 +1546,48 @@ def test_dreyer_glass_in_the_factors_hand_buys_the_gate_its_name_on_the_guilds_t
     st = gm.inspect("Story")["state"]
     assert st["guild_recognizes"] == "House Dreyer" and st["guild_bought"]
     assert "The gate's speaker" in holds(gm, "Halvard Dreyer")
+
+
+SLATES = {"Ossa the Carrier": "Ossa's tally-slate", "Sergeant Edda Marr": "Marr's tally-slate",
+          "Reeve Ansel Varrick": "The reeve's tally-slate", "Captain Ruhl": "Ruhl's tally-slate",
+          "Mother Sallow": "Mother Sallow's slate", "Halvard Dreyer": "Halvard's slate",
+          "Elder Taan": "Taan's count-cord", "Iska of the Keth": "Iska's count-cord"}
+
+
+def test_the_reach_hands_out_slates_bound_to_their_holders_with_the_live_counts_and_a_scan():
+    eng, gm, you = reach()
+    gm.patch(gm.inspect("Pip")["id"], {"down": True})  # whatever the world says on the day, not a number we wrote
+    gm.world.step(10)
+    st = gm.inspect("Story")["state"]
+    fit = sum(1 for pid in (st["hold"], st.get("yard")) if pid for c in gm.world.children(pid)
+              if c["state"].get("faction") == "House Varrick" and not c["state"].get("down") and not c["state"].get("dead"))
+    here = {e["name"] for e in gm.world.find(limit=None)}
+    assert len([w for w in SLATES if w in here]) >= 7
+    for who, dev in SLATES.items():
+        if who not in here:
+            continue
+        d = gm.world.get(gm.inspect(dev)["id"])
+        assert d["parent_id"] == gm.inspect(who)["id"] and d["state"]["keeper"] == who
+        assert any(c["type"] == "lock" for c in gm.world.children(d["id"]))
+    assert gm.inspect("The Counting House relay")["type"] == "ledger_relay"
+    men = you.act("search", "The reeve's tally-slate", params={"ledger": "men", "item": "men on the wall"})["result"]
+    assert men["entries"][0]["qty"] == fit
+    men = you.act("total", "The reeve's tally-slate", params={"ledger": "men", "by": "item"})["result"]
+    assert "mean" in json.dumps(men) and "stdev" in json.dumps(men)
+    # a scan counts the room, people and loose things; the room hears one line
+    scan = you.act("scan", "The reeve's tally-slate")["result"]
+    assert scan["people"] >= 2 and scan["written"] == len(scan["counted"]) + 1
+    assert you.act("search", "The reeve's tally-slate", params={"ledger": "scans", "item": "people"})["result"]["matched"] == 1
+    # the cord cannot scan; nobody else reads the reeve's slate
+    cord = next(x for x in gm.schemas() if "count_cord" in json.dumps(x)[:80])
+    assert '"scan"' not in json.dumps(cord) and '"scan"' in json.dumps(next(x for x in gm.schemas() if "tally_slate" in json.dumps(x)[:80]))
+    with pytest.raises(Rejected):
+        you.act("read", "Ruhl's tally-slate")
+    # Rook gets his a minute after his crawler comes in; a reboot hands out nothing twice
+    gm.spawn("person", gm.inspect("The Carriers' Landing")["id"], "Bellan Rook")
+    gm.schedule(after=1, kind="rook_arrives", entity=gm.summary()["root"])
+    gm.world.step(70)
+    assert gm.world.get(gm.inspect("Rook's tally-slate")["id"])["parent_id"] == gm.inspect("Bellan Rook")["id"]
+    load_world(gm, "glass-reach", upgrade=True)
+    gm.world.step(10)
+    assert sum(1 for e in gm.world.find(name="Ossa's tally-slate", limit=None) if e["name"] == "Ossa's tally-slate") == 1

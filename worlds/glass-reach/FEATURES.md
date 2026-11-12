@@ -11,9 +11,11 @@ sentences. `status: coming` under a heading means it is built or being built and
 status: coming
 
 Ledgers you carry. The Guild's dark-glass tally slates, the houses' scratch-iron slates and the Keth count-cords keep
-their holder's accounts: water, men, stone, shards. A slate can note what you give and take on its own, page and
-search its records, and total them with averages and spreads. What is on it is for its holder's eyes only; the room
-sees only that you checked it. Guild slates can count a room at a glance and send word through the Counting House.
+their holder's accounts: water, men, stone, shards. A slate notes what you give, take and hire on its own; you can
+page, search and sort it, and total it with averages and spreads. What is on it is for its holder's eyes only; the
+room sees only that you checked it. A Guild slate counts a room at a glance and sends word through the Counting House,
+where the Guild sees who wrote to whom but never what. A house slate counts slowly and goes face to face. A Keth cord
+cannot count a room at all.
 
 ## 2026-11-12: Hauler Nine drives the road
 
