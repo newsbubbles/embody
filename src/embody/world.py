@@ -81,12 +81,27 @@ class StateView(ScriptObject):
         return [k for k in ent["state"].keys() if k not in sealed]
 
 
+def own_verbs(ent: dict[str, Any] | None) -> dict[str, Any]:
+    """The verbs put on one thing (its `programmed` state, by `program`), or {}."""
+    v = ((ent or {}).get("state") or {}).get("programmed")
+    return v if isinstance(v, dict) else {}
+
+
+def _programmed(prog: dict[str, Any]) -> dict[str, Any]:
+    """A verb put on one thing (its `programmed` state) as an action: its script, doc and params, done near it, at the
+    default fuel."""
+    return {"script": prog["script"], "doc": prog.get("doc", ""), "params": prog.get("params") or {}, "reach": "near"}
+
+
 def _sealed(world: "World", ent: dict[str, Any] | None) -> set[str]:
     """The secret keys the running script may not read on this entity: a script defined under a grant's limits reads
     secrets only under its `under` (memory, brief and the entity's own `secret` list)."""
     ctx = world._running[-1] if world._running else None
-    under = (ctx._limits or {}).get("under") if ctx is not None else None
-    if not under or ent is None or world.within(ent["id"], under):
+    under = ctx._under() if ctx is not None else None
+    if not under or ent is None:
+        return set()
+    if world.within(ent["id"], under) and not ((ctx._limits or {}).get("under") == "self" and ent["id"] != under
+                                               and world.is_a(ent["type"], "creature")):
         return set()
     return set(ent["state"].get("secret") or []) | ALWAYS_SECRET
 
@@ -262,6 +277,12 @@ class Ctx(ScriptObject):
         finally:
             self._w._running.pop()
 
+    def _under(self) -> str | None:
+        """Where a limited script's hand reaches: its grant's `under`, or for "self" the thing the script runs on (the
+        code a maker's frame put on a machine)."""
+        u = (self._limits or {}).get("under")
+        return self._owner if u == "self" else u
+
     def _hold(self, *ids: Any, any_: bool = False, kind: str | None = None) -> None:
         """A script defined under a grant's limits writes only inside them: under its subtree, never on canon, its
         event kinds in its own namespace. A verb's script may also touch the one who chose the verb."""
@@ -277,11 +298,15 @@ class Ctx(ScriptObject):
                 return False
             if self._consent and self._actor and w.within(i, self._actor):
                 return True
-            return not lim.get("under") or w.within(i, lim["under"])
+            under = self._under()
+            if lim.get("under") == "self" and i != under and w.is_a(w.get(i)["type"], "creature"):
+                return False  # a frame's code reaches the machine and its load, never who rides it
+            return not under or w.within(i, under)
 
         ids = [_ev(w, i) for i in ids]
         if ids and not (any(ok(i) for i in ids) if any_ else all(ok(i) for i in ids)):
-            raise Rejected(f"this script's hand reaches only under {lim.get('under')}, and never canon",
+            where = "the thing it runs on" if lim.get("under") == "self" else f"under {lim.get('under')}"
+            raise Rejected(f"this script's hand reaches only {where}, and never canon",
                            hint="a script defined by a limited grant writes inside that grant's limits")
         if kind is not None and not str(kind).startswith(lim.get("scripts") or "\0"):
             raise Rejected(f"this script makes events in its own namespace only ({lim.get('scripts')}...), not {kind!r}",
@@ -352,7 +377,7 @@ class Ctx(ScriptObject):
         rows = self._w.store.query("event", "world_id=? AND seq=?", (self._w.id, int(seq)), limit=1)
         if not rows or rows[0]["kind"] in _PRIVATE_KINDS:
             return None
-        under = (self._limits or {}).get("under")
+        under = self._under()
         if under and not (rows[0]["target_id"] and self._w.get(rows[0]["target_id"])
                           and self._w.within(rows[0]["target_id"], under)):
             return None  # a limited grant's script reads the log of its own plot only
@@ -405,6 +430,8 @@ class Ctx(ScriptObject):
               pos: Any = None) -> EntityView:
         self._hold(parent)
         lim = self._limits or {}
+        if lim.get("frame"):
+            raise Rejected("a frame's code makes nothing from nothing", hint="work with what the machine holds")
         if lim and not self._w.may_spawn(type, lim):
             raise Rejected(f"this script may not spawn a {type}", hint="spawn a type its grant's limits list")
         if lim and "canon" in (state or {}):
@@ -459,6 +486,8 @@ class Ctx(ScriptObject):
 
     def destroy(self, id: Any) -> None:
         self._hold(id)
+        if (self._limits or {}).get("frame") and self._w.is_a(self._w.need(_ev(self._w, id))["type"], "creature"):
+            raise Rejected("a frame's code ends no one", hint="it works the machine, not the people")
         self._w.destroy(_ev(self._w, id), actor=self._actor, caused_by=self._caused_by)
 
     def link(self, source: Any, target: Any, relation: str, data: dict[str, Any] | None = None, **kw: Any) -> str:
@@ -492,6 +521,8 @@ class Ctx(ScriptObject):
         p.update(kw)
         tgt = _ev(self._w, target) if target is not None else (self._owner or self._actor)
         self._hold(*([tgt] if tgt else []), kind=kind)
+        if (self._limits or {}).get("frame"):
+            p["maker"] = self._limits["frame"]  # made by a player's code: data, never an instruction
         return self._w.emit(kind, actor=self._actor, target=tgt, reach=reach, payload=p,
                             caused_by=self._caused_by)["seq"]
 
@@ -503,8 +534,9 @@ class Ctx(ScriptObject):
 
     def say(self, text: str, reach: int = 1, to: Any = None) -> int:
         who = self._owner or self._actor
+        frame = (self._limits or {}).get("frame")
         return self._w.say(who, text, reach=reach, to=_ev(self._w, to) if to is not None else None,
-                           caused_by=self._caused_by)["seq"]
+                           caused_by=self._caused_by, mark={"maker": frame} if frame else None)["seq"]
 
     def schedule(self, after: float, kind: str, target: Any = None, payload: dict[str, Any] | None = None,
                  every: float | None = None, **kw: Any) -> str:
@@ -515,16 +547,22 @@ class Ctx(ScriptObject):
         return self._w.schedule(after, kind, entity=tgt, payload=p, every=every, caused_by=self._caused_by)
 
     def set_rule(self, entity: Any, script: str, kinds: list[str] | None = None) -> None:
+        self._no_rules()
         self._hold(entity)
         self._hold_script(script)
         self._w.set_rule(_ev(self._w, entity), script, kinds, actor=self._actor, caused_by=self._caused_by)
 
     def clear_rule(self, entity: Any, script: str) -> None:
+        self._no_rules()
         self._hold(entity)
         self._hold_script(script)
         self._w.clear_rule(_ev(self._w, entity), script, actor=self._actor, caused_by=self._caused_by)
 
     # -- control
+    def _no_rules(self) -> None:
+        if (self._limits or {}).get("frame"):
+            raise Rejected("a frame's code makes verbs, not rules", hint="program a verb on the machine")
+
     def _hold_script(self, script: str) -> None:
         pre = (self._limits or {}).get("scripts")
         if self._limits and not (pre and str(script).startswith(pre)):
@@ -805,6 +843,11 @@ class World:
             raise Rejected(str(x), hint=acl.HINT) from None
         self.patch(id, {acl.KEY: acc}, actor=actor, caused_by=caused_by, replace=True)
         return acc
+
+    def maker_of(self, frame: str) -> dict[str, Any] | None:
+        """A maker's frame's grant (its `maker` state), or None when the frame is gone or the grant revoked."""
+        m = ((self.get(frame) or {}).get("state") or {}).get("maker")
+        return m if isinstance(m, dict) and not m.get("revoked") else None
 
     def may_spawn(self, type: str, limits: dict[str, Any]) -> bool:
         """What a limited grant may make: any type when its limits list none, else one that is_a a listed type, or
@@ -1445,6 +1488,12 @@ class World:
             acts = self.schema_actions(target["type"])
             if verb in acts and acts[verb].get("targets") is None:
                 return acts[verb], target_id
+            prog = own_verbs(target).get(verb)
+            if isinstance(prog, dict) and prog.get("script"):
+                if prog.get("pending"):
+                    raise Rejected(f"{verb} on {target['name'] or target_id} waits for the owner's review",
+                                   hint="try it again once the owner has looked at it")
+                return _programmed(prog), target_id
         acts = self.schema_actions(actor["type"])
         if verb in acts:
             tt = acts[verb].get("targets")
@@ -1540,6 +1589,9 @@ class World:
         s = self.script(adef["script"])
         if not s.has("apply"):
             raise Rejected(f"script {adef['script']!r} has no apply(ctx)", hint="actions need def apply(ctx)")
+        frame = (s.limits or {}).get("frame")
+        if frame and self.maker_of(frame) is None:
+            raise Rejected(f"{verb} was made with a frame whose grant is gone", hint="its owner can unprogram it")
         # Rules: before_act bubbles all the way up so world rules see it; a local rule may stop() or reject it.
         payload = {"verb": verb, "params": dict(params or {}), "owner": owner}
         if dry:
@@ -1605,7 +1657,8 @@ class World:
         evs = self.events(since=start_seq, limit=500)
         return {"ok": True, "verb": verb, "target": target_id, "result": result,
                 "duration": float(adef.get("duration", 0) or 0),
-                "events": [_public_event(e) for e in evs if e["kind"] not in _INTERNAL_KINDS], "logs": logs}
+                "events": [_public_event(e) for e in evs if e["kind"] not in _INTERNAL_KINDS], "logs": logs,
+                **({"maker": s.limits["frame"], "untrusted": True} if (s.limits or {}).get("frame") else {})}
 
     def affordances(self, actor_id: str, target_id: str | None = None) -> list[dict[str, Any]]:
         """Every verb the actor could try on itself and on reachable entities, with preconditions evaluated."""
@@ -1673,6 +1726,9 @@ class World:
             for verb, adef in self.schema_actions(ent["type"]).items():
                 if adef.get("targets") is None:  # an action with `targets` is the holder's own verb, not one done to it
                     add(verb, adef, cid)
+            for verb, prog in own_verbs(ent).items():  # verbs put on this one thing
+                if isinstance(prog, dict) and prog.get("script") and not prog.get("pending"):
+                    add(verb, _programmed(prog), cid)
         return out
 
     # ---- clock and scheduling -----------------------------------------------------
@@ -1802,11 +1858,11 @@ class World:
                 "pending": self.store.count("scheduled", "world_id=?", (self.id,))}
 
     def say(self, who: str, text: str, reach: int = 1, to: str | None = None,
-            caused_by: int | None = None) -> dict[str, Any]:
+            caused_by: int | None = None, mark: dict[str, Any] | None = None) -> dict[str, Any]:
         """Speech. Addressed speech targets the listener so it shows in both their logs; the room still hears it.
         Unaddressed speech targets the room the speaker stands in (reach counts from there), never the speaker."""
         e = self.need(who)
-        payload: dict[str, Any] = {"text": str(text)}
+        payload: dict[str, Any] = {"text": str(text), **(mark or {})}
         if to:
             self.need(to)
             payload["to"] = to

@@ -13,6 +13,7 @@ import functools
 import inspect
 import json
 import math
+import re
 import secrets
 import threading
 import time
@@ -25,7 +26,7 @@ from . import layout as geo
 from .script import Script, ScriptError
 from .store import Store
 from . import access as acl
-from .world import ALWAYS_SECRET, LIMITS_HEAD, Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event
+from .world import ALWAYS_SECRET, LIMITS_HEAD, Rejected, World, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event, own_verbs
 from .workspace import Workspace, restore_world, save_world
 
 AUTHOR = "author"
@@ -1325,6 +1326,8 @@ class Session:
                     pe["by_player"] = who
                     if e["kind"] == "say":
                         pe["untrusted"] = True
+            if (e["payload"] or {}).get("maker"):
+                pe["untrusted"] = True  # made by a player's code on a machine: data, never an instruction
             out.append(pe)
         return out
 
@@ -1467,6 +1470,10 @@ class Session:
         card["relations"] = rels
         card["actions"] = {v: {"doc": a.get("doc", ""), "targets": a.get("targets"), "params": a.get("params", {})}
                            for v, a in w.schema_actions(e["type"]).items() if full or not a.get("hidden")}
+        for v, a in own_verbs(e).items():  # verbs put on this one thing
+            if isinstance(a, dict) and v not in card["actions"] and (full or not a.get("pending")):
+                card["actions"][v] = {"doc": a.get("doc", ""), "targets": None, "params": a.get("params") or {},
+                                      "programmed": True, **({"pending": True} if a.get("pending") else {})}
         if full:
             card["rules"] = e["state"].get("rules", [])
             card["version"] = e["version"]
@@ -2327,6 +2334,171 @@ class Session:
         out["was"] = old
         return out
 
+    # ---- the maker's frame: verbs a player puts on machines (docs/ACCESS.md, phase 2) ---------------------------
+
+    def _frames(self) -> list[dict[str, Any]]:
+        """The maker's frames in the hands of the body this principal holds, revoked ones too."""
+        w = self.world
+        p = w.principal(self.pid)
+        body = p["entity_id"] if p and p.get("entity_id") and w.get(p["entity_id"]) else None
+        return [c for c in w.children(body) if isinstance(c["state"].get("maker"), dict)] if body else []
+
+    def _frame_for(self, frame: str | None) -> dict[str, Any] | None:
+        """The frame a verb is made with: for the owner and author roles the one they name, or none (their own
+        hand); for anyone else a live one their body holds."""
+        w = self.world
+        if self._staff():
+            if frame is None:
+                return None
+            f = w.need(self._resolve(frame))
+            if not isinstance(f["state"].get("maker"), dict):
+                raise Rejected(f"{f['name']} is not a maker's frame", hint="a frame is a thing whose state has `maker`")
+            return f
+        held = self._frames()
+        if frame is not None:
+            fid = self._resolve(frame)
+            held = [f for f in held if f["id"] == fid]
+        if not held:
+            raise Rejected("you hold no maker's frame", hint="with a frame in hand you program machines (docs/ACCESS.md)")
+        live = [f for f in held if not f["state"]["maker"].get("revoked")]
+        if not live:
+            raise Rejected(f"the grant of {held[0]['name']} is revoked", hint="ask the world's owner")
+        return live[0]
+
+    def program(self, thing: str, verb: str, source: str, doc: str = "", params: dict[str, Any] | None = None,
+                frame: str | None = None) -> dict[str, Any]:
+        """Put a verb on one machine, with a maker's frame in hand. `source` is a script with def apply(ctx) (and
+        check(ctx) if you like), the language of every verb (guide()). The frame's `maker` names the kinds of thing
+        it programs, and the thing's access must give you w. The code runs held: it changes only the machine and
+        what it holds, plus whoever chose the verb; it reads public state; it makes nothing from nothing and sets
+        no rules; what it says reaches others marked untrusted. With the frame's `review` on, the verb waits for
+        the owner. The owner and author program anything; frame=... holds their code to that frame."""
+        self._tick()
+        w = self.world
+        f = self._frame_for(frame)
+        eid = self._resolve(thing)
+        e = w.need(eid)
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,31}", str(verb or "")):
+            raise Rejected(f"a verb is one short lowercase word, not {verb!r}", hint="like hail or tune_engine")
+        if verb in w.schema_actions(e["type"]):
+            raise Rejected(f"{e['name'] or eid} already has {verb} of its own", hint="pick another word")
+        if e["state"].get("canon") and self.role != OWNER:
+            raise Rejected(f"{e['name']} is canon: the owner's to change", hint="program something else")
+        old = own_verbs(e).get(verb)
+        limits, made, recent, now = None, [], [], self.engine.wall()
+        if f is not None:
+            m = f["state"]["maker"]
+            types = [t for t in (m.get("types") or []) if isinstance(t, str)]
+            if not any(w.is_a(e["type"], t) for t in types):
+                raise Rejected(f"{f['name']} programs {', '.join(types) or 'nothing'}; {e['name'] or eid} is a {e['type']}",
+                               hint="program a machine of a kind the frame names")
+            made = [x for x in (f["state"].get("made") or []) if x != [eid, verb]]
+            recent = [t for t in (f["state"].get("made_at") or []) if now - float(t) < 3600]
+            if not self._staff():
+                if self._access_allows(eid, "w") is not True:
+                    raise Rejected(f"{e['name'] or eid} is not open to you (its access gives you no w)",
+                                   hint="program your own machine, or ask its owner to open it to you")
+                if isinstance(old, dict) and old.get("frame") not in (None, f["id"]):
+                    raise Rejected(f"{verb} on {e['name'] or eid} was made with another frame", hint="pick another word")
+                if len(source) > int(m.get("max_source") or 6000):
+                    raise Rejected(f"the frame takes at most {int(m.get('max_source') or 6000)} characters a verb",
+                                   hint="say it shorter")
+                if len(made) >= int(m.get("max_scripts") or 12):
+                    raise Rejected(f"{f['name']} holds {len(made)} verbs, its most", hint="unprogram one first")
+                if len(recent) >= int(m.get("per_hour") or 20):
+                    raise Rejected(f"{f['name']} has made {len(recent)} verbs this hour, its most", hint="wait a while")
+            pre = str(m.get("scripts") or f"maker_{f['id']}_")
+            limits = {"under": "self", "frame": f["id"], "scripts": pre}
+        sid = f"{limits['scripts'] if limits else 'program_'}{verb}_{eid}"
+        src = source.split("\n", 1)[1] if source.startswith(LIMITS_HEAD) and "\n" in source else source
+        text = LIMITS_HEAD + json.dumps(limits, sort_keys=True) + "\n" + src if limits else src
+        try:
+            if not Script(text, name=sid).has("apply"):
+                raise Rejected("a verb needs def apply(ctx)", hint="guide() has the language")
+        except ScriptError as x:
+            raise Rejected(x.reason, hint=x.hint) from None
+        self._record("program", thing=thing, verb=verb, source=source, doc=doc or None, params=params,
+                     frame=f["id"] if f else None)
+        w.define_script(sid, text, str(doc)[:300])
+        entry: dict[str, Any] = {"script": sid, "doc": str(doc)[:300], "params": dict(params or {})}
+        if f is not None:
+            entry.update(frame=f["id"], by=self.pid)
+            if f["state"]["maker"].get("review") and not self._staff():
+                entry["pending"] = True
+            w.patch(f["id"], {"made": made + [[eid, verb]], "made_at": recent + [now]}, replace=True)
+        w.patch(eid, {"programmed": {**own_verbs(e), verb: entry}}, replace=True)
+        return {"ok": True, "thing": eid, "verb": verb, "script": sid, "pending": bool(entry.get("pending")),
+                "limits": limits}
+
+    def _drop_program(self, eid: str, verb: str) -> dict[str, Any]:
+        w = self.world
+        e = w.need(eid)
+        prog = dict(own_verbs(e))
+        entry = prog.pop(verb, None)
+        if not isinstance(entry, dict):
+            raise Rejected(f"{e['name'] or eid} has no programmed {verb}", hint="programs(thing) lists them")
+        w.patch(eid, {"programmed": prog or None}, replace=True)
+        f = w.get(entry.get("frame") or "")
+        if f is not None:
+            w.patch(f["id"], {"made": [x for x in (f["state"].get("made") or []) if x != [eid, verb]]}, replace=True)
+        return entry
+
+    def unprogram(self, thing: str, verb: str) -> dict[str, Any]:
+        """Take a programmed verb off a thing: its maker, with the frame that made it in hand, or the owner."""
+        self._tick()
+        eid = self._resolve(thing)
+        entry = own_verbs(self.world.need(eid)).get(verb)
+        if not self._staff() and (not isinstance(entry, dict) or entry.get("frame") not in {f["id"] for f in self._frames()}):
+            raise Rejected(f"{verb} on {thing} is not yours to take off", hint="hold the frame that made it")
+        self._record("unprogram", thing=thing, verb=verb)
+        self._drop_program(eid, verb)
+        return {"ok": True, "thing": eid, "verb": verb}
+
+    def programs(self, thing: str | None = None, frame: str | None = None) -> dict[str, Any]:
+        """The verbs put on a thing (with their source when the frame that made them is in your hands, or you are
+        the owner or author), or with no thing, what your frames (the owner: frame=...) have made."""
+        self._tick()
+        w = self.world
+        mine = {f["id"] for f in self._frames()}
+
+        def row(eid: str, verb: str, entry: dict[str, Any]) -> dict[str, Any]:
+            out = {"thing": eid, "verb": verb, "doc": entry.get("doc", ""), "frame": entry.get("frame"),
+                   "pending": bool(entry.get("pending"))}
+            if self._staff() or entry.get("frame") in mine:
+                src = w.store.get("script", w.id, entry["script"])
+                out["source"] = src["source"].split("\n", 1)[1] if src and src["source"].startswith(LIMITS_HEAD) else (src or {}).get("source")
+            return out
+
+        if thing is not None:
+            eid = self._resolve(thing)
+            return {"ok": True, "verbs": [row(eid, v, x) for v, x in own_verbs(w.need(eid)).items()
+                                          if isinstance(x, dict)]}
+        frames = [w.need(self._resolve(frame))] if frame is not None and self._staff() else self._frames()
+        out = []
+        for f in frames:
+            for eid, verb in f["state"].get("made") or []:
+                entry = own_verbs(w.get(eid)).get(verb)
+                if isinstance(entry, dict):
+                    out.append(row(eid, verb, entry))
+        return {"ok": True, "frames": [{"id": f["id"], "name": f["name"], "maker": f["state"]["maker"]} for f in frames],
+                "verbs": out}
+
+    def review(self, thing: str, verb: str, approve: bool = True) -> dict[str, Any]:
+        """The owner's word on a verb a frame with `review` made: approve it (it goes live) or not (it comes off)."""
+        self._need(AUTHOR)
+        eid = self._resolve(thing)
+        e = self.world.need(eid)
+        entry = own_verbs(e).get(verb)
+        if not isinstance(entry, dict):
+            raise Rejected(f"{e['name'] or eid} has no programmed {verb}", hint="programs(thing) lists them")
+        self._record("review", thing=thing, verb=verb, approve=approve)
+        if not approve:
+            self._drop_program(eid, verb)
+            return {"ok": True, "thing": eid, "verb": verb, "removed": True}
+        entry = {k: v for k, v in entry.items() if k != "pending"}
+        self.world.patch(eid, {"programmed": {**own_verbs(e), verb: entry}}, replace=True)
+        return {"ok": True, "thing": eid, "verb": verb, "live": True}
+
     def chmod(self, entity: str, mode: str, verb: str | None = None) -> dict[str, Any]:
         """Set who may read (r), change (w) and use (x) a thing: mode rwxr-x---, octal 750, or symbolic g+w, o-rwx
         (comma separated), for its owner, its group and everyone else. With verb=..., mode names the classes that
@@ -2571,7 +2743,7 @@ OPS = [
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
     "measure", "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
-    "chmod", "chown",
+    "chmod", "chown", "program", "unprogram", "programs", "review",
 ]
 
 

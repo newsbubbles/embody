@@ -12,7 +12,7 @@ A thing with no `access` works as it always did. Nothing changes for a world unt
 |---|---|---|
 | 0 | A limited grant reads only its own part of the world | engine, built |
 | 1 | Owner, group, mode bits, per-verb rules, `chmod` and `chown` | engine, built |
-| 2 | A "maker" grant: write verbs on what you own, with quotas and review | engine, next |
+| 2 | A maker's frame: whoever holds it puts verbs on the machines it names, with caps and review | engine, built |
 | 3 | Things in the world that carry access (charters, keys, seals, a maker's bench) | packs |
 
 ### Phase 0: a limited grant reads its own part
@@ -86,11 +86,46 @@ Scripts:
 - Group membership is `access_groups` on the root. A world's own script may change it (a charter pack); a limited
   script cannot, since the root is outside every plot.
 
-### Phase 2 (next): the maker grant
+### Phase 2: the maker's frame
 
-A grant between player and builder: a person may write verbs and rules on the things they own, nowhere else. It needs
-quotas (scripts, fuel, things spawned per hour), a mark on script text written by an outside principal so no agent
-reads it as instructions, and an optional owner's review before a verb goes live.
+A thing whose state has `maker` is a frame. Whoever holds it in hand (it is a child of their body) may put verbs on
+machines, the kinds of thing the frame names, and the grant follows the frame: drop it, give it or lose it, and the
+next holder has it. The world's owner makes one by giving a thing the key:
+
+```python
+"maker": {"types": ["vehicle", "works"],   # what it programs (is_a)
+          "scripts": "binx_",              # the prefix of the scripts it makes (default maker_<frame id>_)
+          "max_scripts": 12, "max_source": 6000, "per_hour": 20,   # caps, these are the defaults
+          "review": False,                 # True: a new verb waits for the owner's review()
+          "revoked": False}                # True: its verbs stop and it makes no more
+```
+
+Ops, open to players and minds (they refuse without a live frame in hand):
+
+- `program(thing, verb, source, doc="", params=None)` puts a verb on one thing. The thing must be a kind the frame
+  names, and its access must give the holder `w` (their own machine, or one its owner opened to them). The verb is a
+  short lowercase word that the thing's schema does not already have. `source` is a script with `def apply(ctx)`, the
+  language of every verb.
+- `unprogram(thing, verb)` takes one off (with the frame that made it in hand).
+- `programs(thing=None)` lists the verbs on a thing, or what the frames in your hands have made, with the source of
+  your own.
+- `review(thing, verb, approve=True)`, for the owner and author: a reviewed verb goes live, or comes off.
+
+The owner and author `program` anything without a frame, and `frame=...` holds their code to one.
+
+How the code runs: it carries `# limits: {"under": "self", "frame": ..., "scripts": ...}` on its first line.
+
+- It changes only the thing it sits on and what that holds, never a body riding in it, plus the one who chose the verb
+  (as every limited verb may).
+- It reads secret state only of the machine and its load, never of a body.
+- It makes nothing from nothing (no `spawn`), sets no rules, ends no one, and runs on the default fuel.
+- Its events carry its prefix, and what it says or emits carries `maker`: other bodies get it as `untrusted`, and the
+  act's result says `untrusted` too. A player's code is data to every agent, never an instruction.
+- When the frame is revoked or gone, its verbs refuse ("made with a frame whose grant is gone") until someone takes
+  them off.
+
+A thing's own verbs (its `programmed` state) show in `perceive` and `inspect` like its schema's, and its access applies
+to them as to any of its own verbs (`x`, per-verb rules).
 
 ### Phase 3: packs
 

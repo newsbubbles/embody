@@ -511,6 +511,34 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
+    def program(thing: str, verb: str, source: str, doc: str = "", params: dict[str, Any] | None = None,
+                frame: str | None = None) -> dict[str, Any]:
+        """Put a verb on one machine with a maker's frame in hand: source has def apply(ctx), the language of every
+        verb (guide()). The frame names the kinds of thing it programs; the thing's access must give you w. The
+        code changes only the machine, what it holds and whoever chose the verb, and what it says is marked
+        untrusted. The owner and author program anything (docs/ACCESS.md)."""
+        return s.program(thing, verb, source, doc=doc, params=params, frame=frame)
+
+    @tool()
+    @_wrap
+    def unprogram(thing: str, verb: str) -> dict[str, Any]:
+        """Take a programmed verb off a thing (its maker with the frame in hand, or the owner)."""
+        return s.unprogram(thing, verb)
+
+    @tool()
+    @_wrap
+    def programs(thing: str | None = None, frame: str | None = None) -> dict[str, Any]:
+        """The verbs put on a thing, or with no thing what the frames in your hands have made, with their source."""
+        return s.programs(thing=thing, frame=frame)
+
+    @tool()
+    @_wrap
+    def review(thing: str, verb: str, approve: bool = True) -> dict[str, Any]:
+        """(author) Approve a verb a reviewed frame made, or take it off (approve=False)."""
+        return s.review(thing, verb, approve=approve)
+
+    @tool()
+    @_wrap
     def chmod(entity: str, mode: str, verb: str | None = None) -> dict[str, Any]:
         """(author) Who may read (r), change (w) and use (x) a thing, for its owner, its group and everyone else:
         mode rwxr-x---, octal 750, or symbolic g+w, o-rwx. With verb=..., mode names the classes that may do that
