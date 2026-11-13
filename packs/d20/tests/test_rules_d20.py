@@ -708,3 +708,7 @@ def test_idle_care_takes_one_draw_from_a_store_and_leaves_water_kept_for_others(
     gm.patch("Ration cask", {"left": 0})
     gm.clock(step=60)
     assert state(gm, "Hold jars")["left"] == 9 and state(gm, "Warder")["water"] >= 4
+    # only a source is drunk from: a stone with no count is not an endless well
+    gm.spawn("thing", "Depot", "Flat stone", state={"portable": False})
+    with pytest.raises(Rejected, match="empty"):
+        gm.act_as("Warder", "drink", "Flat stone")

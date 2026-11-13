@@ -86,7 +86,7 @@ CHANGELOG.md says what changed in the engine, by date. ROADMAP.md tracks what ex
 - `src/embody/` the engine: `script.py` interpreter, `store.py` SQLite, `world.py` graph, events, actions, clock, `ops.py` sessions and capabilities, `workspace.py` worlds as folders, `mirror.py`, `cli.py`, `mcp_server.py`
 - `examples/` sample worlds, one folder each (`ferry-at-dusk/`, `two-rooms/`): `build.py`, `scripts/`, `notes/`, `tests/`. Load one by its path (`load examples/ferry-at-dusk`), or copy it into `worlds/` to make it your own
 - `worlds/` your own worlds, the workspace's folder (git ignores it, all but `glass-reach/`, the hosted world)
-- `packs/` shared verbs and rules a world `requires` (`village/`, `d20/`, `locks/`, `works/`, `vehicles/`, `ledgers/`)
+- `packs/` shared verbs and rules a world `requires` (`village/`, `d20/`, `locks/`, `works/`, `vehicles/`, `ledgers/`, `beasts/`)
 - `docs/SCRIPTING.md` the scripting reference (also the `guide()` tool)
 - `docs/ACCESS.md` owners, groups and modes on things (`chmod`, `chown`), and what a limited grant reads
 - `DESIGN.md` the design, authoritative

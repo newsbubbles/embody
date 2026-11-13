@@ -23,8 +23,8 @@ def held(who, flag):
     return None
 
 def endless(thing):
-    # a source with no level never runs dry
-    return bool(thing.state.water_source) and thing.state.left is None
+    # a source with no level never runs dry: a well, a spring, a place that is a source; drawing from it costs nobody's count
+    return thing is not None and bool(thing.state.water_source) and thing.state.left is None
 
 def kept_for(src, who):
     # whether a body's own idle care may drink from this source: `keep_for` names whose water it is (a faction,
@@ -51,10 +51,6 @@ def water_here(ctx, place, who=None):
         if int(p.state.left) > 0 and (best is None or int(p.state.left) > int(best.state.left)):
             best = p
     return best
-
-def endless(src):
-    # a well, a spring, a place that is a source: drawing from it costs nobody's count
-    return src is not None and src.state.left is None
 
 def known_way(who, place):
     # a hidden place is on a body's map only if it is its own side's
