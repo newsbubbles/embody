@@ -2063,7 +2063,7 @@ RIDGE_GOAT = {"eats": ["graze", "root"], "fed_max": 3, "young_name": "Ridge kid"
                           "names": {"m": "Ridge billy", "f": "Ridge nanny"}},
                          {"name": "old", "from": 50, "state": {"body": 1}}],
               "lifespan": 70, "tame_dc": {"young": 8, "adult": 11}, "tame_at": {"young": 2, "adult": 3},
-              "tame_skill": "survival", "breed_chance": 0.25, "gestation": 5, "litter": [1, 2], "starve_days": 3,
+              "tame_skill": "survival", "breed_chance": 0.25, "gestation": 5, "litter": [1, 1], "starve_days": 3,
               "yields": {"name": "Goat's milk", "state": GOAT_MILK, "max": 2, "sex": "f", "stages": ["adult"]}}
 THORNBACKS = {"The thornback boar": {"sex": "m", "age": 20}, "Thornback sow": {"sex": "f", "age": 14},
               "Thornback yearling": {"sex": "f", "age": 4}}  # the yearling comes of age two dawns on
@@ -2094,6 +2094,10 @@ def keep_beasts(s, names):
     for sid, table in (("thornback", THORNBACK), ("ridge goat", RIDGE_GOAT)):
         if sid not in have:
             s.spawn("species", root, sid, state=dict(table, hidden=True))
+        else:  # a retune lands on the next upgrade; what the world set (in_season) stays
+            sp = s.world.find(type="species", name=sid, limit=1)[0]["id"]
+            if any(s.world.get(sp)["state"].get(k) != v for k, v in table.items()):
+                s.patch(sp, dict(table))
     brake, ridge = names.get("The Thornbrake"), names.get("Red Ridge")
     if brake:
         for n, extra in THORNBACKS.items():
