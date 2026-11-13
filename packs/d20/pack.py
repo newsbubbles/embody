@@ -15,7 +15,9 @@ The numbers, so a narrator can explain a roll:
   lockpick is the locks pack's: `pick` adds the best of lockpick, stealth or craft.
 - A check is d20 + stat + skill against a difficulty (`dc`, default 12). Wounded costs 2, thirsty costs 2.
   A skill neither the pack nor the body knows is an untrained roll on wits, and the result says so (`untrained`,
-  `note` with the skills there are).
+  `note` with the skills there are). A hand from someone is `aid` on the body, a list of {bonus, skill, place, by, why,
+  until}: the next check of that skill (no skill: any) in that place (no place: anywhere), before `until` (world t),
+  adds the bonus and uses it up; the result and the `checked` event carry it. A familiar's `point` writes one.
 - An attack is opposed: d20 + body + blade (+ the weapon's bonus) against the defender's d20 + body + blade
   (+3 if braced). Ties go to the defender. A hit does the weapon's `damage` (bare hands 1) to `vigor`.
 - A `ward` that is switched on hardens against anything fast: a normal attack cannot reach through it. A slow

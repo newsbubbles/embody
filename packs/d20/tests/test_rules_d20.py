@@ -58,6 +58,26 @@ def test_check_rolls_against_a_difficulty_and_says_so():
     assert r["result"]["mod"] == 5 and "untrained" not in r["result"]
 
 
+def test_an_aid_helps_the_next_matching_check_once():
+    # a familiar's `point` leaves {bonus, skill, place, by, why, until} on the body; the next check it fits uses it up
+    eng, gm, you = reach()
+    me = gm.inspect("Reeve Ansel Varrick")
+    here = me["parent"]
+    gm.patch("Reeve Ansel Varrick", {"aid": [
+        {"bonus": 5, "skill": "lore", "place": "nowhere", "by": "x", "why": "elsewhere"},
+        {"bonus": 9, "skill": "lore", "place": here, "by": "x", "why": "too late", "until": -1},
+        {"bonus": 2, "skill": "lore", "place": here, "by": "wisp", "why": "the wisp points under the bench"},
+        {"bonus": 3, "skill": "climb", "by": "x", "why": "another skill"}]})
+    r = you.act("check", params={"skill": "lore", "dc": 10})
+    assert r["result"]["mod"] == 4 + 2 and r["result"]["aid"]["by"] == "wisp"
+    ev = [e for e in r["events"] if e["kind"] == "checked"][0]["payload"]
+    assert ev["aid"]["why"] == "the wisp points under the bench"
+    left = state(gm, "Reeve Ansel Varrick")["aid"]
+    assert [a["why"] for a in left] == ["elsewhere", "another skill"]  # used up, and the lapsed one fell away
+    r = you.act("check", params={"skill": "lore", "dc": 10})
+    assert r["result"]["mod"] == 4 and "aid" not in r["result"]
+
+
 def test_attack_needs_a_standing_foe_here_and_not_yourself():
     eng, gm, you = reach()
     with pytest.raises(Rejected):

@@ -248,7 +248,7 @@ class Ctx(ScriptObject):
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
-        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "strike_wait", "mark_strike", "embodied", "event_at", "locked", "remember",
+        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "ways", "strike_wait", "mark_strike", "embodied", "event_at", "locked", "remember",
         "count", "split", "merge", "transfer", "bulk", "load", "may", "member", "chmod", "chown", "rename",
     )
 
@@ -388,6 +388,11 @@ class Ctx(ScriptObject):
         """Whether a body knows the way to a place: any place not `hidden`, a hidden one only when its `known_to`
         names the body or its faction (World.knows_way). A rule that walks or looks along ways asks this."""
         return self._w.knows_way(_ev(self._w, who), _ev(self._w, place))
+
+    def ways(self, a: Any, b: Any, most: int = 8) -> int | None:
+        """How many ways apart two bodies (or places) stand: 0 in the same place, 1 next door, None when further
+        than `most` or not joined at all. Every way counts, hidden or not (World.ways). A tether reads it."""
+        return self._w.ways(_ev(self._w, a), _ev(self._w, b), most=int(most))
 
     def event_at(self, seq: Any) -> EventView | None:
         """One event of the log by its number (the deed a record came from), or None. Notes and intents stay their
@@ -841,6 +846,47 @@ class World:
             return False
         names = {me["id"], me["state"].get("faction")} - {None}
         return bool(names & set(kt)) if isinstance(kt, list) else kt in names
+
+    def sees(self, viewer: str | None, e: dict[str, Any]) -> bool:
+        """Whether `viewer` sees a body: anything not `hidden`, and a hidden one only by itself or by the ids its
+        `shown_to` lists (a familiar that shows itself to one person and to nobody else)."""
+        st = e["state"]
+        if not st.get("hidden"):
+            return True
+        return viewer is not None and (viewer == e["id"] or viewer in (st.get("shown_to") or ()))
+
+    def _veil(self, ids: Iterable[Any]) -> list[str] | None:
+        """Who may witness an event that a veiled body (hidden, with a `shown_to` list) is in: the body, the ids it
+        shows itself to, and whoever did the deed. None when no veiled body is in it, so the event is as before."""
+        out: set[str] | None = None
+        for i in ids:
+            e = self.get(i) if isinstance(i, str) else None
+            if e is not None and e["state"].get("hidden") and isinstance(e["state"].get("shown_to"), list):
+                out = (out or set()) | {e["id"], *(str(x) for x in e["state"]["shown_to"])}
+        return sorted(out) if out is not None else None
+
+    def ways(self, a: str, b: str, most: int = 8) -> int | None:
+        """Ways between where two bodies stand (a place is where it is): 0 the same place, None past `most`."""
+        def place(i: str) -> str | None:
+            e = self.need(i)
+            for _ in range(16):
+                if self.is_a(e["type"], "place") or not e["parent_id"]:
+                    return e["id"]
+                e = self.need(e["parent_id"])
+            return e["id"]
+        start, goal = place(a), place(b)
+        seen, ring = {start}, [start]
+        for d in range(max(0, most) + 1):
+            if goal in ring:
+                return d
+            nxt = []
+            for p in ring:
+                for n in self.neighbors(p, "connects_to"):
+                    if n not in seen:
+                        seen.add(n)
+                        nxt.append(n)
+            ring = nxt
+        return None
 
     def within(self, id: str, under: str) -> bool:
         """id is under (or is) the entity `under`."""
@@ -1335,6 +1381,11 @@ class World:
             path.append(target)
             anc = self.ancestors(target)
             path.extend(anc if reach < 0 else anc[:reach])
+        p = payload or {}
+        if "seen_by" not in p:
+            veil = self._veil((actor, target, p.get("entity"), p.get("who")))
+            if veil is not None:  # a veiled body is in it: only those it shows itself to witness it, in every view
+                payload = {**p, "seen_by": sorted(set(veil) | ({actor} if actor else set()))}
         seq = self.store.next_seq(self.id)
         ev = {"world_id": self.id, "seq": seq, "t": self.t, "kind": kind, "actor_id": actor, "target_id": target,
               "reach": reach, "payload": payload or {}, "caused_by": caused_by, "path": path}
@@ -1414,6 +1465,9 @@ class World:
             return False
         if lst.get("unless_embodied") and self.embodied(node) and not self.own_lines(node):
             return False  # the table is the floor; an embodied mind answers instead, unless it left lines and is idle
+        sb = (ev["payload"] or {}).get("seen_by")
+        if sb is not None and node not in sb and self.is_a(self.need(node)["type"], "creature"):
+            return False  # a veiled body's deed: someone it was not shown does not hear it either
         s = self.script(lst["script"])
         fn = lst.get("fn", "on")
         if not s.has(fn):
@@ -1509,6 +1563,9 @@ class World:
             while sleeps and sleeps[-1]["seq"] > r["seq"]:
                 asleep = sleeps.pop()["kind"] == "woke"  # before a waking it slept; before falling asleep it woke
             watch = {who, here} if here else {who}
+            sb = (r["payload"] or {}).get("seen_by")
+            if sb is not None and who not in sb:
+                continue  # a veiled body's deed, and this one was not shown it
             if r["actor_id"] == who or watch & set(r["path"]):
                 if asleep and r["actor_id"] != who and r["target_id"] != who and not _loud(r):
                     continue  # a sleeper hears only what is loud, or what is done to it
@@ -1580,6 +1637,22 @@ class World:
             return True, ""
         return False, f"{target_id} ({target['name'] or target['type']}) is not within reach of {actor_id}"
 
+    def _closer_hint(self, actor_id: str, target_id: str) -> str:
+        """How to get within reach, in verbs that exist: `go` to the place next door it is in (an agent told to "move
+        closer" looked for a move verb). Nothing hidden is named, and a place further off is left to the map."""
+        actor, target = self.need(actor_id), self.need(target_id)
+        at = target
+        for _ in range(8):  # up to the place it stands in: a thing in a hand or a chest is where its holder is
+            if at is None or self.is_a(at["type"], "place") or at["state"].get("hidden"):
+                break
+            at = self.get(at["parent_id"]) if at["parent_id"] else None
+        if (at is not None and self.is_a(at["type"], "place") and not at["state"].get("hidden")
+                and not target["state"].get("hidden") and actor["parent_id"]):
+            for e in self.edges(actor["parent_id"], "connects_to", "out"):
+                if e["target"] == at["id"]:
+                    return f"go {at['name']} first ({target['name']} is there), or pick something perceive lists"
+        return "go where it is first (the places perceive lists under exits), or pick something perceive lists"
+
     def locked_by(self, id: str) -> dict[str, Any] | None:
         """What keeps a box, a door or a place shut: the entity itself when its state says `locked`, or a lock
         attached to it (a child whose state has `attached` and `locked`). None when nothing does."""
@@ -1605,17 +1678,22 @@ class World:
     def _prepare(self, actor_id: str, verb: str, target_id: str | None, params: dict[str, Any] | None,
                  dry: bool) -> tuple[dict[str, Any], str, Script]:
         adef, owner = self.resolve_action(actor_id, verb, target_id)
+        if owner != actor_id:
+            me = self.need(actor_id)
+            if me["state"].get("hands", self.schema_defaults(me["type"]).get("hands")) is False:
+                raise Rejected(f"you have no hands in this world: {verb} is a thing's verb, and you can't take, give, "
+                               "open or use things", hint="your own verbs are the ones you have; perceive lists them")
         reach = adef.get("reach", "near")
         if target_id and reach == "near":
             ok, why = self.reachable(actor_id, target_id)
             if not ok:
-                raise Rejected(why, hint="move closer, or pick something perceive lists")
+                raise Rejected(why, hint=self._closer_hint(actor_id, target_id))
             rng = adef.get("range")
             if rng is not None:
                 d = self.distance(actor_id, target_id)
                 if d is not None and d > float(rng):
                     raise Rejected(f"{target_id} is {d:.1f} away; {verb} reaches {rng}",
-                                   hint="move closer first")
+                                   hint="walk nearer to it first, then try again")
         elif target_id and reach == "self" and target_id != actor_id:
             raise Rejected(f"{verb} can only target yourself")
         if adef.get("strikes") and target_id and target_id != actor_id:
@@ -2054,7 +2132,12 @@ class World:
 
     def lapsed(self, p: dict[str, Any], now: float | None) -> bool:
         """Only principals that came in on a grant lapse; the owner at the keyboard never loses a seat to silence."""
-        if now is None or not p.get("grant_id") or p.get("last_seen") is None:
+        if now is None or not p.get("grant_id"):
+            return False
+        g = self.store.get("grants", self.id, p["grant_id"])
+        if g is None or g.get("revoked") or (g.get("expires") is not None and float(g["expires"]) <= now):
+            return True  # the grant it came in on has ended: the seat is not its to keep (a guest back on a new grant)
+        if p.get("last_seen") is None:
             return False
         return now - float(p["last_seen"]) > self.claim_lapse()
 

@@ -1006,7 +1006,7 @@ class Session:
             "goals": [g for g in ent["state"].get("goals") or [] if g.get("status", "active") == "active"],
             "holding": [self._card(c) for c in w.children(me)],
             "here": self._place_card(here) if here else None,
-            "present": [self._card(c) for c in w.children(here_id) if c["id"] != me and not c["state"].get("hidden")]
+            "present": [self._card(c) for c in w.children(here_id) if c["id"] != me and w.sees(me, c)]
             if here_id else [],
             "exits": self._exits(here_id, me) if here_id else [],
             "relations": self._relations(me),
@@ -1330,6 +1330,9 @@ class Session:
         for e in rows:
             if e["kind"] in _INTERNAL_KINDS or (not full and e["kind"] in _HOST_KINDS):
                 continue
+            sb = (e["payload"] or {}).get("seen_by")
+            if not full and sb is not None and me not in sb:
+                continue  # a veiled body's deed this viewer was not shown (World._veil)
             if not full and e["target_id"] != me:
                 if e["kind"] in _PRIVATE_KINDS:
                     continue
@@ -1340,6 +1343,8 @@ class Session:
                 if e["kind"] == "spawned" and (w.get(e["target_id"]) or {}).get("state", {}).get("hidden"):
                     continue  # a hidden thing made where you are (a ledger's page, a trap) is still hidden
             pe = _public_event(e)
+            if not full and sb is not None:
+                pe["payload"] = {k: v for k, v in pe["payload"].items() if k != "seen_by"}  # not who else it shows itself to
             a = e["actor_id"]
             if a and a != me:
                 who = holder(a)
@@ -2054,17 +2059,22 @@ class Session:
         if whom is not None and not self._privileged() and not self._within_earshot(me, whom):
             raise Rejected(f"{self.world.need(whom)['name']} is not here to hear you: to= is for someone in this place",
                            hint="go where they are, or say it to the room without to=")
+        veil = self.world._veil([me]) if whom is not None and not self._privileged() else None
+        if veil is not None and whom not in veil:
+            raise Rejected(f"{self.world.need(whom)['name']} can't hear you: you are hidden from them",
+                           hint="only those in your shown_to hear you; show yourself to them first, if you have a "
+                                "way to, or speak to someone who sees you")
         ev = self.world.say(me, text, reach=reach, to=whom)
         self.world._bump_cursor(self.pid)
         return {"ok": True, "event": _public_event(ev)}
 
     def _within_earshot(self, me: str, whom: str) -> bool:
-        """Someone a line can be addressed to: in this place and not hidden, held by you, or what holds you."""
+        """Someone a line can be addressed to: in this place and seen (World.sees), held by you, or what holds you."""
         w = self.world
         e, t = w.need(me), w.need(whom)
         if whom in (me, e["parent_id"]) or t["parent_id"] == me:
             return True
-        return e["parent_id"] is not None and t["parent_id"] == e["parent_id"] and not t["state"].get("hidden")
+        return e["parent_id"] is not None and t["parent_id"] == e["parent_id"] and w.sees(me, t)
 
     def say_as(self, entity: str, text: str, reach: int = 1, to: str | None = None) -> dict[str, Any]:
         """Author only: a free line from any entity. How a narrator gives an NPC words its table does not have."""
@@ -2213,7 +2223,7 @@ class Session:
                 b = {"world": w.id, "t": w.t, "ambient": self._ambient(here),
                      "here": {"id": here["id"], "name": here["name"]} if here else None,
                      "present": [{"id": c["id"], "name": c["name"]} for c in w.children(ent["parent_id"])
-                                 if c["id"] != me and not c["state"].get("hidden")] if here else [],
+                                 if c["id"] != me and w.sees(me, c)] if here else [],
                      "events": evs, "cursor": w.store.next_seq(w.id) - 1}
                 w.set_cursor(self.pid, b["cursor"])
             if timed_out:
@@ -2278,7 +2288,7 @@ class Session:
         w = self.world
         ent = w.get(me) if me else None
         here = w.get(ent["parent_id"]) if ent and ent["parent_id"] else None
-        near = [c for c in w.children(here["id"]) if c["id"] != me and not c["state"].get("hidden")
+        near = [c for c in w.children(here["id"]) if c["id"] != me and w.sees(me, c)
                 and w.is_a(c["type"], "creature")] if here else []  # who is here: people, not the jars by the cistern
         names: dict[str, str] = {}
 
@@ -2348,7 +2358,7 @@ class Session:
         b = {"world": w.id, "t": w.t, "fired": True, "until": until, "ambient": self._ambient(here),
              "here": {"id": here["id"], "name": here["name"]} if here else None,
              "present": [{"id": c["id"], "name": c["name"]} for c in w.children(here["id"])
-                         if c["id"] != me and not c["state"].get("hidden") and w.is_a(c["type"], "creature")]
+                         if c["id"] != me and w.sees(me, c) and w.is_a(c["type"], "creature")]
                         if here else [],  # the same `present` the expression read: people and creatures, not things
              "events": seen[-50:], "cursor": hi}
         if me:

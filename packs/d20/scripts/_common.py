@@ -15,6 +15,27 @@ def bonus(who, skill):
         b = b - 2
     return b
 
+def take_aid(ctx, who, skill, here):
+    # a hand from someone (a familiar's `point`): `aid` on the body is a list of {bonus, skill, place, by, why, until}.
+    # The first one for this skill (none: any skill) in this place (none: anywhere), not past `until` (world t), is
+    # used up by this check and returned; lapsed ones fall away. None when nothing helps.
+    aids = who.state.aid or []
+    if not aids:
+        return None
+    keep = []
+    used = None
+    for a in aids:
+        if a.get("until") is not None and float(a.get("until")) < ctx.t:
+            continue
+        fits = (not a.get("skill") or a.get("skill") == skill) and (not a.get("place") or (here is not None and a.get("place") == here.id))
+        if used is None and fits:
+            used = a
+            continue
+        keep.append(a)
+    if len(keep) != len(aids):
+        ctx.patch(who, {"aid": keep})
+    return used
+
 def held(who, flag):
     # the first thing held whose state has the flag set
     for it in who.children():

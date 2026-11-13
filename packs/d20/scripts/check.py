@@ -6,6 +6,10 @@ def apply(ctx):
     dc = int(p.get("dc") or 12)
     roll = ctx.rand.roll("1d20")
     mod = bonus(ctx.actor, skill)
+    here = ctx.actor.parent
+    aid = take_aid(ctx, ctx.actor, skill, here)
+    if aid is not None:
+        mod = mod + int(aid.get("bonus") or 0)
     total = roll + mod
     ok = total >= dc
     # a skill nobody here has heard of is still a roll, an untrained one on wits, and the result says so plainly
@@ -13,11 +17,13 @@ def apply(ctx):
     note = None
     if untrained:
         note = "no skill '" + skill + "' here: an untrained roll on wits (skills: " + ", ".join(sorted(SKILLS)) + ")"
-    here = ctx.actor.parent
     ctx.emit("checked", target=ctx.actor, reach=1, by=ctx.actor.id, place=here.id if here is not None else None,
-             skill=skill, roll=roll, mod=mod, total=total, dc=dc, success=ok, margin=total - dc, untrained=untrained)
-    ctx.log(skill + ": d20 " + str(roll) + " + " + str(mod) + " = " + str(total) + " vs " + str(dc) + (" pass" if ok else " fail") + (" (" + note + ")" if note else ""))
+             skill=skill, roll=roll, mod=mod, total=total, dc=dc, success=ok, margin=total - dc, untrained=untrained, aid=aid)
+    helped = " (+" + str(aid.get("bonus") or 0) + ": " + str(aid.get("why") or "a hand from someone") + ")" if aid is not None else ""
+    ctx.log(skill + ": d20 " + str(roll) + " + " + str(mod) + helped + " = " + str(total) + " vs " + str(dc) + (" pass" if ok else " fail") + (" (" + note + ")" if note else ""))
     out = {"roll": roll, "mod": mod, "total": total, "dc": dc, "success": ok}
+    if aid is not None:
+        out["aid"] = aid
     if note:
         out["untrained"] = True
         out["note"] = note

@@ -187,6 +187,19 @@ def test_rules_cascade_and_are_scoped():
     assert 1 <= res["result"] <= 6
 
 
+def test_out_of_reach_names_the_way_in_verbs_that_exist():
+    # "move closer" sent an agent looking for a move verb; the refusal names go and the place
+    w = build(Store())
+    i = ids(w)
+    with pytest.raises(Rejected) as r:
+        w.act(i["Prisoner"], "attack", i["Guard"])
+    assert r.value.hint.startswith("go Hall first (Guard is there)") and "move" not in r.value.hint
+    w.patch(i["Guard"], {"hidden": True})
+    with pytest.raises(Rejected) as r:
+        w.act(i["Prisoner"], "attack", i["Guard"])
+    assert "Hall" not in r.value.hint  # a hidden body's place is not told
+
+
 def test_a_rule_that_walks_the_world_asks_for_its_fuel():
     # the beasts' dawn pass ran out of its 20,000 at a dozen beasts in the Reach and failed the dawn
     w = build(Store())

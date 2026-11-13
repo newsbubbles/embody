@@ -92,6 +92,27 @@ def test_a_grant_holds_its_own_world_and_no_other():
     assert s.use("two-rooms")["id"] == "two-rooms"
 
 
+def test_a_seat_held_on_an_ended_grant_is_free_for_a_new_one():
+    # Shibiko's 24 h grant ran out while his principal still held his body; his new grant was refused the seat
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.patch("Prisoner", {"playable": True})
+    wall = [1000.0]
+    eng.wall = lambda: wall[0]
+    old = gm.invite("player", entity="Prisoner", label="shibiko", expires=1)
+    a = eng.session_for_token(old["token"])
+    a.join()
+    wall[0] = 1000.0 + 3601
+    new = eng.session_for_token(gm.invite("player", entity="Prisoner", label="shibiko again")["token"])
+    assert new.join()["you"]["name"] == "Prisoner" and w.principal(a.pid) is None
+    # and the server's tick lets go of a seat whose grant ended, with nobody waiting for it
+    third = eng.session_for_token(gm.invite("player", entity="Guard", label="g", expires=1)["token"])
+    third.join()
+    assert eng.tick_all()["released"] == {}
+    wall[0] += 2 * 3600
+    assert third.pid in eng.tick_all()["released"]["two-rooms"] and w.principal(third.pid) is None
+
+
 def test_open_invite_sees_seats_and_claims_race_to_one_winner():
     eng, w, i = engine_with_two_rooms()
     gm = owner(eng)
