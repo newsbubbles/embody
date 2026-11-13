@@ -857,6 +857,8 @@ def test_drifters_go_to_the_wall_for_pay_and_a_bought_one_counts_against_it():
     spy.act("give", "Joss", params={"item": "Plain waterskin"})
     joss = gm.inspect("Joss")["state"]
     assert where(gm, "Joss") == "Scar Gate, the Hold" and joss["turncoat"] and joss["faction"] == "House Varrick"
+    word = next(e for e in gm.world.find(limit=None) if e["name"] == "The house's word")
+    assert "Signed for the house: 1." in word["state"].get("text", "")  # the board counts him at once, not at dawn
     card = next(c for c in hold.perceive()["present"] if c["name"] == "Joss") if where(gm, "Bram") == "Scar Gate, the Hold" else None
     assert card is None or "turncoat" not in json.dumps(card)
     gm.move("Bram", "The Gate Yard")

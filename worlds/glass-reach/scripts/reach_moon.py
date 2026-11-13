@@ -143,6 +143,8 @@ def hire(ctx, st, drifter, payer, it):
         ctx.move(drifter, hold)
         ctx.emit("arrived", target=hold, reach=1, who=drifter.id, place=hold.id, quiet=False)
     ctx.emit("hired", target=drifter, reach=0, by=payer.id, side=side)
+    # the boards count the signed at once: Halvard read "signed: 2" with three of his inside (2026-11-13)
+    boards(ctx, story_of(ctx).state)
 
 def pay_rook(ctx, st, rook, payer, it):
     if it.state.kind != "ember":
