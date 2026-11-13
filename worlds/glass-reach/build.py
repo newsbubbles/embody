@@ -246,7 +246,7 @@ ROUTINE_KINDS = ["keth_run", "crawler"]
 CHAPTER_KINDS = ["dawn", "harvested", "downed", "killed", "given", "moon_turns", "chapter_two_begins", "truce_mended"]
 # Chapter two's middle (scripts/reach_moon.py): the beats on the calendar and the four contests the moon counts.
 MOON_KINDS = ["convoy_word", "rook_arrives", "riders_fires", "herald_comes", "given", "talked", "checked", "dawn", "moon_word",
-              "keth_council", "convoy_closes", "pitch_sets"]
+              "keth_council", "convoy_closes", "pitch_sets", "shown"]
 # The Guild's road wardens on the Salt Road (scripts/reach_wardens.py).
 WARDEN_KINDS = ["arrived", "talked", "given", "dawn", "dusk"]
 # The Guild Yard beside the Landing (scripts/reach_guild.py): the counting house kept, the yard tank filled by the crawler.

@@ -678,6 +678,17 @@ def on(ctx, event):
             scene(ctx, deepwell, "The council sits at the cups in the dark and rises without a word for the Hold. Taan "
                   "says only: 'Proof is proof. Terms are terms. The Hold broke the terms.'")
         return
+    if k == "shown":  # proof shown to Taan counts as proof in her hands; the shower keeps it
+        it = ctx.get(p.get("item"))
+        shower = ctx.get(p.get("by"))
+        if it is not None and shower is not None and event.target == st.taan and it.name in PROOFS \
+                and not st.keth_proof and not st.keth_proof_pending:
+            ctx.patch(story, {"keth_proof_pending": it.name, "keth_proof_by": shower.id})
+            ctx.schedule(COUNCIL, "keth_council", target=ctx.root())
+            scene(ctx, shower.parent, "Taan looks a long time at what " + shower.name + " holds out, and does not take "
+                  "it. 'The house's own mark. Keep it whole.' She says no more. 'The council sits on it. Bows are not "
+                  "mine alone to promise.'")
+        return
     if k == "given":
         it = ctx.get(p.get("item"))
         payer = ctx.get(p.get("by"))

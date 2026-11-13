@@ -37,7 +37,14 @@ def apply(ctx):
     here = ctx.actor.parent
     ctx.move(ctx.actor, ctx.target)
     ctx.emit("arrived", target=ctx.target, reach=-1, who=ctx.actor.id, place=ctx.target.id, quiet=False)
-    for p in ctx.children(here, "creature"):
-        if p.state.follows == ctx.actor.id and not p.state.down and not p.state.dead:
-            ctx.move(p, ctx.target)
-            ctx.emit("arrived", target=ctx.target, reach=1, who=p.id, place=ctx.target.id, following=ctx.actor.id, quiet=False)
+    led = [ctx.actor.id]  # followers of followers come too, each once (a beast behind its owner behind the captain)
+    for depth in range(32):
+        came = []
+        for p in ctx.children(here, "creature"):
+            if p.state.follows in led and not p.state.down and not p.state.dead:
+                ctx.move(p, ctx.target)
+                ctx.emit("arrived", target=ctx.target, reach=1, who=p.id, place=ctx.target.id, following=p.state.follows, quiet=False)
+                came.append(p.id)
+        if not came:
+            break
+        led = came
