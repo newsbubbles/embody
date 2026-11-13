@@ -22,7 +22,7 @@ own, so a world may replace any of them with a file of the same name in its scri
   within reach of everyone in its place, and `take` takes it back down. A locked holder refuses `put`, and nothing in it is
   in reach until it is unlocked; an attached lock does not count against `room`, nor does a stack that joins one there.
 - show: something you hold to someone here; they get a `shown` event with its `text` (or description), it stays yours.
-- talk: `params {"about": topic}`; the person answers from `dialog` through person_on, or with `default_line`.
+- talk: `params {"about": topic}`; the person answers from `dialog` through person_on, or with `default_line`. A held body whose mind left its own lines (`away(dialog=...)`, in its secret `idle_orders`) answers from those first while the mind waits.
 - leave_word: `params {"for": who, "word": message}` with someone here, for someone who is not: the keeper stores it
   in its secret `word_left` (listener `leave_word`, fn `keep`, on `word_left`, always) and whispers it once to the one
   it is for when they next talk to it (listener `leave_word` on `talked`, unless embodied). `for` is a name, a kind of

@@ -58,7 +58,10 @@ def on(ctx, event):
     topic = words(event.payload.get("about", ""))
     asker = event.payload.get("by")
     me = ctx.self.state
-    dialog = me.dialog or {}
+    dialog = dict(me.dialog or {})
+    own = (me.idle_orders or {}).get("dialog") or {}
+    for k in own:  # a mind's own lines while its seat is idle, over the author's
+        dialog[k] = own[k]
     gives = me.gives or {}
     best = None
     best_s = 0
@@ -68,7 +71,7 @@ def on(ctx, event):
             best = key
             best_s = s
     if best is None:
-        ctx.say(me.default_line or "Hm.", to=asker)
+        ctx.say(me.default_line or (me.standing_orders or {}).get("answer") or "Hm.", to=asker)
         return
     got = given_to(me, best)
     had = asker in got or "*" in got

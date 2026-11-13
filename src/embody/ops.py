@@ -39,6 +39,10 @@ _SAY_BURST = 30
 _NOTE_MAX = 2000  # a guest's remember() note, in characters
 _DESCRIPTION_MAX = 800  # how a newcomer looks, set once at join(template=..., description=...)
 _SAY_WINDOW = 60.0
+# A mind's idle orders: how many stops a patrol has, how long it dwells at each (world s), how many own lines.
+_PATROL_STOPS = 12
+_DWELL = (30.0, 3600.0, 120.0)  # least, most, default
+_OWN_TOPICS = 20
 # State keys only the entity itself (its mind) and authors ever see.
 # State keys nobody but the host reads: a mind's memory, its brief and goals, and the host's plan for the world
 # (`policy` on the root). The `secret` list on an entity adds its own.
@@ -304,7 +308,14 @@ class Session:
     def _acted(self) -> None:
         """A deed by whoever holds this body, player or mind: the seat is in use, so its body's idle behaviors wait."""
         if self.world_id:
-            self.world.touch(self.pid, self.engine.wall(), acted=True)
+            w = self.world
+            w.touch(self.pid, self.engine.wall(), acted=True)
+            p = w.principal(self.pid)
+            body = w.get(p["entity_id"]) if p and p.get("entity_id") else None
+            orders = (body or {}).get("state", {}).get("idle_orders") or {}
+            if orders.get("patrol") or orders.get("fresh"):  # the first deed ends a patrol; own lines wait for idle
+                rest = {k: v for k, v in orders.items() if k not in ("patrol", "fresh")}
+                w.patch(body["id"], {"idle_orders": rest or None}, replace=True)
 
     def _need(self, cap: str) -> None:
         """The author's hand: a narrator has it for what its role lets through (grants.ROLE_OPS keeps schemas,
@@ -1928,13 +1939,21 @@ class Session:
         return {"ok": True, "reclaimed": tid, "name": r["name"], "from": r["from_name"], "why": r["why"]}
 
     def away(self, give: list[dict[str, Any]] | None = None, answer: str | None = None,
-             entity: str | None = None, sleep: bool = False) -> dict[str, Any]:
+             entity: str | None = None, sleep: bool = False, patrol: list[str] | None = None,
+             dwell: float | None = None, dialog: dict[str, str] | None = None) -> dict[str, Any]:
         """Standing orders for your body while your seat is idle (you went to bed, your mind is on a long watch).
         give=[{"item": <name>, "to": <name> or "anyone"}]: who may reclaim() what from you. answer: one line your
         body says to whoever speaks to it. Others see them on your card while you are idle. away() with nothing
         clears them; they stay set while you play and only work while you are idle. entity: which of a mind's
         bodies (default the one you embody). sleep=true: your body lies down to sleep now, by its own `sleep` verb
-        (the d20 pack's): it mends faster and is easy prey, so do it somewhere safe. Your next deed wakes it."""
+        (the d20 pack's): it mends faster and is easy prey, so do it somewhere safe. Your next deed wakes it.
+
+        A mind's own orders for its body, secret to everyone else: patrol=[place, place, ...] walks the body round
+        those stops by its own `go` (each one way from the next; back to the first if the last leads there, else back
+        the way it came), `dwell` world seconds at each (default 120), from now until the seat's next deed. Keep a
+        wait(until=...) going and it sees what the body sees wherever it stands (until="len(present) > 0" wakes you
+        when anyone is there). dialog={"ferry|crossing": "line", ...}: the body's own answers while the seat is idle,
+        over the author's table; others hear the lines, never the table."""
         self._tick()
         w = self.world
         eid = self._resolve(entity) if entity else self._me()
@@ -1951,13 +1970,51 @@ class Session:
             if len(answer) > _SAY_MAX:
                 raise Rejected(f"a standing answer is at most {_SAY_MAX} characters", hint="one short line")
             orders["answer"] = str(answer)
+        idle: dict[str, Any] = {}
+        if patrol:
+            if not isinstance(patrol, list) or not 2 <= len(patrol) <= _PATROL_STOPS:
+                raise Rejected(f"a patrol is 2 to {_PATROL_STOPS} places", hint='patrol=["The Gate", "The Wall Walk"]')
+            stops = [self._resolve(x) for x in patrol]
+            for s in stops:
+                if not w.is_a(w.need(s)["type"], "place"):
+                    raise Rejected(f"{w.need(s)['name']} is not a place", hint="patrol stops are places")
+            if any(a == b for a, b in zip(stops, stops[1:])):
+                raise Rejected("a patrol stop follows itself", hint="name each place once in a row")
+            if "go" not in w.schema_actions(w.need(eid)["type"]):
+                raise Rejected("this body has no go verb", hint="a patrol walks by the body's own go")
+            loop = w.patrol_ways(eid, stops)
+            lo, hi, df = _DWELL
+            d = float(dwell if dwell is not None else df)
+            if not lo <= d <= hi:
+                raise Rejected(f"dwell is {lo:g} to {hi:g} world seconds", hint=f"dwell={df:g}")
+            idle["patrol"] = {"stops": stops, "dwell": d, "loop": loop, "id": w._next_id("pt")}
+        if dialog:
+            if not isinstance(dialog, dict) or len(dialog) > _OWN_TOPICS:
+                raise Rejected(f"own lines are a dict of at most {_OWN_TOPICS} topics",
+                               hint='dialog={"ferry|crossing": "The ferry runs at dawn."}')
+            for k, v in dialog.items():
+                if not str(k).strip() or not isinstance(v, str) or not v.strip() or len(v) > _SAY_MAX:
+                    raise Rejected(f"each own line is a topic and one line of at most {_SAY_MAX} characters",
+                                   hint='{"water|well": "Ask Sefa, not me."}')
+            idle["dialog"] = {str(k).strip().lower(): str(v) for k, v in dialog.items()}
+            idle["fresh"] = True  # they answer from now until the seat's next deed, then whenever it is idle
         if sleep and not w.need(eid)["state"].get("asleep"):
             if "sleep" not in w.schema_actions(w.need(eid)["type"]):
                 raise Rejected("this body has no sleep verb", hint="away() without sleep; a world gets sleep from the d20 pack")
             w.act(eid, "sleep", None, {}, principal_id=self.pid)
-        w.patch(eid, {"standing_orders": orders or None}, replace=True)
-        return {"ok": True, "entity": eid, "standing_orders": orders, "asleep": bool(w.need(eid)["state"].get("asleep")),
-                "hint": "they work while your seat is idle; away() clears them"}
+        w.patch(eid, {"standing_orders": orders or None, "idle_orders": idle or None}, replace=True)
+        out = {"ok": True, "entity": eid, "standing_orders": orders, "asleep": bool(w.need(eid)["state"].get("asleep")),
+               "hint": "they work while your seat is idle; away() clears them"}
+        if idle.get("patrol"):
+            pat = idle["patrol"]
+            w.schedule(pat["dwell"], "patrol", eid, {"id": pat["id"], "i": 0, "dir": 1}, log=False)
+            out["patrol"] = {"stops": [w.need(s)["name"] for s in pat["stops"]], "dwell": pat["dwell"],
+                             "loop": pat["loop"],
+                             "hint": "it walks from now until your next deed; wait(until='len(present) > 0') wakes you "
+                                     "when anyone is where it stands"}
+        if idle.get("dialog"):
+            out["dialog"] = sorted(idle["dialog"])
+        return out
 
     def say(self, text: str, reach: int = 1, to: str | None = None) -> dict[str, Any]:
         """Speak as the entity you embody. `to` addresses someone here; the room still hears it. Players and

@@ -1403,8 +1403,8 @@ class World:
         kinds = lst.get("kinds") or []
         if kinds and ev["kind"] not in kinds:
             return False
-        if lst.get("unless_embodied") and self.embodied(node):
-            return False  # the table is the floor; an embodied mind answers instead
+        if lst.get("unless_embodied") and self.embodied(node) and not self.own_lines(node):
+            return False  # the table is the floor; an embodied mind answers instead, unless it left lines and is idle
         s = self.script(lst["script"])
         fn = lst.get("fn", "on")
         if not s.has(fn):
@@ -1945,6 +1945,9 @@ class World:
         if kind == "introduce":  # introduce(after=...): what was announced lands now
             self.land(p["spec"])
             return
+        if kind == "patrol":  # a mind's patrol: one step of its body's loop, written to no log but the walking
+            self._patrol_step(eid, p)
+            return
         # Any other scheduled kind is just an event that fires later (listeners may react).
         self.emit(kind, actor=p.get("actor"), target=eid, reach=int(p.get("reach", 1)), payload=p)
 
@@ -1979,15 +1982,17 @@ class World:
             target = who
         ev = self.emit("say", actor=who, target=target, reach=reach, payload=payload, caused_by=caused_by)
         if to and to != who:
-            self._answer_away(to, who, ev["seq"])
+            self._answer_away(to, who, ev["seq"], text)
         return ev
 
-    def _answer_away(self, body: str, asker: str, caused_by: int) -> None:
+    def _answer_away(self, body: str, asker: str, caused_by: int, text: str = "") -> None:
         """A body whose seat is idle answers whoever speaks to it with its standing `answer`, once per asker per
         ten world minutes, so two idle bodies never talk each other round."""
         e = self.get(body)
         line = ((e or {}).get("state", {}).get("standing_orders") or {}).get("answer")
-        if not line or not self.embodied(body) or not self.idle(body):
+        own = self._own_line(e, text) if self.own_lines(body) else None
+        line = own or line
+        if not line or not self.embodied(body) or not (own or self.idle(body)):
             return
         last = self._answered.get((body, asker))
         if last is not None and self.t - last < 600:
@@ -2053,6 +2058,74 @@ class World:
             if acted:
                 p["acted_t"] = self.t
             self.store.put("principal", p)
+
+    # ---- a mind's idle orders: its body's patrol and its own lines -----------------------------------------------
+
+    def own_lines(self, entity_id: str) -> bool:
+        """An embodied body whose mind left its own dialog lines (away(dialog=...)) and has done nothing since, or
+        whose seat is idle: it answers talk from its tables as an unheld body does, its lines over the author's."""
+        e = self.get(entity_id)
+        orders = (e or {}).get("state", {}).get("idle_orders") or {}
+        return bool(orders.get("dialog") and (orders.get("fresh") or self.idle(entity_id)))
+
+    @staticmethod
+    def _own_line(e: dict[str, Any] | None, text: Any) -> str | None:
+        """The mind's own line for words said to its body: the key ("ferry|crossing") with the most of its aliases
+        among the words, longer aliases first, as the village table picks."""
+        table = (((e or {}).get("state") or {}).get("idle_orders") or {}).get("dialog") or {}
+        clean = "".join(c if c.isalnum() else " " for c in str(text or "").lower())
+        words = " " + " ".join(clean.split()) + " "
+        best, best_s = None, 0
+        for key in table:
+            s = sum(10 + len(a.strip()) for a in str(key).lower().split("|") if a.strip() and f" {a.strip()} " in words)
+            if s > best_s:
+                best, best_s = key, s
+        return str(table[best]) if best is not None else None
+
+    def patrol_ways(self, body: str, stops: list[str]) -> bool:
+        """Whether a patrol's stops are each one known way from the next; True when the last leads back to the first
+        (a loop), False when the body walks back the way it came. Raises naming the first missing link."""
+        def way(a: str, b: str) -> bool:
+            return any(e["target"] == b for e in self.edges(a, "connects_to", "out")) and self.knows_way(body, b)
+        for a, b in zip(stops, stops[1:]):
+            if not way(a, b):
+                raise Rejected(f"no way from {self.need(a)['name']} to {self.need(b)['name']} that this body knows: "
+                               f"patrol stops go one way apart", hint="add the place between them as a stop")
+        return len(stops) > 2 and way(stops[-1], stops[0])
+
+    def _patrol_step(self, eid: str, p: dict[str, Any]) -> None:
+        """Walk the body one step of its patrol by its own `go`, so a lock, a squall or a cooldown stops it as it
+        would stop anyone; then the next step after the dwell. A refused step is tried again at the next."""
+        e = self.need(eid)
+        pat = (e["state"].get("idle_orders") or {}).get("patrol")
+        if not pat or pat.get("id") != p.get("id"):
+            return  # cleared, or a newer patrol: this timer is stale
+        stops = [s for s in pat["stops"] if self.get(s)]
+        if len(stops) != len(pat["stops"]):
+            return
+        i, d, here = int(p.get("i") or 0), int(p.get("dir") or 1), e["parent_id"]
+        if here in stops and stops[i] != here:
+            i = stops.index(here)  # carried or pushed onto another stop: go on from there
+        if stops[i] == here:
+            if pat.get("loop"):
+                i = (i + 1) % len(stops)
+            else:
+                if not 0 <= i + d < len(stops):
+                    d = -d
+                i = i + d
+            try:
+                self.act(eid, "go", stops[i])
+            except Rejected:
+                pass
+        else:
+            near = [s for s in stops if any(x["target"] == s for x in self.edges(here, "connects_to", "out"))] if here else []
+            if near:  # off the route: back onto the nearest stop
+                i = stops.index(near[0])
+                try:
+                    self.act(eid, "go", stops[i])
+                except Rejected:
+                    pass
+        self.schedule(float(pat["dwell"]), "patrol", eid, {"id": pat["id"], "i": i, "dir": d}, log=False)
 
     def idle_after(self) -> float:
         """World seconds after a seat's last deed when its body counts as idle (world meta `idle_after`, default 900)."""
@@ -2317,7 +2390,7 @@ _PRIVATE_KINDS = frozenset({"remembered", "intended", "act_refused"})
 # Events only the hosts (owner, author, observers) see, not even the body they are about: an act the world refused.
 _HOST_KINDS = frozenset({"act_refused"})
 # State keys no other body reads, whatever the entity's own `secret` list says.
-ALWAYS_SECRET = frozenset({"memory", "brief", "goals", "policy", "cooldowns"})
+ALWAYS_SECRET = frozenset({"memory", "brief", "goals", "policy", "cooldowns", "idle_orders"})
 # A strike's cooldown in real seconds, when the meta's `strike_cooldown` does not say: `held` when a player or a mind
 # holds either side (an agent's time to read the fight and decide), `free` between bodies nobody holds.
 STRIKE_COOLDOWN = {"held": 60.0, "free": 15.0}

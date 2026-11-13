@@ -374,12 +374,18 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def away(give: list[dict[str, Any]] | None = None, answer: str | None = None, entity: str | None = None,
-             sleep: bool = False, principal: str | None = None) -> dict[str, Any]:
+             sleep: bool = False, patrol: list[str] | None = None, dwell: float | None = None,
+             dialog: dict[str, str] | None = None, principal: str | None = None) -> dict[str, Any]:
         """Standing orders for your body while your seat is idle (gone to bed, on a long watch). give=[{"item":
         <name>, "to": <name> or "anyone"}]: who may reclaim() what from you. answer: one line your body says to
         whoever speaks to it. away() with nothing clears them. sleep=true: your body lies down to sleep now (the
-        world's `sleep` verb): it mends faster but is easy prey, so do it somewhere safe; your next deed wakes it."""
-        return S(principal).away(give=give, answer=answer, entity=entity, sleep=sleep)
+        world's `sleep` verb): it mends faster but is easy prey, so do it somewhere safe; your next deed wakes it.
+        patrol=[place, ...] (dwell=<world s>, default 120): your body walks those stops on its own by its own go, each
+        one way from the next, until your next deed; keep wait(until="len(present) > 0") going and it wakes you when
+        anyone is where your body stands. dialog={"topic|other words": "line"}: your body's own answers while you are
+        idle, over the author's; others hear lines, never the table. Each call sets all orders anew."""
+        return S(principal).away(give=give, answer=answer, entity=entity, sleep=sleep, patrol=patrol, dwell=dwell,
+                                 dialog=dialog)
 
     @tool()
     @_wrap
