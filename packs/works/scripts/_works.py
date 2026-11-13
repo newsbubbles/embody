@@ -131,9 +131,16 @@ def in_hours(ctx, proj):
         return a <= h and h < b
     return h >= a or h < b
 
+def bare(name):
+    """A name without its leading article, to follow 'the': never 'the The raised wall'."""
+    words = str(name).split(" ", 1)
+    if len(words) == 2 and words[0] in ("A", "An", "The", "a", "an", "the"):
+        return words[1]
+    return str(name)
+
 def describe(ctx, proj):
     st = proj.state
-    becomes = (st.becomes or {}).get("name") or "something"
+    becomes = bare((st.becomes or {}).get("name") or "something")
     stage = stage_of(proj)
     if stage is None:
         text = "The works on the " + becomes + ", all but done."
@@ -185,7 +192,7 @@ def stage_done(ctx, proj, stage):
     for key in needs.keys():
         spend(ctx, proj, key, int(needs[key]), None)
     i = int(st.stage or 0)
-    becomes = (st.becomes or {}).get("name") or "works"
+    becomes = bare((st.becomes or {}).get("name") or "works")
     ctx.emit("scene", target=proj.parent, reach=1, text=stage.get("scene") or ("The " + str(stage.get("name")) + " of the " + becomes + " is done."),
              works=proj.id, stage=stage.get("name"))
     for wid in (st.crew or {}).keys():

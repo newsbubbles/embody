@@ -1,8 +1,9 @@
+use("works")
 def apply(ctx):
     plan = ctx.target
     st = plan.state
     b = st.becomes or {}
-    lines = [st.text or ("A plan for the " + str(b.get("name") or "something") + ".")]
+    lines = [st.text or ("A plan for the " + bare(b.get("name") or "something") + ".")]
     lines.append("It makes: " + str(b.get("name")) + ".")
     for s in st.stages or []:
         needs = s.get("needs") or {}
@@ -28,7 +29,7 @@ def apply(ctx):
     elif st.patrons:
         lines.append("It is for " + ", ".join(st.patrons) + " to start, here.")
     if st.built and ctx.get(st.built) is not None:
-        lines.append("It has been built: the " + ctx.get(st.built).name + ".")
+        lines.append("It has been built: the " + bare(ctx.get(st.built).name) + ".")
     elif st.project and ctx.get(st.project) is not None:
         lines.append("It is under way, at " + ctx.get(st.project).parent.name + ".")
     text = "\n".join(lines)

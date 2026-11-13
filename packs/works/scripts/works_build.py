@@ -26,7 +26,7 @@ def check(ctx):
     if me.state.down:
         return "you are down"
     if st.built and ctx.get(st.built) is not None:
-        return "it is already built: the " + ctx.get(st.built).name + " stands at " + ctx.get(st.built).parent.name
+        return "it is already built: the " + bare(ctx.get(st.built).name) + " stands at " + ctx.get(st.built).parent.name
     if st.project and ctx.get(st.project) is not None:
         return "it is already under way at " + ctx.get(st.project).parent.name + ": work on it there"
     if st.portable:
@@ -49,7 +49,7 @@ def apply(ctx):
     st = plan.state
     site = me.parent
     becomes = dict(st.becomes or {})
-    name = becomes.get("works_name") or ("Works on the " + str(becomes.get("name") or plan.name))
+    name = becomes.get("works_name") or ("Works on the " + bare(becomes.get("name") or plan.name))
     proj = ctx.spawn("project", site, name=name, pos=plan.pos if not st.portable else me.pos, state={
         "plan": plan.id, "plan_name": plan.name, "stages": list(st.stages or []), "stage": 0, "labour": 0,
         "becomes": becomes, "patron": me.id, "crew": {}, "hands": [], "hours": st.hours,

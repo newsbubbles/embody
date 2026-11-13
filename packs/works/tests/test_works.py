@@ -198,3 +198,15 @@ def test_taking_the_plan_out_stops_the_next_stage(yard):
     assert any("plan is not in the works" in b for b in [boss.act("survey", works)["result"]])
     thief.act("supply", works, params={"item": "Plan for a cairn"})
     assert "plan is not in the works" not in boss.act("survey", works)["result"]
+
+
+def test_a_finished_name_with_its_own_article_is_not_doubled(yard):
+    eng, gm = yard
+    gm.patch("Plan for a cairn", {"becomes": {"type": "thing", "name": "The raised wall", "state": {"portable": False}}})
+    boss = seat(eng, "Boss")
+    assert "A plan for the raised wall." in boss.act("study", "Plan for a cairn")["result"]
+    boss.act("build", "Plan for a cairn")
+    works = gm.find(type="project")[0]
+    assert works["name"] == "Works on the raised wall"
+    run(gm, 60)
+    assert gm.inspect(works["id"])["state"]["description"].startswith("The works on the raised wall")
