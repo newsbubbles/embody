@@ -45,13 +45,14 @@ read and person_on come from packs/village, the rules from packs/d20), define(s)
 """
 
 from packs.d20.pack import install_rules, keep_behaviors
+from packs.beasts.pack import BEAST_STATE, BEAST_ACTIONS, install_rules as install_beasts
 
 WORLD = {
     "id": "glass-reach",
     "name": "The Glass Reach",
     "seed": 23,
     "description": "A desert fief, a cracked cistern, a people with the water, a blade left behind. Rules on the table.",
-    "requires": ["d20", "village", "works", "locks", "vehicles", "ledgers"],
+    "requires": ["d20", "village", "works", "locks", "vehicles", "ledgers", "beasts"],
 }
 
 # ---- what there is ---------------------------------------------------------------------
@@ -252,7 +253,7 @@ WARDEN_KINDS = ["arrived", "talked", "given", "dawn", "dusk"]
 GUILD_KINDS = ["arrived", "crawler"]
 # The Riders' Hollow (scripts/reach_riders.py): the muster at the fires, the watch, the cart at dawn, a freed prisoner home.
 # The wild ground (scripts/reach_wild.py): day and night, the dawn fills, the pack in the brake.
-WILD_KINDS = ["dusk", "dawn", "arrived", "downed", "killed"]
+WILD_KINDS = ["dusk", "dawn", "arrived", "downed", "killed", "moon_turns"]
 RIDER_KINDS = ["riders_fires", "riders_muster", "arrived", "dawn", "freed_home", "pick_failed", "lock_broken",
                "break_failed", "spoil_failed", "free_failed"]
 # What is hidden until someone looks (scripts/reach_finds.py) and what the road does to a newcomer (scripts/reach_road.py).
@@ -417,8 +418,15 @@ def define(s):
                     listeners=[{"script": "speaker", "kinds": ["taken", "slab_handed"]}])
     keep_slate_schemas(s)
     keep_keeper_book_schema(s)
-    s.define_schema("beast", extends="creature", doc="An animal of the Reach: the d20 blows land on it and it strikes back; it does not drink, talk or carry.",
-                    state={"beast": True, "body": 2, "wits": 1, "will": 1, "skills": {}, "vigor": 6, "max_vigor": 6})
+    # the beasts pack's beast (it grows, eats, can be tamed, breeds), with the Reach's word that it does not drink or talk
+    s.define_schema("beast", extends="creature", doc="An animal of the Reach: grows, eats what the land gives, can be tamed and kept, breeds; "
+                    "the d20 blows land on it and it fights back. It does not drink, talk or carry.",
+                    state=dict(BEAST_STATE), actions=BEAST_ACTIONS, behaviors=[{"script": "fighter_tick", "every": 6}])
+    s.define_schema("root_ground", extends="thing", doc="Ground with root under it: grub one out by hand, from the place's own forage.",
+                    state={"portable": False},
+                    actions={"grub": {"script": "grub_root", "duration": 600,
+                                      "doc": "Grub a root out by hand (ten minutes): food for a thornback, or a goat. "
+                                             "What you take, the pack here does not eat"}})
     s.define_schema("nest", extends="thing", doc="A swarm's nest. Everyone in its place loses a point of vigor a minute, to one, until it is smoked.",
                     state={"portable": False, "swarm": True, "calm_until": None},
                     actions={"smoke": {"script": "wasp_smoke", "doc": "Burn a glassthorn smudge under the nest: the swarm sleeps a day", "duration": 10}},
@@ -2026,6 +2034,101 @@ def keep_wild(s, names):
     s.patch(story, {"wild_lore": True})
 
 
+# Beasts (Nate 2026-11-13: growth, taming, diet, breeding, "needs to be balanced"; the beasts pack). The thornbacks of
+# the brake become a species that grows, eats root and breeds at the moon; the Keth keep a small goat herd on Red Ridge
+# that grazes and gives milk. The land sets the numbers: the brake grows root for about four thornbacks a day, the
+# ridge graze for about five goats. Root is grubbed by hand from the brake's own forage (grub_root), so what a tamer
+# feeds is what the pack does not eat. Idris at the steading remembers old Tessel raising pups; Taan and Iska know the
+# goats.
+THORNBACK = {"eats": ["root", "carrion"], "fed_max": 3, "young_name": "Thornback pup",
+             "stages": [{"name": "young", "from": 0, "state": {"body": 2, "vigor": 4, "max_vigor": 4, "skills": {},
+                                                                "description": "A thornback pup, all legs and soft grey "
+                                                                               "scale, the glass only starting at its spine."}},
+                        {"name": "adult", "from": 6, "state": {"body": 3, "vigor": 6, "max_vigor": 6, "skills": {"brawl": 1},
+                                                                "description": SOW["description"]},
+                         "names": {"m": "Thornback boar", "f": "Thornback sow"}, "parts": [{"name": "Snout", "state": SNOUT}]},
+                        {"name": "old", "from": 60, "state": {"body": 2, "description": "An old thornback, its scale gone "
+                                                                                         "milky and chipped."}}],
+             "lifespan": 75, "tame_dc": {"young": 11, "adult": 14}, "tame_at": {"young": 3, "adult": 5},
+             "tame_skill": "survival", "breed_chance": 0.25, "season": True, "gestation": 6, "litter": [1, 2],
+             "starve_days": 2, "guards": True}
+GOAT_MILK = {"portable": True, "bulk": 0, "left": 1, "max_left": 1, "food": "milk",
+             "description": "A gourd of warm goat's milk, a draw's worth: drink it."}
+RIDGE_GOAT = {"eats": ["graze", "root"], "fed_max": 3, "young_name": "Ridge kid",
+              "stages": [{"name": "young", "from": 0, "state": {"body": 1, "vigor": 3, "max_vigor": 3, "skills": {},
+                                                                 "description": "A ridge kid, red-brown and bouncing."}},
+                         {"name": "adult", "from": 4, "state": {"body": 2, "vigor": 4, "max_vigor": 4, "skills": {},
+                                                                 "description": "A ridge goat, rust-red to match the rock, "
+                                                                                "with a Keth knot of blue cord in one ear."},
+                          "names": {"m": "Ridge billy", "f": "Ridge nanny"}},
+                         {"name": "old", "from": 50, "state": {"body": 1}}],
+              "lifespan": 70, "tame_dc": {"young": 8, "adult": 11}, "tame_at": {"young": 2, "adult": 3},
+              "tame_skill": "survival", "breed_chance": 0.25, "gestation": 5, "litter": [1, 2], "starve_days": 3,
+              "yields": {"name": "Goat's milk", "state": GOAT_MILK, "max": 2, "sex": "f", "stages": ["adult"]}}
+THORNBACKS = {"The thornback boar": {"sex": "m", "age": 20}, "Thornback sow": {"sex": "f", "age": 14},
+              "Thornback yearling": {"sex": "f", "age": 4}}  # the yearling comes of age two dawns on
+GOATS = [("Old Horn", "m", 16), ("Bell", "f", 12), ("Saltlick", "f", 9), ("Dun", "f", 20)]
+BRAKE_FORAGE = {"root": {"left": 8, "max": 8, "regrow": 4}}
+RIDGE_FORAGE = {"graze": {"left": 6, "max": 6, "regrow": 5}}
+ROOT_GROUND = {"portable": False, "root_ground": True,
+               "description": "Under the glassthorn the sand is laced with fat grey roots, the thornbacks' food: you "
+                              "can see where they have rooted. Grub one out by hand and it is something to offer them."}
+IDRIS_PUPS = ("'Old Tessel raised thornback pups, they say. Took them young, before their glass came in, and fed them root "
+              "from her own hand every day, and never at night when the pack is wild. A grown one won't have you without "
+              "five days of patience and a bite or two. The boar? Nobody tames the boar.'")
+BEAST_KNOWS = {
+    "Elder Taan": "Our goats graze Red Ridge: Old Horn the billy and his three, Bell, Saltlick and Dun. The ridge feeds "
+                  "about five; more and they go hungry. Any Keth may milk a fed nanny. Nobody else takes one of ours "
+                  "without asking.",
+    "Iska of the Keth": "The ridge goats are the camp's: Old Horn, Bell, Saltlick, Dun. A fed nanny gives a gourd of milk "
+                        "at dawn, and a goat that is fed by your hand comes to know you.",
+}
+
+
+def keep_beasts(s, names):
+    """The beasts pack in the Reach: its rule on the dawn, the two species, the thornbacks made the pack's beasts,
+    forage on the brake and the ridge, the root ground, the Keth goats, and who knows. Checks before every write."""
+    root = s.summary()["root"]
+    install_beasts(s, root, day="dawn")
+    have = {e["name"] for e in s.world.find(type="species", limit=None)}
+    for sid, table in (("thornback", THORNBACK), ("ridge goat", RIDGE_GOAT)):
+        if sid not in have:
+            s.spawn("species", root, sid, state=dict(table, hidden=True))
+    brake, ridge = names.get("The Thornbrake"), names.get("Red Ridge")
+    if brake:
+        for n, extra in THORNBACKS.items():
+            b = names.get(n)
+            if b and not s.world.get(b)["state"].get("species"):
+                s.patch(b, dict(extra, species="thornback", stage="young" if extra["age"] < 6 else "adult", fed=3,
+                                home=brake, pack=True))
+        if not s.world.get(brake)["state"].get("forage"):
+            s.patch(brake, {"forage": BRAKE_FORAGE})
+        if "The root ground" not in names:
+            s.spawn("root_ground", brake, "The root ground", state=dict(ROOT_GROUND))
+    if ridge:
+        if not s.world.get(ridge)["state"].get("forage"):
+            s.patch(ridge, {"forage": RIDGE_FORAGE})
+        for n, sex, age in GOATS:
+            if n not in names:
+                s.spawn("beast", ridge, n, state={"species": "ridge goat", "sex": sex, "age": age, "stage": "adult",
+                                                  "fed": 3, "home": ridge, "herd": "the Keth", "loyalty": 4,
+                                                  "body": 2, "vigor": 4, "max_vigor": 4,
+                                                  "description": RIDGE_GOAT["stages"][1]["state"]["description"]})
+    idris = names.get("Idris")
+    if idris:
+        dialog = dict(s.world.get(idris)["state"].get("dialog") or {})
+        if "thornback|pup|tame|beast|root|feed" not in dialog:
+            dialog["thornback|pup|tame|beast|root|feed"] = IDRIS_PUPS
+            s.patch(idris, {"dialog": dialog})
+    story = s.world.find(type="story", limit=1)[0]["id"]
+    if s.world.get(story)["state"].get("beast_lore"):
+        return
+    for who, text in BEAST_KNOWS.items():
+        if names.get(who):
+            s.remember(text, entity=names[who])
+    s.patch(story, {"beast_lore": True})
+
+
 # Lockpick (the locks pack's own skill, Nate 2026-11-11): the trade belongs to those who would have learned it. A
 # Dreyer spy and the house's scout and runner, the Guild's door-keeper and the wright's mate, and Merrow at the Salt
 # Works, who fixes anything that moves. A Dreyer newcomer comes in with a little of it (TEMPLATES).
@@ -2483,6 +2586,7 @@ def keep_canon(s):
     keep_pointers(s, names_of(s))
     keep_riders(s, names_of(s))
     keep_wild(s, names_of(s))
+    keep_beasts(s, names_of(s))  # after the brake and the pack
     keep_kiln(s, names_of(s))  # after the brake, for its glassthorn
     keep_lockpicks(s, names_of(s))
     keep_stacks(s)

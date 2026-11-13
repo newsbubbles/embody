@@ -3,9 +3,11 @@
 # The story keeps day and night (`wild_night`, set at dusk, cleared at dawn). At dawn the rock's basin gains two
 # draws, every dew still gains its dew, a barrel cactus tapped dry is full again a week after, and a pack that fled
 # comes back once its day is out. Walk into the brake at night and the pack goes for you; down the big boar and the
-# rest run for a day. The wasps are their own (scripts/wasp_tick.py, wasp_smoke.py).
+# rest run for a day. The wasps are their own (scripts/wasp_tick.py, wasp_smoke.py). The beasts pack does their
+# growing, eating and breeding; here the pack is riled from dusk to dawn, and in season for three days from the moon.
 use("common")
 PACK_FLEES = 86400
+RUT = 259200  # three days
 
 def story_of(ctx):
     return ctx.find(type="story", limit=1)[0]
@@ -56,6 +58,29 @@ def dawn(ctx, st):
             if it.state.dew:
                 fill(ctx, it, int(it.state.per_dawn or 2))
 
+# the pack is wild at night in its own ground (the beasts pack: no gentling a riled beast); a kept one is not
+def rile(ctx, st, on):
+    brake = ctx.get(st.thornbrake) if st.thornbrake else None
+    if brake is None:
+        return
+    for c in ctx.children(brake, "creature"):
+        if c.state.beast and c.state.owner is None and bool(c.state.riled) != on:
+            ctx.patch(c, {"riled": on})
+
+# thornbacks breed at the moon: in season from its turning for three days
+def season(ctx, story, moon):
+    sp = None
+    for e in ctx.find(type="species", limit=10):
+        if e.name == "thornback":
+            sp = e
+    if sp is None:
+        return
+    if moon:
+        ctx.patch(sp, {"in_season": True})
+        ctx.patch(story, {"rut_until": ctx.t + RUT})
+    elif sp.state.in_season and story.state.rut_until is not None and ctx.t >= float(story.state.rut_until):
+        ctx.patch(sp, {"in_season": False})
+
 def on(ctx, event):
     story = story_of(ctx)
     st = story.state
@@ -63,10 +88,16 @@ def on(ctx, event):
     p = event.payload or {}
     if k == "dusk":
         ctx.patch(story, {"wild_night": True})
+        rile(ctx, st, True)
         return
     if k == "dawn":
         ctx.patch(story, {"wild_night": False})
+        rile(ctx, st, False)
         dawn(ctx, st)
+        season(ctx, story, False)
+        return
+    if k == "moon_turns":
+        season(ctx, story, True)
         return
     brake = ctx.get(st.thornbrake) if st.thornbrake else None
     if brake is None:
