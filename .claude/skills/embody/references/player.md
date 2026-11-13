@@ -14,7 +14,7 @@ When your character says something that expects a reply, or does something someo
 
     wait(until="heard('', by='Sefa')", timeout=120)
 
-`heard('', by='Sefa')` fires on anything Sefa says; `heard('water')` on a word; `came('Nico')` on an arrival; `did('attack')` on a deed. The expressions are in references/watch.md. A wait that fired returns what was said and done; tell your human in the fiction, then let them choose. A wait that timed out moved nothing: say the silence in the fiction ("Sefa only watches the flats"), and offer to wait longer. Never loop on a bare `wait()`: it wakes on every footstep.
+`heard('', by='Sefa')` fires on anything Sefa says; `heard('water')` on a word; `arrived('Nico')` when Nico walks in (`came('Nico')` is true while Nico is here, so armed with Nico beside you it fires at once); `did('attack')` on a deed. The expressions are in references/watch.md. A wait that fired returns what was said and done; tell your human in the fiction, then let them choose. A wait that timed out moved nothing: say the silence in the fiction ("Sefa only watches the flats"), and offer to wait longer. Never loop on a bare `wait()`: it wakes on every footstep.
 
 ## 2. Between your human's turns, keep a watch
 

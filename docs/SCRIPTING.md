@@ -97,7 +97,7 @@ Mutations (each one is logged as an event):
 - `ctx.move(x, parent, pos=None)`, `ctx.set_pos(x, pos)`, `ctx.destroy(x)`
 - `ctx.link(a, b, relation, data=None)`, `ctx.unlink(a, b, relation)`
 - `ctx.relate(relation, [participants], data=None)`, `ctx.unrelate(id)`
-- `ctx.set_rule(entity, script, kinds=None)`, `ctx.clear_rule(entity, script)`
+- `ctx.set_rule(entity, script, kinds=None, fuel=None)`, `ctx.clear_rule(entity, script)`
 - `ctx.remember(x, text)` a note in x's secret memory, as `remember` writes it: what they did or saw, for their mind
 
 Stacks: a thing whose state has a `count` is that many of itself (Emberglass, 60 of it). Its card shows `count`, and so does every list that names it (a rack's `holding`). village `take`, `drop`, `give` and `put` take `params {"count": n}` to move part of one; without a count they move all of it.
@@ -146,7 +146,7 @@ A monster that acts on its own until a player embodies it: a behavior with `tick
 
 Ambient facts: put a dict `ambient` on the world root (`time_of_day`, `weather`, `light`, whatever the world cares about) and, where a place differs, an `ambient` dict on the place. Every perceive carries the two merged, the place's keys on top. A rule on the root listening for your own `fog`, `nightfall`, `dawn` timers patches them and emits `scene` events at the places; `examples/ferry-at-dusk/scripts/weather.py` is one. Timers are listed by the `timers` op and cancelled with `unschedule`.
 
-A world file that grows: besides `define(s)` and `populate(s)`, give it an `upgrade(s)` that adds what an older build lacks (a new place, a prop in someone's pocket, a timer, the ambient dict) and checks before each step, so running it twice changes nothing. `load_world(id, upgrade=true)` runs `define` and then `upgrade` against the live world. `set_rule` is already a no-op when the same rule is installed.
+A world file that grows: besides `define(s)` and `populate(s)`, give it an `upgrade(s)` that adds what an older build lacks (a new place, a prop in someone's pocket, a timer, the ambient dict) and checks before each step, so running it twice changes nothing. `load_world(id, upgrade=true)` runs `define` and then `upgrade` against the live world. `set_rule` is already a no-op when the same rule is installed. A rule that walks the whole world on one event (a day pass over every beast and place) may run out of its 20,000 operations as the world grows: give it `fuel=` at install (up to a million), and keep the walk short (find what changed, not everything).
 
 A table as the floor and a mind on top: the listener that answers `talked` from a dialog table carries `unless_embodied: true`. While an agent embodies the person the table is silent and the agent hears the `talked` and the addressed `say`; when it leaves, the table answers again. State an author writes for the mind goes in `brief`; the mind's own notes go in `memory` through `remember`, its goals in `goals` through `intend`. All three are always secret.
 

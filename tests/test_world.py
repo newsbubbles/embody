@@ -187,6 +187,23 @@ def test_rules_cascade_and_are_scoped():
     assert 1 <= res["result"] <= 6
 
 
+def test_a_rule_that_walks_the_world_asks_for_its_fuel():
+    # the beasts' dawn pass ran out of its 20,000 at a dozen beasts in the Reach and failed the dawn
+    w = build(Store())
+    root = w.root_id
+    w.define_script("counter", "def on(ctx, event):\n    n = 0\n    for i in range(30000):\n        n = n + 1\n"
+                               "    ctx.patch(ctx.root(), {'counted': n})\n")
+    w.set_rule(root, "counter", ["tally"])
+    with pytest.raises(Rejected, match="ran out of fuel"):
+        w.emit("tally", target=root)
+    w.set_rule(root, "counter", ["tally"], fuel=200_000)
+    assert w.get(root)["state"]["rules"][-1]["fuel"] == 200_000
+    w.emit("tally", target=root)
+    assert w.get(root)["state"]["counted"] == 30000
+    with pytest.raises(Rejected, match="fuel is 1 to 1,000,000"):
+        w.set_rule(root, "counter", ["tally"], fuel=5_000_000)
+
+
 def test_behaviors_tick_on_the_clock_and_stop_when_embodied():
     w = build(Store())
     i = ids(w)

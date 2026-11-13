@@ -182,6 +182,8 @@ def render_watch(b: dict[str, Any]) -> str:
                 + (f"; here {b['here']}" if isinstance(b.get("here"), str) else "")
                 + (f"; present: {', '.join(b['present'])}" if b.get("present") and isinstance(b["present"][0], str) else ""))
     head = f"FIRED: {b['until']}\n" if b.get("until") else ""
+    if b.get("already"):
+        head += f"ALREADY TRUE: {b.get('note', '')}\n"
     return head + (render_perceive(b) if "affordances" in b else render_wait(b))
 
 

@@ -171,6 +171,30 @@ def walk_to(ctx, b, place, why):
     ctx.move(b, place)
     ctx.emit("arrived", target=place, reach=1, who=b.id, place=place.id, quiet=True, why=why)
 
+def step_home(ctx, b, why):
+    # one way nearer its home by ways it could walk now, looking a few places out; True when it moved
+    home = ref(ctx, b.state.home)
+    if home is None or b.parent is None or b.parent.id == home.id:
+        return False
+    first = {}
+    seen = [b.parent.id]
+    edge = [b.parent]
+    for depth in range(4):
+        nxt = []
+        for p in edge:
+            for e in ctx.edges(p, "connects_to", "out"):
+                q = ctx.get(e["target"])
+                if q is None or q.id in seen or not open_way(ctx, b, p, q):
+                    continue
+                seen.append(q.id)
+                first[q.id] = first.get(p.id) or q
+                if q.id == home.id:
+                    walk_to(ctx, b, first[q.id], why)
+                    return True
+                nxt.append(q)
+        edge = nxt
+    return False
+
 def open_way(ctx, b, here, place):
     # a way this body could walk now: no shut or locked door on it, not a hidden place it does not know
     for e in ctx.edges(here, "connects_to", "out"):

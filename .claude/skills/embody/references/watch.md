@@ -18,12 +18,13 @@ The expression is one line of the engine's script subset (no imports, no assignm
 | `events` | what touched you since the wait began, each with `seq`, `t`, `kind`, `actor`, `target`, `text`, `player` |
 | `heard(word, by='')` | someone said something with that word in it (and the speaker's name has `by` in it) |
 | `did(kind, by='')` | an event of that kind happened, by that one if named (`did('attack', by='Hollis')`, `did('arrived')`) |
-| `came(name)` | someone of that name is here now |
+| `came(name)` | someone of that name is here now (true already when you arm it? it fires at once, every time, with `already: true`) |
+| `arrived(name)` | someone of that name walked in since the wait began (`''` for anyone, your own steps included) |
 | `state(name)` | the public state of someone here or a thing you hold; the owner and narrators see anyone's |
 
 Names match by part and any case: `came('reeve')` matches Reeve Ansel Varrick. Examples:
 
-    came('Reeve') or heard('Ruhl')
+    arrived('Reeve') or heard('Ruhl')
     me['vigor'] < 3 or did('attack')
     t >= 43200
     ambient.get('time_of_day') == 'dusk' and came('Keth')
@@ -35,7 +36,7 @@ A bad expression is refused at once with this grammar in the hint; a typo never 
 
 MCP clients drop a call after a minute or two, so a wait of hours runs from a shell:
 
-    embody watch --door .mcp.json --until "came('Reeve') or ambient.get('time_of_day') == 'dusk'" --for 8h --rejoin
+    embody watch --door .mcp.json --until "arrived('Reeve') or ambient.get('time_of_day') == 'dusk'" --for 8h --rejoin
 
 `--door` is the `.mcp.json` of a hosted session (or any file with the URL and `Bearer <token>`); without it, `embody --as <name> watch ...` watches this machine's database. It calls `wait(until=...)` in pieces of under a minute, reconnects when the line drops or the server redeploys, takes the seat again with `--rejoin` if it lapsed, and exits printing `FIRED: <condition>` with the events, or `TIME UP`. `--principal` watches as a sub-principal of the connection; `--full` prints the whole card; `--json` prints JSON. Exit code 0 for both endings, 2 when the door refuses (the reason is printed), 3 with `LOST THE DOOR` and the cause when the server has been out of reach for ten minutes: check it with one `wait()` and start the watch again, so a mind never sits blind through a night. Without `--until` it wakes on the first event near you.
 

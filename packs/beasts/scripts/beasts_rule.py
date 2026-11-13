@@ -84,6 +84,15 @@ def day(ctx):
     hunger(ctx, beasts, specs)
     beasts = [b for b in beasts if not b.state.dead]
     for b in beasts:
+        # a wild grazer away from home goes back a way a day when home has more of what it eats than where it stands
+        # (a goat that fled to a bare well); a hungry one has already walked to eat, and hunters keep to where they hunt
+        sp = specs[b.state.species]
+        if kept(b) or not b.state.home or b.state.down or b.state.dead or b.state.hungry or predator(b, sp):
+            continue
+        home = ref(ctx, b.state.home)
+        if home is not None and forage_left(home, diet(b, sp)) > forage_left(b.parent, diet(b, sp)):
+            step_home(ctx, b, "home")
+    for b in beasts:
         if kept(b):
             loyalty(ctx, b, ended, d, full[b.id])
     births(ctx, beasts, specs, d)
@@ -144,7 +153,7 @@ def old(b, specs):
     return b.state.stage in tags(sv(b, specs[b.state.species], "old_stages", ["old"]))
 
 def wander(ctx, b, eats):
-    # a hungry wild beast goes one way over, to where there is the most it eats
+    # a hungry wild beast goes one way over, to where there is the most it eats; with nothing near, a way toward home
     best = None
     best_n = 0
     for e in ctx.edges(b.parent, "connects_to", "out"):
@@ -157,6 +166,8 @@ def wander(ctx, b, eats):
             best_n = n
     if best is not None:
         walk_to(ctx, b, best, "hunger")
+    elif b.state.home and forage_left(ref(ctx, b.state.home) or b.parent, eats) > 0:
+        step_home(ctx, b, "hunger")
 
 def loyalty(ctx, b, ended, d, was_full):
     l = int(b.state.loyalty if b.state.loyalty is not None else 3)
@@ -231,8 +242,11 @@ def conceive(ctx, beasts, specs, ended, d):
         if mate is None:
             continue
         # the land must carry one more: fewer of them here than it regrows a day, unless a keeper fed her by hand. The
-        # old do not count: they eat last and go first, so a herd at its limit still makes young to follow them
-        here = len([b for b in beasts if b.parent.id == f.parent.id and b.state.species == f.state.species and not old(b, specs)])
+        # old do not count: they eat last and go first, so a herd at its limit still makes young to follow them. The
+        # young on the way do (a litter's least each): three nannies that conceive at one dawn are three more mouths
+        kin = [b for b in beasts if b.parent.id == f.parent.id and b.state.species == f.state.species]
+        here = len([b for b in kin if not old(b, specs)])
+        here = here + sum([int(tags(sv(b, sp, "litter", [1, 1]))[0]) for b in kin if b.state.carrying])
         hand = any([v == ended for v in (f.state.fed_by or {}).values()])
         # a hunter's room is its prey, not the ground: well fed is enough (`room`: "fed"; grazers "forage")
         room = sv(f, sp, "room", "prey" if sv(f, sp, "preys_on", None) else "forage")

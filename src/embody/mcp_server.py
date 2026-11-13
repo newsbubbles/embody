@@ -427,7 +427,8 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
                    principal: str | None = None) -> dict[str, Any]:
         """Block until an event touches you or your place (or the timeout, max 120 s). Returns the light bundle
         (t, ambient, here, who is present, the new events, cursor); `full=true` returns perceive() instead.
-        until="<expression>" waits for a condition instead of any event: came('Reeve'), heard('water', by='Ruhl'),
+        until="<expression>" waits for a condition instead of any event: arrived('Reeve') (walks in), came('Reeve')
+        (is here now: already true fires at once, with already=true), heard('water', by='Ruhl'),
         me['vigor'] < 3, t >= 43200, ambient.get('time_of_day') == 'dusk'. It returns with fired=true and the
         events since it began, or timed_out with nothing moved: call again (pass back `since` if you are not
         embodied). For hours of waiting, run `embody watch` from a shell instead; it loops this for you."""
@@ -603,9 +604,10 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
-    def set_rule(entity: str, script: str, kinds: list[str] | None = None) -> dict[str, Any]:
-        """(author) Attach a listener script to one entity (a rule for its subtree; on the root, for the whole world)."""
-        return s.set_rule(entity, script, kinds=kinds)
+    def set_rule(entity: str, script: str, kinds: list[str] | None = None, fuel: int | None = None) -> dict[str, Any]:
+        """(author) Attach a listener script to one entity (a rule for its subtree; on the root, for the whole world).
+        fuel: its budget per event, default 20,000, up to a million for a rule that walks the whole world."""
+        return s.set_rule(entity, script, kinds=kinds, fuel=fuel)
 
     @tool()
     @_wrap

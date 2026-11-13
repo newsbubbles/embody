@@ -325,3 +325,42 @@ def test_a_bold_pack_goes_for_a_person_only_when_they_are_alone(wild):
     gm.move("Dov", "Yard")
     dawn(gm)
     assert st(gm, j)["attacked_by"] == gm.inspect("Cass")["id"] and gm.inspect(j)["parent"] == gm.inspect("Ridge")["id"]
+
+
+def test_a_goat_that_strayed_walks_home_a_way_a_day(wild):
+    # the Reach: goats that fled or wandered hungry ended at the Low Well and starved there, ways from the ridge
+    eng, gm = wild
+    root = gm.world.root_id
+    for p in ("Flats", "Scrub", "Low Well"):
+        gm.spawn("place", root, p)
+    gm.connect("Ridge", "Flats")
+    gm.connect("Flats", "Scrub")
+    gm.connect("Scrub", "Low Well")
+    gm.patch("goat", {"starve_days": 4})
+    fed = beast(gm, "Flats", "Nanny", species="goat", sex="f", home="Ridge", fed=3)
+    lost = beast(gm, "Low Well", "Billy", species="goat", sex="m", home="Ridge", fed=1)
+    dawn(gm)
+    assert where(gm, "Nanny") == "Ridge"  # fed, and home has graze where she stands has none
+    assert where(gm, "Billy") == "Scrub"  # hungry with nothing near: a way toward home, not a wait to starve
+    dawn(gm)
+    assert where(gm, "Billy") == "Flats"
+    dawn(gm)
+    assert where(gm, "Billy") == "Ridge"  # the ridge's graze is next door now: he goes to eat
+    assert not gm.world.get(lost)["state"].get("dead") and not gm.world.get(fed)["state"].get("dead")
+
+
+
+def test_young_on_the_way_count_against_the_land(wild):
+    # the Reach: four goats on a ridge that regrows five, three nannies conceived at one dawn and the herd jumped to seven
+    eng, gm = wild
+    gm.patch("Ridge", {"forage": {"graze": {"left": 8, "max": 8, "regrow": 5}}})
+    gm.patch("goat", {"breed_chance": 1.0, "gestation": 5, "litter": [1, 1]})
+    beast(gm, "Ridge", "Billy", species="goat", sex="m", home="Ridge")
+    for n in ("Nan", "Dot", "Bess"):
+        beast(gm, "Ridge", n, species="goat", sex="f", home="Ridge")
+    dawn(gm)
+    carrying = [e for e in gm.world.find(type="beast", limit=100) if e["state"].get("carrying")]
+    assert len(carrying) == 1  # four here and one on the way fill what the ridge regrows
+
+def where(gm, name):
+    return gm.world.get(gm.world.get(gm.inspect(name)["id"])["parent_id"])["name"]

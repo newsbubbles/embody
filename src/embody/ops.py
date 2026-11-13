@@ -2238,6 +2238,7 @@ class Session:
             if since is None:
                 since = p["cursor_seq"] if (me and p) else w.store.next_seq(w.id) - 1
         scan, seen = int(since), []
+        first = True
         while True:
             with self.engine.lock:
                 self._tick()
@@ -2257,7 +2258,16 @@ class Session:
                     raise Rejected(f"until: {e.reason}", hint=UNTIL_DOC) from None
                 timed_out = clock() - start >= timeout
                 if fired:
-                    return self._watch_reply(me, until, seen, hi, full)
+                    # true on the room as it stands, with no event at all: armed again, it fires again at once
+                    already = first and bool(cond.call("until", env=self._watch_view(me, []), fuel=20_000))
+                    b = self._watch_reply(me, until, seen, hi, full)
+                    if already:
+                        b["already"] = True
+                        b["note"] = ("this was already true when you armed it, without any event: it fires again at "
+                                     "once each time you arm it. came(name) is who is here now; arrived(name) waits "
+                                     "for someone to walk in after the wait begins. Change the condition first.")
+                    return b
+                first = False
                 if timed_out:
                     return {"world": w.id, "t": w.t, "timed_out": True, "fired": False, "until": until,
                             "since": since, "seen": len(seen), "here": view["here"], "present": view["present"]}
@@ -2281,6 +2291,7 @@ class Session:
             return names[i]
 
         evs = [{"seq": e["seq"], "t": e["t"], "kind": e["kind"], "actor": nm(e["actor"]), "target": nm(e["target"]),
+                "who": nm((e.get("payload") or {}).get("who")) or nm(e["actor"]),
                 "text": str((e.get("payload") or {}).get("text") or (e.get("payload") or {}).get("about") or ""),
                 "player": bool(e.get("by_player"))} for e in seen]
         cards = {c["name"]: self._visible_state(c, full=False) for c in near}
@@ -2305,6 +2316,9 @@ class Session:
         def came(name: str) -> bool:
             return any(low(name) in low(n) for n in data["present"])
 
+        def arrived(name: str = "") -> bool:
+            return any(e["kind"] == "arrived" and low(name) in low(e["who"]) for e in data["events"])
+
         def state(name: str) -> dict[str, Any]:
             for n, st in data["cards"].items():
                 if low(name) == low(n) or low(name) in low(n):
@@ -2318,7 +2332,7 @@ class Session:
             return {}
 
         view = {k: v for k, v in data.items() if k != "cards"}
-        view.update(heard=heard, did=did, came=came, state=state)
+        view.update(heard=heard, did=did, came=came, arrived=arrived, state=state)
         return view
 
     def _watch_reply(self, me: str | None, until: str, seen: list[dict[str, Any]], hi: int,
@@ -2334,7 +2348,8 @@ class Session:
         b = {"world": w.id, "t": w.t, "fired": True, "until": until, "ambient": self._ambient(here),
              "here": {"id": here["id"], "name": here["name"]} if here else None,
              "present": [{"id": c["id"], "name": c["name"]} for c in w.children(here["id"])
-                         if c["id"] != me and not c["state"].get("hidden")] if here else [],
+                         if c["id"] != me and not c["state"].get("hidden") and w.is_a(c["type"], "creature")]
+                        if here else [],  # the same `present` the expression read: people and creatures, not things
              "events": seen[-50:], "cursor": hi}
         if me:
             w.set_cursor(self.pid, hi)
@@ -2709,10 +2724,11 @@ class Session:
         self.world.unrelate(id)
         return {"ok": True}
 
-    def set_rule(self, entity: str, script: str, kinds: list[str] | None = None) -> dict[str, Any]:
+    def set_rule(self, entity: str, script: str, kinds: list[str] | None = None,
+                 fuel: int | None = None) -> dict[str, Any]:
         self._need(AUTHOR)
-        self._record("set_rule", entity=entity, script=script, kinds=kinds)
-        self.world.set_rule(self._resolve(entity), script, kinds)
+        self._record("set_rule", entity=entity, script=script, kinds=kinds, **({"fuel": fuel} if fuel is not None else {}))
+        self.world.set_rule(self._resolve(entity), script, kinds, fuel=fuel)
         return {"ok": True}
 
     def clear_rule(self, entity: str, script: str) -> dict[str, Any]:
@@ -2839,8 +2855,9 @@ UNTIL_DOC = ("until is one Python expression (the embody script subset: no impor
              "know: t (world seconds), ambient (dict: time_of_day, light, ...), here (your place's name), present "
              "(names of who is here), me (your own state: water, vigor, wounded, ...), events (since the wait began: "
              "seq, t, kind, actor, target, text, player), and helpers heard(word, by=''), did(kind, by=''), "
-             "came(name), state(name) (the state you can see of someone here or something you hold). Examples: "
-             "\"came('Reeve')\", \"heard('ruhl', by='Reeve') or me['vigor'] < 3\", \"t >= 43200\", "
+             "came(name) (is here now), arrived(name) (walked in since the wait began; '' for anyone), state(name) "
+             "(the state you can see of someone here or something you hold). Examples: "
+             "\"arrived('Reeve')\", \"heard('ruhl', by='Reeve') or me['vigor'] < 3\", \"t >= 43200\", "
              "\"ambient.get('time_of_day') == 'dusk'\". Names match by part, any case.")
 
 

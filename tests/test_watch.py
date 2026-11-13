@@ -57,6 +57,22 @@ def test_until_reads_time_place_people_and_my_own_state():
     assert you.wait(timeout=0, until="came('jug')", **NOW)["timed_out"] is True
 
 
+def test_came_is_who_is_here_arrived_waits_for_a_walk_in_and_both_replies_list_the_same_present():
+    # a Codex player's watch on came('Ansel') woke at once on every arming: Ansel was already in the room
+    eng, gm, you, mara = two()
+    gm.spawn("thing", gm.inspect("Ashford Square")["id"], "Jug", state={"portable": False})
+    b = you.wait(timeout=0, until="came('mara')", **NOW)
+    assert b["fired"] is True and b["already"] is True and "arrived(name)" in b["note"]
+    quiet = you.wait(timeout=0, until="arrived('mara')", **NOW)
+    assert quiet["timed_out"] is True
+    mara.act("go", "Pell's Mill")
+    mara.act("go", "Ashford Square")
+    b = you.wait(timeout=0, until="arrived('mara')", **NOW)
+    assert b["fired"] is True and "already" not in b and any(e["kind"] == "arrived" for e in b["events"])
+    # the fired reply's present is the timed-out one's: people and creatures, not the jug
+    assert sorted(p["name"] for p in b["present"]) == sorted(quiet["present"]) and "Jug" not in quiet["present"]
+
+
 def test_until_reads_my_state_with_the_schema_defaults_beneath():
     # Halvard's watch on me['water'] was refused, "key 'water' not found": a body by a source never dries, so its
     # water was never written, though every rule reads it as the schema's 10. A watch reads it the same way.

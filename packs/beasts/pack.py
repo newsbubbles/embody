@@ -4,7 +4,9 @@ A world names it after d20 in its manifest (`"requires": ["d20", "beasts"]`): th
 blows. It defines the `species` and `beast` schemas and one rule, which a world installs on its root with
 `install_rules(s, root, day="dawn", night="dusk")`, naming the event kind that turns its day and the one that is its
 night (when predators hunt) (a world with no dawn schedules a repeating one on its root: `s.schedule(86400,
-"beast_day", entity=root, every=86400)` and `day="beast_day"`; an event with no target reaches no rule). Everything
+"beast_day", entity=root, every=86400)` and `day="beast_day"`; an event with no target reaches no rule). The day walks
+every beast and place, so the rule asks for `fuel` (default `FUEL`, 400,000 operations; twelve beasts in the Glass
+Reach used about 15,500, against a rule's default of 20,000). Everything
 happens on that event, once a day, in this order: forage regrows, carcasses rot, predators hunt (with no night),
 beasts age and grow, they eat or go hungry, kept ones gain or lose loyalty, the young due are born, pairs conceive,
 and kept beasts give what they give.
@@ -38,8 +40,9 @@ the days.
 Diet and hunger. A place's `forage` is {tag: {"left": n, "max": m, "regrow": r}}: each day `regrow` comes back up to
 `max`, and that is what the land carries. Each day every beast is a meal shorter; then the beasts in a place eat its
 forage of their diet, a meal each first so it is shared (the grown, then the young, the old last), then what else they
-are short. At 0 a beast is `hungry` (`beast_hungry`): a wild one walks one way over toward the most it eats and dies
-at `starve_days`. A food item has `food` (a tag or a list) and `feeds` (meals); `portions` uses it more than once, a
+are short. At 0 a beast is `hungry` (`beast_hungry`): a wild one walks one way over toward the most it eats (with
+nothing near, a way toward its `home`) and dies at `starve_days`. A wild grazer that is not hungry and stands away from
+home walks back a way a day when home has more of what it eats than where it stands; hunters keep to where they hunt. A food item has `food` (a tag or a list) and `feeds` (meals); `portions` uses it more than once, a
 stack goes one at a time. `feed` from your hand gives the meals, up to full (a full beast still takes it from a hand,
 as a treat), and refuses food it does not eat ("sniffs the grain and turns away").
 
@@ -57,8 +60,8 @@ gains loyalty when anyone feeds it and loses it only to hunger. A dead owner lea
 
 Breeding. At the day, an adult female and an adult male of one species in one place, both fed 2 or more, she not
 carrying: `breed_chance` that she is (`beast_carrying`), only in season if the species has one, and only if there are
-fewer of her species there (the old not counted: they eat last and go first) than the place's forage of their diet
-regrows a day, unless someone fed her by hand. So a wild herd grows to what the land carries and stops, and kept herds
+fewer of her species there (the old not counted: they eat last and go first; the young on the way counted, each
+carrying female's least `litter`) than the place's forage of their diet regrows a day, unless someone fed her by hand. So a wild herd grows to what the land carries and stops, and kept herds
 grow as fast as their keepers feed them. `gestation` days later `litter` young are born where she is (`beast_born`),
 age 0, wild or kept as she is, following her owner.
 
@@ -124,10 +127,13 @@ def define(s):
                     behaviors=[{"script": "fighter_tick", "every": 6}])
 
 
-def install_rules(s, root, day="dawn", night=None):
+FUEL = 400_000  # one day's walk: the ninety-day hunters test peaks near 21,000, the Reach at twelve beasts 15,500
+
+def install_rules(s, root, day="dawn", night=None, fuel=FUEL):
     """The beasts' rule on the root: `day` (an event kind, or a list) turns their day; `night` (a kind or a list, or
-    None) is when predators hunt, else they hunt at the start of the day. Idempotent."""
+    None) is when predators hunt, else they hunt at the start of the day. `fuel`: the rule's budget for one day's
+    walk over every beast and place (the default holds a few hundred beasts). Idempotent."""
     days = [day] if isinstance(day, str) else list(day)
     nights = [] if night is None else ([night] if isinstance(night, str) else list(night))
     s.patch(root, {"beast_night": nights or None})
-    s.set_rule(root, "beasts_rule", kinds=days + nights + ["arrived", "hit", "missed", "killed"])
+    s.set_rule(root, "beasts_rule", kinds=days + nights + ["arrived", "hit", "missed", "killed"], fuel=fuel)

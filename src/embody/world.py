@@ -16,6 +16,8 @@ from .script import Script, ScriptError, ScriptObject
 from .store import Store
 from . import access as acl
 
+LISTENER_FUEL_MAX = 1_000_000  # the most a rule may ask for with set_rule(..., fuel=)
+
 ROOT_TYPE = "world"
 BASE_TYPE = "entity"
 
@@ -562,11 +564,11 @@ class Ctx(ScriptObject):
         self._hold(tgt, kind=kind)
         return self._w.schedule(after, kind, entity=tgt, payload=p, every=every, caused_by=self._caused_by)
 
-    def set_rule(self, entity: Any, script: str, kinds: list[str] | None = None) -> None:
+    def set_rule(self, entity: Any, script: str, kinds: list[str] | None = None, fuel: int | None = None) -> None:
         self._no_rules()
         self._hold(entity)
         self._hold_script(script)
-        self._w.set_rule(_ev(self._w, entity), script, kinds, actor=self._actor, caused_by=self._caused_by)
+        self._w.set_rule(_ev(self._w, entity), script, kinds, fuel=fuel, actor=self._actor, caused_by=self._caused_by)
 
     def clear_rule(self, entity: Any, script: str) -> None:
         self._no_rules()
@@ -1294,11 +1296,18 @@ class World:
         self.emit("unrelated", actor=actor, target=None, reach=0, caused_by=caused_by,
                   payload={"hyperedge": id, "relation": h["relation"]})
 
-    def set_rule(self, entity: str, script: str, kinds: list[str] | None = None, actor: str | None = None,
-                 caused_by: int | None = None) -> None:
+    def set_rule(self, entity: str, script: str, kinds: list[str] | None = None, fuel: int | None = None,
+                 actor: str | None = None, caused_by: int | None = None) -> None:
+        """A listener on an entity's subtree. `fuel`: the rule's budget per event when it walks a big world (a day pass
+        over every beast), from the default 20,000 up to a million."""
         self.script(script)
         e = self.need(entity)
         rule = {"script": script, "kinds": kinds or ["before_act"]}
+        if fuel is not None:
+            if not 1 <= int(fuel) <= LISTENER_FUEL_MAX:
+                raise Rejected(f"fuel is 1 to {LISTENER_FUEL_MAX:,}, not {fuel}",
+                               hint="leave it out for the default 20,000; a rule that walks the whole world may need more")
+            rule["fuel"] = int(fuel)
         have = e["state"].get("rules", [])
         if rule in have:
             return  # already installed as is: a world file's upgrade() may run twice
@@ -1413,7 +1422,7 @@ class World:
                   params=params, event=_event_view(ev), verb=verb, caused_by=ev["seq"],
                   seed=self._seed_for(ev["seq"], node))
         try:
-            ctx.run(s, fn, [ctx, _event_view(ev)], fuel=20_000)
+            ctx.run(s, fn, [ctx, _event_view(ev)], fuel=min(int(lst.get("fuel") or 20_000), LISTENER_FUEL_MAX))
         except _Stop:
             logs.extend(ctx.logs)
             return True
