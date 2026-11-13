@@ -673,6 +673,7 @@ def on(ctx, event):
                   "the house's own mark. If the Hold keeps the terms to the moon, the Keth will stand on its wall when the "
                   "riders come.'")
             ctx.emit("keth_proof", target=ctx.root(), reach=-1, thing=st.keth_proof_pending, by=st.keth_proof_by)
+            boards(ctx, story_of(ctx).state)  # the captain's notice names the proof now, not at dawn
         else:
             ctx.patch(story, {"keth_proof_pending": None})
             scene(ctx, deepwell, "The council sits at the cups in the dark and rises without a word for the Hold. Taan "
