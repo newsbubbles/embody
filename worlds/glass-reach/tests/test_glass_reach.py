@@ -921,6 +921,9 @@ def test_pitch_mends_the_cistern_once_the_wedge_is_out_and_the_mended_cistern_co
     to_next(gm, "pitch_sets")
     assert gm.inspect("Story")["state"]["cistern_mended"] and gm.inspect("The cistern")["state"]["left"] >= 6
     assert any("trickling" in t for t in scenes(gm.history(kinds=["scene"], limit=20, newest=True)))
+    gm.patch("The cistern", {"left": 0})  # drawn dry, the seep fills it again by the night, up to six
+    to_next(gm, "dawn")
+    assert gm.inspect("The cistern")["state"]["left"] == 2
     to_next(gm, "moon_turns")
     assert gm.inspect("Story")["state"]["reckoning"]["cistern"]
 

@@ -267,6 +267,19 @@ def pitch_sets(ctx, st):
           "Hold has stopped hoping for: water, trickling into the cistern from the seep under the Scar.")
     ctx.emit("cistern_mended", target=ctx.root(), reach=-1, by=st.pitch_curing)
 
+SEEP = 2      # draws the seep puts back in a mended cistern each night
+SEEP_TOP = 6  # what it fills to, no more
+
+def seep(ctx, st):
+    # the mended cistern says the seep under the Scar fills it; the night of 2026-11-12 the Hold drew it dry and
+    # nothing came back, so the seep keeps that word
+    cistern = ctx.get(st.cistern) if st.cistern else None
+    if not st.cistern_mended or cistern is None or not cistern.state.mended:
+        return
+    left = int(cistern.state.left or 0)
+    if left < SEEP_TOP:
+        ctx.patch(cistern, {"left": min(SEEP_TOP, left + SEEP)})
+
 def courses(b):
     # the wall works (packs/works): every course laid and set stands as a man; one still setting does not yet
     bs = b.state
@@ -630,6 +643,7 @@ def on(ctx, event):
     if st.chapter != 2 or st.moon_turned:
         return
     if k == "dawn":
+        seep(ctx, st)
         lean(ctx, st)
         omen(ctx, st)
         boards(ctx, story_of(ctx).state)
