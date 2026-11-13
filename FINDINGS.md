@@ -225,3 +225,18 @@ authority with the new `write` verb, signature and witness included, and the wor
 A keeper now honors a leaf held by the asker that names the asker and is written in the hand of someone the thing is
 kept for. A `"letters": false` setting turns this off. Hask handed over the key live, and the sealed case's number
 stays the wright's to give.
+
+## 2026-11-13: A captain filled his skins from the jars and the cistern paid
+
+**Seen:** at the Hold, Ruhl asked twice to fill his two skins from the Keth jars (e64) so the jars would come down
+toward four. Both `filled` events named the cistern (e19) as the source, so the jars stayed at seven and the cistern
+went lower. Ruhl caught it from the events and told the reeve, but the reeve and the night's counts went on believing
+the jars had moved.
+
+**Why:** the d20 `fill` verb takes the first water source in the place (`water_here`) and has no way to name one.
+Where a place has two sources that mean different things (Keth water owed by the truce, the Hold's own cistern), the
+choice is the whole point of the act, and the verb makes it silently.
+
+**Taught:** when a place can hold more than one of something a verb draws on, the verb takes a parameter naming
+which, and refuses with the list when it is ambiguous. `fill` (and `drink`) should take `params {"from": <source>}`.
+Until then, a mind that cares which source it draws from checks `source` in the `filled` event.
