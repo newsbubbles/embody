@@ -1765,8 +1765,9 @@ def test_a_keepers_book_opens_to_read_and_takes_a_book_of_writing():
     gm.spawn("keepers_book", "Tam", "A Keeper's book", state={"text": "THE COUNT.", "room": 3000})
     r = me.act("read", "A Keeper's book")
     assert "THE COUNT." in json.dumps(r["events"])
-    me.act("write", "A Keeper's book", params={"text": "x" * 1500})  # more than a leaf holds
+    r = me.act("write", "A Keeper's book", params={"text": "x" * 1500})  # more than a leaf holds
     assert gm.inspect("A Keeper's book")["state"]["text"].endswith("x" * 1500)
+    assert "Tam writes in a Keeper's book." in json.dumps(r["events"])
     with pytest.raises(Rejected, match="room for"):
         me.act("write", "A Keeper's book", params={"text": "y" * 1500})
 

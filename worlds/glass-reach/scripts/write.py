@@ -48,5 +48,9 @@ def apply(ctx):
             ctx.rename(it, name)
     ctx.emit("wrote", target=it, reach=0, by=ctx.actor.id, text=words)
     if ctx.actor.parent is not None:
-        ctx.emit("scene", target=ctx.actor.parent, reach=1, text=ctx.actor.name + " writes on " + it.name.lower() + ".")
+        # a book (it says its own room) is written in, a leaf on; only the article drops its capital
+        parts = it.name.split(" ", 1)
+        shown = parts[0].lower() + " " + parts[1] if len(parts) == 2 and parts[0] in ("A", "An", "The") else it.name
+        ctx.emit("scene", target=ctx.actor.parent, reach=1, text=ctx.actor.name + (" writes in " if it.state.room else
+                 " writes on ") + shown + ".")
     return "written: " + words
