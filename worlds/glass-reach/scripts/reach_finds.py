@@ -1,6 +1,10 @@
 # Things hidden in the Reach until someone looks: a hidden thing with `find_dc` turns up for whoever passes a check
 # here with one of its `find_skills` and a total that reaches its dc. The place says something is off (a hint in a
-# description); the check is the looking. Found, it is in plain sight for everyone there.
+# description); the check is the looking. Found, it is in plain sight for everyone there. A passed search or track that
+# finds nothing, with nothing hidden here to that skill at any dc, says so plainly: a quiet pass read like a wrong tree
+# or a missing door (Wizard, 2026-11-13: "Am I to assume that if I get this kind of answer, I'm barking up the wrong tree?").
+
+LOOKING = ["search", "track"]  # the skills whose whole point is finding; lore and survival passes serve other ends too
 
 def unhint(ctx, c):
     # what pointed at it (the cistern's glint, the proud stone) says nothing more once it is found
@@ -22,12 +26,17 @@ def on(ctx, event):
         return
     skill = str(p.get("skill") or "")
     total = int(p.get("total") or 0)
+    found, still = 0, 0
     for c in ctx.children(place):
         st = c.state
         if not st.hidden or not st.find_dc:
             continue
-        if skill not in (st.find_skills or []) or total < int(st.find_dc):
+        if skill not in (st.find_skills or []):
             continue
+        if total < int(st.find_dc):
+            still += 1
+            continue
+        found += 1
         ctx.patch(c, {"hidden": False, "found_by": me.id})
         unhint(ctx, c)
         ctx.emit("scene", target=place, reach=1, text=st.find_text)
@@ -43,8 +52,15 @@ def on(ctx, event):
         t = ctx.get(e["target"])
         if t is None or not t.state.hidden or not t.state.find_dc:
             continue
-        if skill not in (t.state.find_skills or []) or total < int(t.state.find_dc):
+        if skill not in (t.state.find_skills or []):
             continue
+        if total < int(t.state.find_dc):
+            still += 1
+            continue
+        found += 1
         ctx.patch(t, {"hidden": False, "known_to": None, "found_by": me.id})
         ctx.emit("scene", target=place, reach=1, text=t.state.find_text)
         ctx.emit("found", target=t, reach=1, by=me.id, place=place.id, thing=t.name)
+    if skill in LOOKING and not found and not still:
+        ctx.emit("scene", target=me, reach=0, text="You look well, and nothing is hidden here to find by " + skill
+                 + ". If a trail led you here, it ends here.")

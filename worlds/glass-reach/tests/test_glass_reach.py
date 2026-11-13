@@ -787,6 +787,13 @@ def test_hidden_things_turn_up_for_the_right_look_and_the_place_says_where_to_lo
                                                               "find_skills": ["search"], "find_text": "A plumb."})
     r = ash.act("check", params={"skill": "search", "dc": 5})
     assert any(t.startswith("A mason's plumb lies where") for t in scenes(r["events"]))  # never "The A mason's plumb"
+    # a pass that finds nothing says so, when nothing is hidden to that look; a deeper secret keeps quiet
+    nothing = lambda r: any("nothing is hidden here" in t for t in scenes(r["events"]))
+    assert nothing(ash.act("check", params={"skill": "search", "dc": 12}))
+    assert not nothing(ash.act("check", params={"skill": "blade", "dc": 12}))
+    gm.spawn("thing", "The Gate Yard", "A deep secret", state={"hidden": True, "find_dc": 60, "find_skills": ["search"],
+                                                             "find_text": "Deep."})
+    assert not nothing(ash.act("check", params={"skill": "search", "dc": 12}))
     load_world(gm, "glass-reach", upgrade=True)  # a reboot makes no second one and does not put the hint back
     assert len([e for e in gm.find(name="Hollis's count") if e["name"] == "Hollis's count"]) == 1
     assert "finger proud" not in gm.inspect("The Gate Yard")["state"]["description"]
