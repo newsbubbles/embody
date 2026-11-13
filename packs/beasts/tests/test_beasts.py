@@ -234,3 +234,94 @@ def test_a_species_with_a_season_breeds_only_in_it(wild):
     gm.patch("thornback", {"in_season": True})
     dawn(gm)
     assert st(gm, sow)["carrying"]["due"] == gm.world.get(gm.world.root_id)["state"]["beast_day"] + 6
+
+
+GOAT = {"eats": ["graze"], "fed_max": 3, "young_name": "Kid", "breed_chance": 0.3, "gestation": 5, "litter": [1, 2],
+        "lifespan": 70, "carcass": 8,
+        "stages": [{"name": "young", "from": 0, "state": {"body": 1, "vigor": 3, "max_vigor": 3}},
+                   {"name": "adult", "from": 8, "state": {"body": 2, "vigor": 5, "max_vigor": 5, "skills": {"brawl": 1}},
+                    "names": {"m": "Billy", "f": "Nanny"}},
+                   {"name": "old", "from": 50, "state": {"body": 1}}]}
+JACKAL = {"eats": ["meat", "carrion"], "preys_on": ["goat"], "fed_max": 3, "starve_days": 4, "young_name": "Jackal pup",
+          "breed_chance": 0.2, "gestation": 8, "litter": [1, 2], "lifespan": 80, "tame_dc": {"young": 12}, "tame_at": {"young": 4},
+          "wanders_in": {"at": "Dunes", "prey": 6, "count": [2, 2]},
+          "stages": [{"name": "young", "from": 0, "state": {"body": 1, "vigor": 3, "max_vigor": 3}},
+                     {"name": "adult", "from": 10, "state": {"body": 2, "vigor": 5, "max_vigor": 5, "skills": {"brawl": 2}},
+                      "names": {"m": "Jackal dog", "f": "Jackal bitch"},
+                      "parts": [{"name": "Fangs", "state": {"weapon": True, "damage": 2, "portable": False}}]},
+                     {"name": "old", "from": 60, "state": {"body": 1}}]}
+
+
+def hunting_ground(gm):
+    root = gm.world.root_id
+    gm.spawn("place", root, "Dunes")
+    gm.connect("Ridge", "Dunes")
+    gm.patch("Ridge", {"forage": {"graze": {"left": 8, "max": 8, "regrow": 5}}})
+    gm.patch("goat", GOAT)
+    gm.spawn("species", root, "jackal", state=JACKAL)
+
+
+def test_hunters_and_their_herd_both_last_ninety_days_and_swing(wild):
+    eng, gm = wild
+    hunting_ground(gm)
+    for i, sex in enumerate(["m", "f", "f", "f"]):
+        gm.spawn("beast", "Ridge", f"Goat {i}", state={"species": "goat", "sex": sex, "age": 12 + i * 5, "stage": "adult",
+                                                    "fed": 3, "home": "Ridge", "vigor": 5, "max_vigor": 5, "body": 2})
+    for i, sex in enumerate(["m", "f", "f"]):
+        j = gm.spawn("beast", "Dunes", f"Jackal {i}", state={"species": "jackal", "sex": sex, "age": 15 + i * 5, "stage": "adult",
+                                                          "fed": 2, "home": "Dunes", "pack": True, "vigor": 5, "max_vigor": 5,
+                                                          "body": 2, "skills": {"brawl": 2}})["id"]
+        gm.spawn("thing", j, "Fangs", state={"weapon": True, "damage": 2, "portable": False})
+    goats, jackals = [], []
+    for _ in range(90):
+        dawn(gm)
+        alive = living(gm)
+        goats.append(len([e for e in alive if e["state"]["species"] == "goat"]))
+        jackals.append(len([e for e in alive if e["state"]["species"] == "jackal"]))
+    kinds = [e["kind"] for e in gm.world.store.query("event", "world_id=? AND kind IN ('killed','beast_wandered_in')", (gm.world.id,))]
+    # the hunters kill, the herd never goes (its last two, and its last grown pair, are out of reach), and a pack that
+    # starves out comes back from beyond the map once the herd is big again
+    assert kinds.count("killed") >= 5 and min(goats) >= 2 and max(goats) - min(goats) >= 3, goats
+    assert sum(1 for j in jackals if j > 0) >= 60 and jackals[-1] > 0, jackals
+
+
+def test_a_carcass_rots_and_a_tamed_hunter_eats_meat_cut_from_it(wild):
+    eng, gm = wild
+    hunting_ground(gm)
+    me = gm.inspect("Ada")["id"]
+    gm.move("Ada", "Dunes")
+    goat = gm.spawn("beast", "Dunes", "Old goat", state={"species": "goat", "sex": "f", "age": 40, "stage": "adult",
+                                                       "fed": 0, "hungry_days": 1})["id"]
+    pup = gm.spawn("beast", "Dunes", "Pup", state={"species": "jackal", "sex": "f", "age": 2, "stage": "young",
+                                                 "owner": me, "follows": me, "loyalty": 3, "with_owner": 0, "fed": 0})["id"]
+    dawn(gm)  # the goat starves on the bare sand and lies there as meat
+    g = st(gm, goat)
+    assert g["dead"] and "meat" in g["food"] and g["meals"] == 8
+    gm.act_as("Ada", "butcher", goat)
+    assert any(c["name"] == "Meat" for c in gm.world.children(me))
+    with pytest.raises(Rejected, match="turns away"):
+        gm.spawn("thing", "Ada", "Grass", state={"portable": True, "food": "graze", "feeds": 1})
+        gm.act_as("Ada", "feed", pup, {"item": "Grass"})
+    gm.act_as("Ada", "feed", pup, {"item": "Meat"})
+    assert st(gm, pup)["fed"] == 1
+    dawn(gm)  # turned, and the pup eats the carrion where it lies
+    assert st(gm, goat)["food"] == ["carrion"] and st(gm, goat)["meals"] < 7 and st(gm, pup)["fed"] >= 1
+    dawn(gm, 2)
+    assert st(gm, goat).get("food") is None and st(gm, goat).get("meals") == 0
+    with pytest.raises(Rejected, match="nothing left"):
+        gm.act_as("Ada", "butcher", goat)
+
+
+def test_a_bold_pack_goes_for_a_person_only_when_they_are_alone(wild):
+    eng, gm = wild
+    hunting_ground(gm)
+    gm.patch("jackal", {"attacks_people": True})
+    j = gm.spawn("beast", "Dunes", "Lean jackal", state={"species": "jackal", "sex": "m", "age": 20, "stage": "adult", "fed": 0,
+                                                  "home": "Dunes", "pack": True})["id"]
+    gm.spawn("person", "Ridge", "Cass")
+    gm.spawn("person", "Ridge", "Dov")
+    dawn(gm)
+    assert st(gm, j).get("attacked_by") is None and gm.inspect(j)["parent"] == gm.inspect("Dunes")["id"]
+    gm.move("Dov", "Yard")
+    dawn(gm)
+    assert st(gm, j)["attacked_by"] == gm.inspect("Cass")["id"] and gm.inspect(j)["parent"] == gm.inspect("Ridge")["id"]

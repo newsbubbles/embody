@@ -253,3 +253,16 @@ def test_a_trip_outlives_the_server(tmp_path):
     gm2.use("road")
     roll(gm2.world, 200)
     assert where(gm2, "Cart") == "Gate" and where(gm2, "Ada") == "Cart"
+
+
+def test_followers_of_followers_board_and_alight_together(tmp_path):
+    eng, gm = world(tmp_path)
+    gm.patch("Cart", {"seats": 3})
+    gm.spawn("person", gm.inspect("Yard")["id"], "Dov")
+    gm.patch("Cy", {"follows": gm.inspect("Ada")["id"]})
+    gm.patch("Dov", {"follows": gm.inspect("Cy")["id"]})
+    ada = seat(eng, "Ada")
+    ada.act("board", "Cart")
+    assert [where(gm, n) for n in ["Ada", "Cy", "Dov"]] == ["Cart"] * 3
+    ada.act("alight", "Cart")
+    assert [where(gm, n) for n in ["Ada", "Cy", "Dov"]] == ["Yard"] * 3

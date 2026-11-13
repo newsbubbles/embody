@@ -2,11 +2,12 @@
 
 A world names it after d20 in its manifest (`"requires": ["d20", "beasts"]`): the pack's scripts use d20's rolls and
 blows. It defines the `species` and `beast` schemas and one rule, which a world installs on its root with
-`install_rules(s, root, day="dawn")`, naming the event kind that turns its day (a world with no dawn schedules a
-repeating one on its root: `s.schedule(86400, "beast_day", entity=root, every=86400)` and `day="beast_day"`; an event
-with no target reaches no rule). Everything happens on that event, once a day, in this order: forage regrows, beasts
-age and grow, they eat or go hungry, kept ones gain or lose loyalty, the young due are born, pairs conceive, and kept
-beasts give what they give.
+`install_rules(s, root, day="dawn", night="dusk")`, naming the event kind that turns its day and the one that is its
+night (when predators hunt) (a world with no dawn schedules a repeating one on its root: `s.schedule(86400,
+"beast_day", entity=root, every=86400)` and `day="beast_day"`; an event with no target reaches no rule). Everything
+happens on that event, once a day, in this order: forage regrows, carcasses rot, predators hunt (with no night),
+beasts age and grow, they eat or go hungry, kept ones gain or lose loyalty, the young due are born, pairs conceive,
+and kept beasts give what they give.
 
 A species is a hidden `species` entity named by its id ("thornback"); a beast's `species` names it. Every value below
 may also sit on a beast itself, which wins over its species:
@@ -20,8 +21,9 @@ may also sit on a beast itself, which wins over its species:
 - `eats`: diet tags ["root", "pulp", "carrion", "graze"]. `fed_max` (default 3).
 - `tame_dc` and `tame_at`: a number, or a table by stage ({"young": 11, "adult": 14}); a stage the table leaves out is
   never tamed, nor is a beast with `leader`. `tame_skill` (default survival).
-- `breeds` (stages, default ["adult"]), `breed_chance` (default 0.25), `season` (true: only while the species has
-  `in_season`, which a world rule sets), `gestation` (days, default 6), `litter` [min, max], `young_name`.
+- `breeds` (a mother's stages, default ["adult"]), `sires` (a father's, default ["adult", "old"]), `breed_chance`
+  (default 0.25), `season` (true: only while the species has `in_season`, which a world rule sets), `gestation` (days,
+  default 6), `litter` [min, max], `young_name`.
 - `starve_days` (default 2): a wild beast that many days hungry dies.
 - `guards`: a kept one growls (`growled`) at a stranger arriving where it is (not its owner's faction) and takes up
   its owner's fight. `yields`: {"name": "Goat's milk", "state": {...}, "max": 2, "stages": ["adult"], "sex": "f"}: a
@@ -60,9 +62,30 @@ regrows a day, unless someone fed her by hand. So a wild herd grows to what the 
 grow as fast as their keepers feed them. `gestation` days later `litter` young are born where she is (`beast_born`),
 age 0, wild or kept as she is, following her owner.
 
+Carnivores and hunting. A species with `preys_on` (species ids) hunts; it eats `meat` and `carrion`, which only the
+dead give. A dead beast is a carcass where it lies: `meals` (its species' `carcass`, default its max_vigor) of meat
+and carrion, carrion only after a day, bones after three; beasts whose diet matches eat it at the day, and people cut
+a meal off with `butcher` to carry (the way to keep a tamed hunter fed: the dearest beast to keep). A `killed` beast
+becomes a carcass too. Once a night (the kinds `install_rules` names as `night`; with none, at the start of the day),
+each wild pack (its species in one place) with a member at fed below `hunts_below` (default 1: the hungry) hunts the
+weakest prey within reach: its place, its home and the places next to its home, one place further after `range_after`
+(default 2) days hungry, which is when it comes for the herds by the houses. Weakest is young or old, hurt, alone and
+nobody's. The pack walks to it (`beast_hunts`); the prey may flee (d20 + survival against 10 + 2 a hunter:
+`beast_fled`), else up to six rounds of d20 blows, its herd and its owner's guard beasts striking back, until it is
+down (`killed`, a carcass) or half the pack is (`beast_hunt_failed`). A person is hunted only by a species with
+`attacks_people` or a ranging pack, only alone, and is fought for real: the hunters take them as their foe and their
+fighter ticks fight at the world's pace, so they can run or fight; a person they down is left down, not eaten. Two
+guards against an empty map: a prey species keeps its last `refuge` (default 2) within a pack's reach, and its last
+grown male and female, out of reach; and a hunter species with `wanders_in` {"at": place, "prey": n, "count": [a, b]}
+comes back from beyond the map once none of it is left and its prey number n. A hunter breeds only with `prey_per`
+(default 3) prey within reach for each of its kind there, one more (`room`: "prey"; grazers have "forage"). A pack of
+three jackals and four goats on a ridge regrowing 5 keep both alive for ninety days in the pack's test, the herd
+between 3 and 8.
+
 Events: `beast_grew`, `beast_hungry`, `beast_tamed`, `beast_trust`, `beast_bit`, `beast_shied`, `beast_feral`,
 `beast_carrying`, `beast_born`, `beast_died` {why: hunger, age}, `beast_yielded`, `beast_stays`, `beast_comes`,
-`beast_released`, `growled`, `fed`. Walks arrive `quiet`.
+`beast_released`, `growled`, `fed`, `beast_hunts`, `beast_fled`, `beast_hunt_failed`, `killed` {by, why: hunt},
+`beast_wandered_in`, `butchered`. Walks arrive `quiet`.
 
 What a world does not need: no ticks of its own for hunger or growth (the day does it), no follow code (village `go`
 moves whoever `follows` the walker), and no fight code (beasts run d20's `fighter_tick`, so a struck beast or a kept
@@ -85,6 +108,8 @@ BEAST_ACTIONS = {
     "stay": {"script": "beast_stay", "doc": "Tell your beast to stay here"},
     "come": {"script": "beast_come", "reach": "sight", "doc": "Call your beast to you: here it follows again, one way over it comes"},
     "release": {"script": "beast_release", "doc": "Let your beast go wild"},
+    "butcher": {"script": "beast_butcher", "duration": 30,
+                "doc": "Cut a meal of meat from a dead beast here, to carry and feed by hand"},
 }
 
 
@@ -99,7 +124,10 @@ def define(s):
                     behaviors=[{"script": "fighter_tick", "every": 6}])
 
 
-def install_rules(s, root, day="dawn"):
-    """The beasts' rule on the root: `day` (an event kind, or a list) turns their day. Idempotent."""
+def install_rules(s, root, day="dawn", night=None):
+    """The beasts' rule on the root: `day` (an event kind, or a list) turns their day; `night` (a kind or a list, or
+    None) is when predators hunt, else they hunt at the start of the day. Idempotent."""
     days = [day] if isinstance(day, str) else list(day)
-    s.set_rule(root, "beasts_rule", kinds=days + ["arrived", "hit", "missed"])
+    nights = [] if night is None else ([night] if isinstance(night, str) else list(night))
+    s.patch(root, {"beast_night": nights or None})
+    s.set_rule(root, "beasts_rule", kinds=days + nights + ["arrived", "hit", "missed", "killed"])

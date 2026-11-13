@@ -75,6 +75,23 @@ def test_named_seat_invite_joins_bare_and_returns_a_briefing():
     assert w.embodied(i["Prisoner"]) is None
 
 
+def test_a_grant_holds_its_own_world_and_no_other():
+    # a watcher that picked the first world by name wandered into another world mid-watch
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.patch("Prisoner", {"playable": True})
+    s = eng.session_for_token(gm.invite("player", entity="Prisoner", label="brisk")["token"])
+    s.join()
+    gm.create_world("Aaa first", id="aaa")
+    assert [x["id"] for x in s.worlds()] == ["two-rooms"]
+    assert {x["id"] for x in gm.worlds()} == {"aaa", "two-rooms"}
+    for f in (lambda: s.use("aaa"), lambda: s.join(world_id="aaa"), lambda: s.seats("aaa")):
+        with pytest.raises(Rejected, match="this grant is for the world 'two-rooms'"):
+            f()
+    assert s.world_id == "two-rooms" and s.wait(timeout=0)["here"]["name"]
+    assert s.use("two-rooms")["id"] == "two-rooms"
+
+
 def test_open_invite_sees_seats_and_claims_race_to_one_winner():
     eng, w, i = engine_with_two_rooms()
     gm = owner(eng)

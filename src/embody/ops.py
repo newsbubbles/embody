@@ -518,7 +518,15 @@ class Session:
     # ---- choosing a world -----------------------------------------------------
 
     def worlds(self) -> list[dict[str, Any]]:
-        return self.engine.worlds()
+        """Every world on this server; over a grant, only the grant's own (a token is one world)."""
+        out = self.engine.worlds()
+        return [x for x in out if x["id"] == self.grant["world_id"]] if self.grant is not None else out
+
+    def _own_world(self, world_id: str) -> None:
+        """A grant holds one world: its session never points at another, whatever a caller names."""
+        if self.grant is not None and world_id != self.grant["world_id"]:
+            raise Rejected(f"this grant is for the world {self.grant['world_id']!r}, not {world_id!r}",
+                           hint="call it without a world, or with that one; worlds() lists only yours")
 
     def who(self) -> dict[str, Any]:
         """This session as the server sees it: principal, role, world, and the grant it came in on."""
@@ -548,6 +556,7 @@ class Session:
     def use(self, world_id: str) -> dict[str, Any]:
         """Point this session at a world without embodying anything (authors, observers). The answer says who you are
         there (`you`: principal and role)."""
+        self._own_world(world_id)
         self.engine.world(world_id)
         self.world_id = world_id
         return self.world.summary() | {"you": self.who()}
@@ -611,6 +620,7 @@ class Session:
         world_id = world_id or self.world_id
         if not world_id:
             raise Rejected("no world", hint="join(world_id, entity); worlds() lists them")
+        self._own_world(world_id)
         description = (description or "").strip()
         if description and not template:
             raise Rejected("a seat keeps the description its world gave it",
@@ -1372,6 +1382,13 @@ class Session:
                 v = {name: {kk: vv for kk, vv in t.items() if kk in _TEMPLATE_PUBLIC}
                      for name, t in v.items() if isinstance(t, dict)}
             out[k] = v
+        return out
+
+    def _watch_me(self, e: dict[str, Any]) -> dict[str, Any]:
+        """A watcher's own state as its body's rules read it: the schema's defaults under what is stored, so
+        me['water'] works on a body that has never dried (a rule reads a missing value as its default)."""
+        out = {k: v for k, v in self.world.schema_defaults(e["type"]).items() if k not in ("rules", "secret", "space")}
+        out.update(self._visible_state(e, full=True))
         return out
 
     def _card(self, e: dict[str, Any], full: bool = False) -> dict[str, Any]:
@@ -2170,8 +2187,9 @@ class Session:
         (with the `since` it gave, for a watcher that is not embodied) and the events so far still count."""
         if until is not None and str(until).strip():
             return self._watch(str(until), timeout, kinds, full, since, clock, sleep)
-        me = self._me()
-        p = self._principal()
+        with self.engine.lock:  # read the body with the store to itself, as every poll does
+            me = self._me()
+            p = self._principal()
         start = clock()
         while True:
             with self.engine.lock:  # one poll at a time shares the store with every other caller; the sleep does not
@@ -2271,7 +2289,7 @@ class Session:
             cards[ent["name"]] = self._visible_state(ent, full=True)
         data = json.loads(json.dumps({
             "t": w.t, "ambient": self._ambient(here), "here": here["name"] if here else None,
-            "present": [c["name"] for c in near], "me": self._visible_state(ent, full=True) if ent else {},
+            "present": [c["name"] for c in near], "me": self._watch_me(ent) if ent else {},
             "events": evs, "cards": cards}, default=str))
         privileged = self._privileged()
 

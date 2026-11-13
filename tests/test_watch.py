@@ -57,6 +57,22 @@ def test_until_reads_time_place_people_and_my_own_state():
     assert you.wait(timeout=0, until="came('jug')", **NOW)["timed_out"] is True
 
 
+def test_until_reads_my_state_with_the_schema_defaults_beneath():
+    # Halvard's watch on me['water'] was refused, "key 'water' not found": a body by a source never dries, so its
+    # water was never written, though every rule reads it as the schema's 10. A watch reads it the same way.
+    eng, gm = ferry()
+    gm.define_schema("wayfarer", extends="creature", state={"water": 10, "max_water": 10})
+    gm.spawn("wayfarer", gm.inspect("Ashford Square")["id"], "Halvard")
+    h = eng.session("halvard-mind")
+    h.join("ferry-at-dusk", "Halvard")
+    hid = gm.inspect("Halvard")["id"]
+    row = gm.world.get(hid)
+    gm.world.store.put("entity", {**row, "state": {k: v for k, v in row["state"].items() if k != "water"}})  # never written
+    assert "water" not in gm.world.get(hid)["state"]
+    assert h.wait(timeout=0, until="me['water'] < 3", **NOW)["timed_out"] is True
+    gm.patch("Halvard", {"water": 2})
+    assert h.wait(timeout=0, until="me['water'] < 3", **NOW)["fired"] is True
+
 def test_until_sees_only_what_the_watcher_may_know_and_cannot_write():
     eng, gm, you, mara = two()
     gm.patch("Mara", {"plan": "poison the ale", "secret": ["plan"]})

@@ -28,8 +28,7 @@ def apply(ctx):
     ctx.move(me, v)
     ctx.emit("boarded", target=v, reach=1, who=me.id, moving=bool(v.state.moving))
     ctx.emit("arrived", target=v, reach=-1, who=me.id, place=v.id)
-    for p in ctx.children(here):
-        if (p.state.friend == me.id or p.state.follows == me.id) and not p.state.asleep:
-            if v.state.seats is None or len(riders(ctx, v)) < int(v.state.seats):
-                ctx.move(p, v)
-                ctx.emit("boarded", target=v, reach=1, who=p.id, following=me.id)
+    for pl in followers(ctx, here, me):
+        if v.state.seats is None or len(riders(ctx, v)) < int(v.state.seats):
+            ctx.move(pl[0], v)
+            ctx.emit("boarded", target=v, reach=1, who=pl[0].id, following=pl[1])

@@ -19,7 +19,6 @@ def apply(ctx):
     ctx.move(me, place)
     ctx.emit("alighted", target=v, reach=1, who=me.id, place=place.id, moving=bool(v.state.moving))
     ctx.emit("arrived", target=place, reach=-1, who=me.id, place=place.id)
-    for p in ctx.children(v):
-        if (p.state.friend == me.id or p.state.follows == me.id) and not p.state.asleep:
-            ctx.move(p, place)
-            ctx.emit("alighted", target=v, reach=1, who=p.id, place=place.id, following=me.id)
+    for pl in followers(ctx, v, me):
+        ctx.move(pl[0], place)
+        ctx.emit("alighted", target=v, reach=1, who=pl[0].id, place=place.id, following=pl[1])

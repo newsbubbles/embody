@@ -18,6 +18,27 @@ def vehicle_of(ctx, x):
         return p
     return None
 
+def followers(ctx, here, me):
+    # who comes along with me from here, each with the one they follow: those who follow me (or befriended me), then
+    # whoever follows them, and so on; each body once, sleepers stay
+    out = []
+    led = [me.id]
+    seen = [me.id]
+    for depth in range(32):
+        came = []
+        for p in ctx.children(here):
+            if p.id in seen or p.state.asleep:
+                continue
+            lead = p.state.follows if p.state.follows in led else (p.state.friend if p.state.friend in led else None)
+            if lead is not None:
+                out.append([p, lead])
+                came.append(p.id)
+                seen.append(p.id)
+        if not came:
+            break
+        led = came
+    return out
+
 def place_ref(ctx, ref):
     # a place by its id or its exact name
     if ref is None:

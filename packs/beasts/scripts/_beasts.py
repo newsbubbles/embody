@@ -126,6 +126,34 @@ def grow_into(ctx, b, sp, st_def):
 def die(ctx, b, why):
     ctx.patch(b, {"dead": True, "down": True, "carrying": None, "follows": None, "hungry": False})
     ctx.emit("beast_died", target=b, reach=1, why=why, species=b.state.species)
+    carcass(ctx, b)
+
+def carcass(ctx, b):
+    # a dead beast is meat for a day, carrion for two more, then bones: `meals` of it to eat where it lies
+    if b.state.carcass_day is not None:
+        return
+    sp = species_of(ctx, b)
+    n = sv(b, sp, "carcass", None)
+    if n is None:
+        n = max(1, int(b.state.max_vigor or 4))
+    ctx.patch(b, {"food": ["meat", "carrion"], "meals": int(n), "carcass_day": today(ctx)})
+
+def eat_carcass(ctx, place, eats, need):
+    # take up to `need` meals from the dead lying here whose food this diet eats; returns how many
+    got = 0
+    for c in ctx.children(place):
+        if got >= need:
+            break
+        m = int(c.state.meals or 0)
+        if m <= 0 or not [t for t in tags(c.state.food) if t in eats]:
+            continue
+        take = min(need - got, m)
+        ctx.patch(c, {"meals": m - take})
+        got = got + take
+    return got
+
+def meat_here(place, eats):
+    return sum([int(c.state.meals or 0) for c in place.children() if [t for t in tags(c.state.food) if t in eats]])
 
 def ref(ctx, x):
     # an entity by id, or by its exact name
