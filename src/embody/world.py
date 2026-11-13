@@ -1678,8 +1678,11 @@ class World:
                 raise Rejected(f"{verb} failed while applying: {e.reason}", hint=e.hint) from None
             logs.extend(ctx.logs)
             if adef.get("strikes") and target_id and target_id != actor_id:
-                self.mark_strike(actor_id, target_id, float(adef.get("cooldown_x") or 1), actor=actor_id,
-                                 caused_by=ev["seq"])
+                # the verb's own cooldown_x, times the one its apply returns (the weapon it struck with: a maul's 2)
+                x = float(adef.get("cooldown_x") or 1)
+                if isinstance(result, dict) and isinstance(result.get("cooldown_x"), (int, float)):
+                    x = x * float(result["cooldown_x"])
+                self.mark_strike(actor_id, target_id, x, actor=actor_id, caused_by=ev["seq"])
             if adef.get("cost"):
                 st = self.need(actor_id)["state"]
                 self.patch(actor_id, {k: st.get(k, 0) - n for k, n in adef["cost"].items()}, actor=actor_id,

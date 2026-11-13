@@ -34,7 +34,7 @@ The numbers, so a narrator can explain a roll:
 - Strikes take their time. `attack`, `shoot` and `kill` are strikes (`strikes: true`): after one, the striker
   waits the engine's cooldown before striking that foe again, and half of it before anyone (docs/SCRIPTING.md,
   Strikes; a minute of real time when a player or a mind holds either side, 15 s when neither does, nothing on a
-  paused clock). A fighter's own blows and shots wait the same, times the weapon's `cooldown_x` (2 for a maul).
+  paused clock). Blows and shots, a player's or a fighter's, wait times the weapon's `cooldown_x` (2 for a maul).
   A world's own strike verbs say `strikes: true` and their `cooldown_x` and `cost`.
 - At half vigor you are `wounded`; at 0 you are `down` and can only yield, drink or crawl; `kill` finishes
   someone down; striking someone who yielded to you is `dishonor` and every faction hears of it.

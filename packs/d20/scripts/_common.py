@@ -129,10 +129,11 @@ def strike(ctx, me, t, slow):
         ctx.patch(t, {"attacked_by": me.id})
     if t.state.yielded == me.id:
         ctx.emit("dishonor", target=me, reach=-1, against=t.id)
+    cx = (weapon.state.cooldown_x if weapon else None) or 1  # a maul's 2: the engine holds the striker off longer
     if ward and ward.state.on and not slow:
         ctx.emit("warded", target=t, reach=1, by=me.id, weapon=wname)
         ctx.log("the ward hardens against the fast blow")
-        return {"hit": False, "warded": True}
+        return {"hit": False, "warded": True, "cooldown_x": cx}
     # a sleeper is struck with advantage (the better of two rolls) and defends with bare hands, unbraced
     asleep = bool(t.state.asleep)
     a_roll = ctx.rand.roll("1d20")
@@ -166,7 +167,7 @@ def strike(ctx, me, t, slow):
     if me.state.braced:
         ctx.patch(me, {"braced": False})
     ctx.log(("hit for " + str(dmg) if hit else "miss") + " (" + str(attack) + " vs " + str(defence) + ")")
-    return {"hit": hit, "dmg": dmg, "attack": attack, "defence": defence}
+    return {"hit": hit, "dmg": dmg, "attack": attack, "defence": defence, "cooldown_x": cx}
 
 def melee(who):
     # the first weapon held that is not one that fires: what a blow is struck with
@@ -259,7 +260,7 @@ def shot(ctx, me, t, weapon):
     if ward and ward.state.on:
         ctx.emit("warded", target=t, reach=1, by=me.id, weapon=wname, ranged=True)
         ctx.log("the ward stops the shot")
-        return {"hit": False, "warded": True}
+        return {"hit": False, "warded": True, "cooldown_x": weapon.state.cooldown_x or 1}
     asleep = bool(t.state.asleep)
     a_roll = ctx.rand.roll("1d20")
     rolls = [a_roll]
@@ -284,7 +285,8 @@ def shot(ctx, me, t, weapon):
         ctx.emit("missed", target=t, reach=1, by=me.id, weapon=wname, attack=attack, defence=defence, rolls=rolls,
                  asleep=asleep, ranged=True)
     ctx.log(("hit for " + str(dmg) if hit else "miss") + " (" + str(attack) + " vs " + str(defence) + ")")
-    return {"hit": hit, "dmg": dmg, "attack": attack, "defence": defence, "far": far}
+    return {"hit": hit, "dmg": dmg, "attack": attack, "defence": defence, "far": far,
+            "cooldown_x": weapon.state.cooldown_x or 1}
 
 def faction_of(ctx, who):
     name = who.state.faction

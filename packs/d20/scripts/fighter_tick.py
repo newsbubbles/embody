@@ -56,15 +56,12 @@ def blow(ctx, me, foe, bow):
     if foe.parent.id != me.parent.id:
         if bow is None or warded:
             return  # a ward stops every shot: hold the arrow until it is down or they come close
-        used = bow
-        shot(ctx, me, foe, bow)
+        r = shot(ctx, me, foe, bow)
     elif bow is not None and melee(me) is None and not warded:
-        used = bow
-        shot(ctx, me, foe, bow)
+        r = shot(ctx, me, foe, bow)
     else:
-        used = melee(me)
-        strike(ctx, me, foe, bool(held(foe, "ward")))
-    ctx.mark_strike(me, foe, (used.state.cooldown_x if used is not None else None) or 1)
+        r = strike(ctx, me, foe, bool(held(foe, "ward")))
+    ctx.mark_strike(me, foe, r.get("cooldown_x") or 1)
 
 def in_a_ring(ctx, who):
     return len(ctx.relations(who, "duel")) > 0

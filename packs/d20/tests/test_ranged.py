@@ -128,3 +128,25 @@ def test_a_fighter_waits_out_its_cooldown_longer_on_a_seated_player():
     you.act("attack", "Brute")  # his own blows keep the same time: the first goes, the next waits a minute
     with pytest.raises(Rejected, match="strike Brute again in about"):
         you.act("attack", "Brute")
+
+
+def test_a_heavy_weapon_holds_a_players_next_blow_longer_and_a_light_one_shorter():
+    eng, gm, you = reach()
+    me = range_of(gm)
+    gm.spawn("person", "Range B", "Bandit", state={"vigor": 30, "max_vigor": 30})
+    gm.spawn("person", "Range A", "Thug", state={"vigor": 30, "max_vigor": 30})
+    bandit, thug = gm.inspect("Bandit")["id"], gm.inspect("Thug")["id"]
+    gm.clock(run=True, rate=4)
+    base = gm.world.strike_cooldown(me, bandit)
+    assert base > 0
+    gm.patch("Short bow", {"cooldown_x": 2})  # a windlass crossbow: the player waits as long as a fighter would
+    you.act("shoot", "Bandit")
+    assert gm.world.strike_wait(me, bandit) == pytest.approx(2 * base, abs=1)
+    for _ in range(40):
+        gm.clock(step=6)
+    gm.spawn("thing", me, "Glass needle", state={"weapon": True, "damage": 1, "portable": True, "cooldown_x": 0.5})
+    for c in gm.world.children(me):
+        if c["state"].get("weapon") and not c["state"].get("ranged") and c["name"] != "Glass needle":
+            gm.patch(c["id"], {"weapon": False})  # the needle is the only blade he holds
+    you.act("attack", "Thug")
+    assert gm.world.strike_wait(me, thug) == pytest.approx(0.5 * base, abs=1)
