@@ -1,7 +1,8 @@
 use("common")
 def tick(ctx):
     # a fighter without a mind: in a duel, strike the other; then whoever struck me last; then anyone my faction has
-    # outlawed. With a bow that will fire, it also shoots them one way over, so wardens can cover a road.
+    # outlawed. With a bow that will fire, it also shoots them one way over, so wardens can cover a road. Every deed
+    # waits out its cooldown on that foe (blow).
     me = ctx.self
     st = me.state
     if st.down or st.dead or st.asleep or me.parent is None:
@@ -46,20 +47,24 @@ def standing_foe(p):
 
 def blow(ctx, me, foe, bow):
     # one deed at a foe: a shot when they stand one way over (held while their ward is on), or here when I have no
-    # blade and their ward is down; else a blow, slow against a ward. A seated foe gets their beat first.
-    if not ready(ctx, me, foe):
+    # blade and their ward is down; else a blow, slow against a ward. Each waits out my cooldown on them, as an
+    # act's strike does (the engine's: longer when a player or a mind holds either side), x the weapon's cooldown_x.
+    if ctx.strike_wait(me, foe) > 0:
         return
     ward = held(foe, "ward")
     warded = bool(ward and ward.state.on)
     if foe.parent.id != me.parent.id:
         if bow is None or warded:
             return  # a ward stops every shot: hold the arrow until it is down or they come close
+        used = bow
         shot(ctx, me, foe, bow)
     elif bow is not None and melee(me) is None and not warded:
+        used = bow
         shot(ctx, me, foe, bow)
     else:
+        used = melee(me)
         strike(ctx, me, foe, bool(held(foe, "ward")))
-    paced(ctx, me, foe)
+    ctx.mark_strike(me, foe, (used.state.cooldown_x if used is not None else None) or 1)
 
 def in_a_ring(ctx, who):
     return len(ctx.relations(who, "duel")) > 0

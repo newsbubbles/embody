@@ -1,5 +1,5 @@
 """Shooting: a bow that fires at someone in sight, ammo that runs down and lands where they stand, cover, the ward,
-fighters who cover a road, and fight pacing for a seated player (fight_beat)."""
+fighters who cover a road, and a fighter's blows waiting out the engine's strike cooldown."""
 
 import pytest
 
@@ -107,28 +107,24 @@ def test_a_warden_with_a_bow_covers_the_road():
     assert [c for c in gm.world.children(gm.inspect("Range A")["id"]) if c["name"] == "Quiver"]
 
 
-def test_a_seated_player_gets_a_beat_to_answer():
+def test_a_fighter_waits_out_its_cooldown_longer_on_a_seated_player():
     eng, gm, you = reach()
     me = range_of(gm)
     gm.patch(me, {"vigor": 80, "max_vigor": 80})
     gm.spawn("fighter", "Range A", "Brute", state={"body": 40, "attacked_by": me})
     brute = gm.inspect("Brute")["id"]
-    blows = lambda: len([e for e in gm.world.events(0, kinds=["hit", "missed"], limit=5000) if e["payload"].get("by") == brute])
-    gm.patch(gm.world.root_id, {"fight_beat": 240})
+    blows = lambda: [e["t"] for e in gm.world.events(0, kinds=["hit", "missed"], limit=5000) if e["payload"].get("by") == brute]
+    gm.clock(run=True, rate=4)
     gm.clock(step=6)
-    assert blows() == 1
-    for _ in range(5):
+    assert len(blows()) == 1
+    for _ in range(30):  # in small steps, as hosted: a big step runs a repeating tick once
         gm.clock(step=6)
-    assert blows() == 1  # the beat holds while he thinks
-    you.act("brace")  # he answers: the brute may strike again at its next tick
-    gm.clock(step=6)
-    assert blows() == 2
-    for _ in range(41):  # the clock in small steps, as hosted: a big step runs a repeating tick once
+    assert len(blows()) == 1  # the Reeve is held: a minute of real time, 240 world seconds at 4x
+    you.act("brace")  # acting does not hurry the brute
+    for _ in range(12):
         gm.clock(step=6)
-    assert blows() == 3  # or the beat runs out
-    # with no fight_beat the brute strikes at its own tick
-    gm.patch(gm.world.root_id, {"fight_beat": 0})
-    n = blows()
-    for _ in range(3):
-        gm.clock(step=6)
-    assert blows() == n + 3
+    t = blows()
+    assert len(t) == 2 and t[1] - t[0] >= 240
+    you.act("attack", "Brute")  # his own blows keep the same time: the first goes, the next waits a minute
+    with pytest.raises(Rejected, match="strike Brute again in about"):
+        you.act("attack", "Brute")

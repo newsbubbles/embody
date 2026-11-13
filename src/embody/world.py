@@ -246,7 +246,7 @@ class Ctx(ScriptObject):
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
-        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "embodied", "event_at", "locked", "remember",
+        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "strike_wait", "mark_strike", "embodied", "event_at", "locked", "remember",
         "count", "split", "merge", "transfer", "bulk", "load", "may", "member", "chmod", "chown", "rename",
     )
 
@@ -370,6 +370,17 @@ class Ctx(ScriptObject):
     def embodied(self, id: Any) -> bool:
         """Someone (a mind, a player) holds this body: it acts for itself, so a rule should not drive it."""
         return self._w.embodied(_ev(self._w, id)) is not None
+
+    def strike_wait(self, who: Any, target: Any) -> float:
+        """World seconds until `who` may strike `target` again, 0 when it may now (World.strike_wait). A rule that
+        strikes on its own (a fighter's tick) asks this first and calls mark_strike after, as an act's strike does."""
+        return self._w.strike_wait(_ev(self._w, who), _ev(self._w, target))
+
+    def mark_strike(self, who: Any, target: Any, x: Any = 1) -> float:
+        """Start `who`'s cooldown on `target` (times x: 2 for a heavy blow, 0.5 for a light one); returns it."""
+        self._hold(who)
+        return self._w.mark_strike(_ev(self._w, who), _ev(self._w, target), float(x or 1), actor=self._actor,
+                                   caused_by=self._caused_by)
 
     def knows_way(self, who: Any, place: Any) -> bool:
         """Whether a body knows the way to a place: any place not `hidden`, a hidden one only when its `known_to`
@@ -1598,6 +1609,17 @@ class World:
                                    hint="move closer first")
         elif target_id and reach == "self" and target_id != actor_id:
             raise Rejected(f"{verb} can only target yourself")
+        if adef.get("strikes") and target_id and target_id != actor_id:
+            wait = self.strike_wait(actor_id, target_id)
+            if wait > 0:
+                name = self.need(target_id)["name"] or target_id
+                raise Rejected(f"you can strike {name} again in about {self._real_s(wait)} s",
+                               hint="a blow takes its time: do something else, or wait (it shows in perceive)")
+        for k, n in (adef.get("cost") or {}).items():
+            have = self.need(actor_id)["state"].get(k)
+            if not isinstance(have, (int, float)) or have < n:
+                raise Rejected(f"{verb} costs {n:g} {k} and you have {have if isinstance(have, (int, float)) else 0:g}",
+                               hint=f"get more {k} first")
         acc = acl.of(self.get(target_id)) if target_id and target_id != actor_id else None
         if acc is not None and not acl.may_verb(acc, self.subjects(actor_id), self.get(self.root_id), verb,
                                                 own=owner == target_id):
@@ -1655,6 +1677,13 @@ class World:
             except ScriptError as e:
                 raise Rejected(f"{verb} failed while applying: {e.reason}", hint=e.hint) from None
             logs.extend(ctx.logs)
+            if adef.get("strikes") and target_id and target_id != actor_id:
+                self.mark_strike(actor_id, target_id, float(adef.get("cooldown_x") or 1), actor=actor_id,
+                                 caused_by=ev["seq"])
+            if adef.get("cost"):
+                st = self.need(actor_id)["state"]
+                self.patch(actor_id, {k: st.get(k, 0) - n for k, n in adef["cost"].items()}, actor=actor_id,
+                           caused_by=ev["seq"])
             dur = float(adef.get("duration", 0) or 0)
             if dur > 0 and s.has("finish"):
                 self.schedule(dur, "finish", entity=owner, caused_by=ev["seq"],
@@ -1677,6 +1706,45 @@ class World:
                 "duration": float(adef.get("duration", 0) or 0),
                 "events": [_public_event(e) for e in evs if e["kind"] not in _INTERNAL_KINDS], "logs": logs,
                 **({"maker": s.limits["frame"], "untrusted": True} if (s.limits or {}).get("frame") else {})}
+
+    # ---- strikes: a cooldown per attacker per target (docs/SCRIPTING.md, Strikes) ----------------------------------
+
+    def strike_cooldown(self, actor_id: str, target_id: str, x: float = 1) -> float:
+        """World seconds a strike holds the striker off that target: the meta's `strike_cooldown` in real seconds
+        (`held` when either side is held by a player or a mind, the time an agent takes to read and decide; `free`
+        when neither is), times x, times the clock's rate. A paused clock has none: its turns are the pace."""
+        ck = self.clock()
+        if not ck["running"] or ck["rate"] <= 0:
+            return 0.0
+        m = {**STRIKE_COOLDOWN, **(self.meta().get("strike_cooldown") or {})}
+        held = self.embodied(actor_id) is not None or self.embodied(target_id) is not None
+        return max(0.0, float(m["held" if held else "free"]) * float(x) * ck["rate"])
+
+    def strike_wait(self, actor_id: str, target_id: str) -> float:
+        """World seconds until actor may strike target again, 0 when it may now: its cooldown on that target, and
+        the floor of half that on anyone (so turning to another foe is no way round it)."""
+        cd = self.need(actor_id)["state"].get("cooldowns") or {}
+        ready = max(float(cd.get(target_id) or 0), float(cd.get("*") or 0))
+        return max(0.0, ready - self.t)
+
+    def mark_strike(self, actor_id: str, target_id: str, x: float = 1, actor: str | None = None,
+                    caused_by: int | None = None) -> float:
+        """Start the cooldown after a strike (secret state `cooldowns`: the world time each foe is ready again, and
+        `*` the floor on any). Returns the cooldown in world seconds."""
+        cd = self.strike_cooldown(actor_id, target_id, x)
+        if cd <= 0:
+            return 0.0
+        st = self.need(actor_id)["state"]
+        cds = {k: v for k, v in (st.get("cooldowns") or {}).items() if float(v) > self.t}
+        cds[target_id] = self.t + cd
+        cds["*"] = max(float(cds.get("*") or 0), self.t + cd / 2)
+        self.patch(actor_id, {"cooldowns": cds}, actor=actor, caused_by=caused_by)
+        return cd
+
+    def _real_s(self, world_s: float) -> int:
+        """World seconds as the real seconds a player waits."""
+        rate = self.clock()["rate"] or 1
+        return max(1, round(world_s / rate))
 
     def in_sight(self, actor_id: str) -> list[str]:
         """The creatures one way over that a body can see (scope "sight": a bow, a thrown spear): through a way it
@@ -2246,7 +2314,10 @@ _PRIVATE_KINDS = frozenset({"remembered", "intended", "act_refused"})
 # Events only the hosts (owner, author, observers) see, not even the body they are about: an act the world refused.
 _HOST_KINDS = frozenset({"act_refused"})
 # State keys no other body reads, whatever the entity's own `secret` list says.
-ALWAYS_SECRET = frozenset({"memory", "brief", "goals", "policy"})
+ALWAYS_SECRET = frozenset({"memory", "brief", "goals", "policy", "cooldowns"})
+# A strike's cooldown in real seconds, when the meta's `strike_cooldown` does not say: `held` when a player or a mind
+# holds either side (an agent's time to read the fight and decide), `free` between bodies nobody holds.
+STRIKE_COOLDOWN = {"held": 60.0, "free": 15.0}
 # Events hidden from the public stream (perceive, act results). Primitive mutations stay in the log.
 _INTERNAL_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "scheduled", "unscheduled", "tick"})
 

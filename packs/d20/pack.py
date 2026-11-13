@@ -31,9 +31,11 @@ The numbers, so a narrator can explain a roll:
   from common, after `in_sight`, `can_fire` and `ring_blocks`. Blows use the first weapon held that does not fire.
 - A fighter (a body with the `fighter_tick` behavior) with a bow that will fire shoots its foes one way over as
   well as here: whoever struck it last, and anyone its faction has outlawed. So wardens cover a road.
-- Fight pacing for seated players: with `fight_beat` (world seconds) on the root, a fighter's next blow or shot at
-  a body someone holds (a player, a mind) waits that long after its last, or until that body acts. Bodies nobody
-  holds fight at the fighter's own tick. Unset or 0, no wait. The marks are `beat_at` on the seated body.
+- Strikes take their time. `attack`, `shoot` and `kill` are strikes (`strikes: true`): after one, the striker
+  waits the engine's cooldown before striking that foe again, and half of it before anyone (docs/SCRIPTING.md,
+  Strikes; a minute of real time when a player or a mind holds either side, 15 s when neither does, nothing on a
+  paused clock). A fighter's own blows and shots wait the same, times the weapon's `cooldown_x` (2 for a maul).
+  A world's own strike verbs say `strikes: true` and their `cooldown_x` and `cost`.
 - At half vigor you are `wounded`; at 0 you are `down` and can only yield, drink or crawl; `kill` finishes
   someone down; striking someone who yielded to you is `dishonor` and every faction hears of it.
 - A `challenge` makes a duel between two people in a place. While it stands nobody else there may strike,
@@ -101,13 +103,13 @@ COMBATANT_STATE = {"body": 1, "wits": 1, "will": 1, "skills": {}, "vigor": 6, "m
 COMBATANT_ACTIONS = {
     "check": {"script": "check", "doc": "Try something against a difficulty: d20 + stat + skill vs dc (default 12)",
               "params": {"skill": "blade, brawl, climb, stealth, survival, lore, lockpick, aim, parley, resolve", "dc": "difficulty, default 12"}},
-    "attack": {"script": "attack", "doc": "Strike someone here: opposed roll, a ward stops fast blows, slow passes it at -2",
+    "attack": {"script": "attack", "strikes": True, "doc": "Strike someone here: opposed roll, a ward stops fast blows, slow passes it at -2",
                "targets": "creature", "scope": "here", "duration": 3, "params": {"slow": "true for the slow blade"}},
-    "shoot": {"script": "shoot", "doc": "Shoot someone here or one way over with what you hold that fires: a ward stops it, cover helps them, the shot lands where they stand",
+    "shoot": {"script": "shoot", "strikes": True, "doc": "Shoot someone here or one way over with what you hold that fires: a ward stops it, cover helps them, the shot lands where they stand",
               "targets": "creature", "scope": "sight", "reach": "sight", "duration": 3},
     "brace": {"script": "brace", "doc": "Guard yourself: +3 to defence until your next deed", "duration": 3},
     "yield": {"script": "yield", "doc": "Give up to someone here; striking you after that is dishonor", "targets": "creature", "scope": "here"},
-    "kill": {"script": "kill", "doc": "Finish someone who is down", "targets": "creature", "scope": "here"},
+    "kill": {"script": "kill", "strikes": True, "doc": "Finish someone who is down", "targets": "creature", "scope": "here"},
     "crawl": {"script": "crawl", "doc": "Drag yourself to a connected place, even when down", "targets": "place", "scope": "exits", "duration": 15},
     "threaten": {"script": "threaten", "doc": "Opposed will; a weapon in hand helps you, friends at their side help them",
                  "targets": "creature", "scope": "here", "duration": 2},

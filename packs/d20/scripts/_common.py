@@ -286,25 +286,6 @@ def shot(ctx, me, t, weapon):
     ctx.log(("hit for " + str(dmg) if hit else "miss") + " (" + str(attack) + " vs " + str(defence) + ")")
     return {"hit": hit, "dmg": dmg, "attack": attack, "defence": defence, "far": far}
 
-def fight_beat(ctx):
-    return float(ctx.root().state.fight_beat or 0)
-
-def ready(ctx, me, foe):
-    # a seated foe (a player, a mind) gets a beat to answer: a fighter's next blow at them waits the world's
-    # `fight_beat` (world seconds, on the root; 0 or unset: no wait), or until they act (rules_guard clears it)
-    beat = fight_beat(ctx)
-    if beat <= 0 or not ctx.embodied(foe):
-        return True
-    at = (foe.state.beat_at or {}).get(me.id)
-    return at is None or ctx.t - float(at) >= beat
-
-def paced(ctx, me, foe):
-    # mark the blow on a seated foe, so the next waits its beat
-    if fight_beat(ctx) > 0 and ctx.embodied(foe):
-        b = dict(foe.state.beat_at or {})
-        b[me.id] = ctx.t
-        ctx.patch(foe, {"beat_at": b})
-
 def faction_of(ctx, who):
     name = who.state.faction
     if not name:
