@@ -259,6 +259,24 @@ def test_say_is_capped_for_players_and_carries_provenance():
     assert all("by_player" not in e for e in gm.perceive(from_entity="Guard", events=50)["events"] if e["actor"] != i["Prisoner"])
 
 
+def test_addressed_speech_reaches_only_someone_in_this_place():
+    # to= named the listener and the line went to them wherever they stood: a player in the Cell spoke to the Guard
+    # in the Hall through a shut door. Addressed speech is for someone here; the room is for everyone else.
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.patch("Prisoner", {"playable": True})
+    a = eng.session_for_token(gm.invite("player", entity="Prisoner", label="a")["token"])
+    a.join()
+    with pytest.raises(Rejected) as r:
+        a.say("Guard, let me out", to="Guard")
+    assert "not here to hear you" in r.value.reason
+    assert not [e for e in gm.perceive(from_entity="Guard", events=50)["events"] if e["kind"] == "say"]
+    gm.move("Guard", i["Cell"])
+    a.say("Guard, let me out", to="Guard")
+    assert [e for e in gm.perceive(from_entity="Guard", events=50)["events"] if e["kind"] == "say"]
+    gm.say_as("Guard", "No.", to="Prisoner")  # the author's say_as is the narrator's voice, not bound to a room
+
+
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))

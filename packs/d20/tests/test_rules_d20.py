@@ -571,10 +571,9 @@ def test_a_thirsty_body_walks_to_water_one_known_step_away_and_back_to_its_post(
     gm.clock(step=60)
     ruhl = state(gm, "Captain Ruhl")
     assert ruhl["water"] == 6 and ruhl["thirsty"] is False and state(gm, "The cistern")["left"] == 11
-    gm.clock(step=60)  # away from his post for water, he drinks his fill before the walk back
-    assert state(gm, "Captain Ruhl")["water"] == 10 and state(gm, "The cistern")["left"] == 10
-    gm.clock(step=60)
+    gm.clock(step=60)  # the cistern is a store with a count: one draw ends his thirst, and he walks back
     assert gm.inspect("Captain Ruhl")["parent"] == yard and state(gm, "Captain Ruhl").get("post") is None
+    assert state(gm, "The cistern")["left"] == 11
     ruhl_id = gm.inspect("Captain Ruhl")["id"]
     walks = [e["payload"] for e in gm.world.events(0, kinds=["arrived"], limit=5000) if e["payload"].get("who") == ruhl_id]
     assert [x["for_water"] for x in walks] == [True, False] and all(x["quiet"] for x in walks)
@@ -683,3 +682,29 @@ def test_a_secret_side_is_not_given_away_and_a_loan_is_not_a_gift():
     r = gm.act_as("Sworn man", "give", "Reeve Ansel Varrick", {"item": "Blank leaf"})
     back = [e["payload"] for e in r["events"] if e["kind"] == "standing" and e["target"] == me]
     assert back and back[0]["delta"] == -1 and back[0]["why"].startswith("lent") and seen() == before
+
+
+def test_idle_care_takes_one_draw_from_a_store_and_leaves_water_kept_for_others():
+    # Linnet's case at the Hold: an idle body that walked for water drank a store down to full. A store with a count
+    # gives one draw; a source `keep_for` another side is not its idle care's to drink; of the rest, the fullest.
+    eng, gm, you = reach()
+    gm.spawn("place", gm.world.root_id, "Depot")
+    gm.spawn("place", gm.world.root_id, "Post")
+    gm.connect("Depot", "Post")
+    gm.spawn("thing", "Depot", "Hold jars", state={"water_source": True, "left": 10, "keep_for": "House Varrick"})
+    gm.spawn("thing", "Depot", "Ration cask", state={"water_source": True, "left": 3})
+    gm.spawn("thing", "Depot", "Spare cask", state={"water_source": True, "left": 6})
+    gm.spawn("person", "Post", "Drifter", state={"faction": "the Keth", "water": 2, "max_water": 16})
+    gm.spawn("waterskin", "Drifter", "Drifter's skin", state={"left": 0})
+    for _ in range(4):
+        gm.clock(step=60)
+    d = state(gm, "Drifter")
+    assert gm.world.get(gm.inspect("Drifter")["parent"])["name"] == "Post" and 4 <= d["water"] <= 7
+    assert state(gm, "Hold jars")["left"] == 10 and state(gm, "Ration cask")["left"] == 3
+    assert state(gm, "Spare cask")["left"] == 5 and state(gm, "Drifter's skin")["left"] == 0  # no free skinful
+    # the jars' own side drinks from them
+    gm.spawn("person", "Depot", "Warder", state={"faction": "House Varrick", "water": 2, "max_water": 16})
+    gm.patch("Spare cask", {"left": 0})
+    gm.patch("Ration cask", {"left": 0})
+    gm.clock(step=60)
+    assert state(gm, "Hold jars")["left"] == 9 and state(gm, "Warder")["water"] >= 4

@@ -51,10 +51,14 @@ The numbers, so a narrator can explain a roll:
   At 3 you are thirsty; at 0 you lose vigor instead, down to 0 and no further: thirst puts a body down
   (`downed_by: thirst`), it never kills, and a drink brings it back up (`rose`). `drink` from a waterskin (+4; a
   full body refuses, so no draw is poured away), `fill` one at a source. A body nobody embodies looks after
-  itself (the `quench` behavior): thirsty, it drinks from a skin in hand, else from a source here, filling its
-  skin while it is there; with nothing here it walks toward the nearest water it knows the way to (up to six
-  steps, one step a look; hidden places only for their own faction), drinks its fill there (a draw a look until
-  it is within a draw of full), and walks back to its `post` the same way. The walks arrive `quiet`. A body that is down drinks what is
+  itself (the `quench` behavior): thirsty, it drinks from a skin in hand, else from a source here; with nothing
+  here it walks toward the nearest water it knows the way to (up to six steps, one step a look; hidden places
+  only for their own faction) and walks back to its `post` the same way. The walks arrive `quiet`. At an endless
+  source (a place with `water_source`, or a source thing with no `left`) it drinks its fill (a draw a look until
+  it is within a draw of full) and fills its skin; a store with a count (`left`) gives it one draw, the fullest
+  store first, and no skinful, so idle bodies never drink a cask dry. A source with `keep_for` (a faction, an
+  entity id, or a list of them) is not drunk or walked to by anyone else's idle care; held seats and deeds are
+  not stopped by it. A body that is down drinks what is
   put in its hand. An embodied seat decides for itself while it is in use; quench is an `idle` behavior, so a
   seat that has done nothing for the world's `idle_after` (a mind on a watcher, a player asleep) drinks the same
   way. `python packs/d20/soak.py <world> --days N` runs a world that long with nobody playing and says who

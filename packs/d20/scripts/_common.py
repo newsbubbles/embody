@@ -26,16 +26,35 @@ def endless(thing):
     # a source with no level never runs dry
     return bool(thing.state.water_source) and thing.state.left is None
 
-def water_here(ctx, place):
-    # the place itself if it is a source, else a thing here that is one and has something left
+def kept_for(src, who):
+    # whether a body's own idle care may drink from this source: `keep_for` names whose water it is (a faction,
+    # an id, or a list of them); none means anyone's. A seat that chooses to drink from another's store still can.
+    keep = src.state.keep_for
+    if who is None or keep is None:
+        return True
+    names = keep if isinstance(keep, list) else [keep]
+    return who.id in names or (who.state.faction is not None and who.state.faction in names)
+
+def water_here(ctx, place, who=None):
+    # the place itself if it is a source, else the thing here that is one with the most left (an endless one
+    # first). With `who`, only the water kept for them (kept_for).
     if place is None:
         return None
-    if place.state.water_source:
+    if place.state.water_source and kept_for(place, who):
         return place
+    best = None
     for p in ctx.children(place, "thing"):
-        if p.state.water_source and (p.state.left is None or int(p.state.left) > 0):
+        if not p.state.water_source or not kept_for(p, who):
+            continue
+        if p.state.left is None:
             return p
-    return None
+        if int(p.state.left) > 0 and (best is None or int(p.state.left) > int(best.state.left)):
+            best = p
+    return best
+
+def endless(src):
+    # a well, a spring, a place that is a source: drawing from it costs nobody's count
+    return src is not None and src.state.left is None
 
 def known_way(who, place):
     # a hidden place is on a body's map only if it is its own side's
@@ -62,7 +81,7 @@ def first_step(ctx, who, here, goal, limit):
                     return ctx.get(first)
                 if not known_way(who, t):
                     continue
-                if goal is None and water_here(ctx, t) is not None:
+                if goal is None and water_here(ctx, t, who) is not None:
                     return ctx.get(first)
                 nxt.append([tid, first])
         frontier = nxt

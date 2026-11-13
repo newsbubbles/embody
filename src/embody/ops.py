@@ -2033,9 +2033,21 @@ class Session:
             if len(dq) >= _SAY_BURST:
                 raise Rejected(f"{_SAY_BURST} lines in a minute is the most anyone says", hint="wait() and listen")
             dq.append(now)
-        ev = self.world.say(me, text, reach=reach, to=self._resolve(to) if to else None)
+        whom = self._resolve(to) if to else None
+        if whom is not None and not self._privileged() and not self._within_earshot(me, whom):
+            raise Rejected(f"{self.world.need(whom)['name']} is not here to hear you: to= is for someone in this place",
+                           hint="go where they are, or say it to the room without to=")
+        ev = self.world.say(me, text, reach=reach, to=whom)
         self.world._bump_cursor(self.pid)
         return {"ok": True, "event": _public_event(ev)}
+
+    def _within_earshot(self, me: str, whom: str) -> bool:
+        """Someone a line can be addressed to: in this place and not hidden, held by you, or what holds you."""
+        w = self.world
+        e, t = w.need(me), w.need(whom)
+        if whom in (me, e["parent_id"]) or t["parent_id"] == me:
+            return True
+        return e["parent_id"] is not None and t["parent_id"] == e["parent_id"] and not t["state"].get("hidden")
 
     def say_as(self, entity: str, text: str, reach: int = 1, to: str | None = None) -> dict[str, Any]:
         """Author only: a free line from any entity. How a narrator gives an NPC words its table does not have."""

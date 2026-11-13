@@ -23,8 +23,9 @@ def tick(ctx):
     mx = int(st.max_water or 10)
     post = ctx.get(st.post) if st.post else None
     away = post is not None and here is not None and post.id != here.id
-    # away from the post for water, drink your fill at the source before the walk back
-    topping = away and water <= mx - 4 and water_here(ctx, here) is not None
+    # away from the post for water, drink your fill at an endless source before the walk back; a store with a
+    # count gives one draw, enough to end the thirst, and its keeper's people the rest
+    topping = away and water <= mx - 4 and endless(water_here(ctx, here, me))
     if water > 3 and not topping:
         if away and not st.down:
             step = first_step(ctx, me, here, post.id, 8)
@@ -36,7 +37,7 @@ def tick(ctx):
         if it.state.capacity is not None and int(it.state.left or 0) > 0:
             skin = it
             break
-    src = water_here(ctx, here)
+    src = water_here(ctx, here, me)
     if skin is None and src is None:
         if not st.down and here is not None:
             near = water_near(ctx, me, here)
@@ -52,7 +53,7 @@ def tick(ctx):
         if src.state.left is not None:
             ctx.patch(src, {"left": max(0, int(src.state.left) - 1)})
         ctx.emit("drank", target=src, reach=1, by=me.id, water=new, source=src.id)
-        for it in me.children():
+        for it in (me.children() if endless(src) else []):  # a skin is filled where it costs no one's count
             if it.state.capacity is not None and int(it.state.left or 0) < int(it.state.capacity):
                 ctx.patch(it, {"left": int(it.state.capacity), "description": it.state.description_full or it.state.description})
                 ctx.emit("filled", target=it, reach=1, by=me.id, source=src.id)
