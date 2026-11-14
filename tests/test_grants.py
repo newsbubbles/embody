@@ -753,3 +753,19 @@ def test_invite_pages_name_the_host_the_request_came_in_on():
     finally:
         server.should_exit = True
         t.join(timeout=5)
+
+
+def test_a_seat_holds_while_any_grant_of_its_principal_is_live():
+    # 2026-11-14: minds re-minted under their own principal id kept the old grant's id on their seat; when the old
+    # one was revoked, the tick freed thirteen live seats at once
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    old = gm.invite("player", entity="Prisoner", label="linnet")
+    a = eng.session_for_token(old["token"])
+    a.join()
+    row = w.store.get("grants", w.id, old["id"])
+    w.store.put("grants", {**row, "id": "g-new", "token_hash": "x"})  # the same principal, a fresh grant
+    w.store.set("grants", w.id, old["id"], revoked=1)
+    assert eng.tick_all()["released"] == {} and w.principal(a.pid)["entity_id"] == i["Prisoner"]
+    w.store.set("grants", w.id, "g-new", revoked=1)  # and with none left, the seat goes
+    assert eng.tick_all()["released"] == {"two-rooms": [a.pid]}

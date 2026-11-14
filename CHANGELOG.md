@@ -6,6 +6,7 @@ The version in `pyproject.toml` is 0.1.0 until the first release; until then ent
 
 ## Unreleased
 
+- Hot-fix: a seat stays held while any live grant of its principal remains. The release of seats on ended grants read only the grant a principal first joined on, so minds re-minted under their own principal id lost their seats when the old grant was revoked (thirteen at once, live).
 - Seats the world hands out: `ctx.offer_seat(entity, to=body, why=...)` offers whoever holds a body a seat for a `seatable` entity (a quest's reward, a tamed beast). The holder sees it in `seats()` and `claim_seat(offer)` mints a mind grant for that one entity, its paste for them alone, within their grant's `slots` (`invite(slots=n)`, else the root's `seat_slots`). Revoking a grant ends the seats claimed under it; `ctx.withdraw_seat` ends one; `seat_offers: false` on the root turns it off.
 - Out of reach, the refusal names the way in verbs that exist: `go <place> first (<thing> is there)` when the thing is in a place next door, else go where it is (perceive lists the exits). It had said "move closer", and a guest looked for a move verb. A thing too far for a ranged verb says "walk nearer to it first, then try again".
 - A seat held on an ended grant is free: a principal whose grant expired or was revoked counts as lapsed, so a guest back on a new grant takes the same body at `join` (it had said the body was already embodied by the old principal), and the server's tick lets the old seat go.

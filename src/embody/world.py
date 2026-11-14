@@ -2210,9 +2210,11 @@ class World:
         """Only principals that came in on a grant lapse; the owner at the keyboard never loses a seat to silence."""
         if now is None or not p.get("grant_id"):
             return False
-        g = self.store.get("grants", self.id, p["grant_id"])
-        if g is None or g.get("revoked") or (g.get("expires") is not None and float(g["expires"]) <= now):
-            return True  # the grant it came in on has ended: the seat is not its to keep (a guest back on a new grant)
+        def live(g: dict[str, Any] | None) -> bool:
+            return g is not None and not g.get("revoked") and (g.get("expires") is None or float(g["expires"]) > now)
+        if not live(self.store.get("grants", self.id, p["grant_id"])) and not any(
+                live(g) for g in self.store.query("grants", "world_id=? AND principal_id=? AND revoked=0", (self.id, p["id"]))):
+            return True  # every grant it may sit on has ended: the seat is not its to keep (a guest back on a new grant)
         if p.get("last_seen") is None:
             return False
         return now - float(p["last_seen"]) > self.claim_lapse()
