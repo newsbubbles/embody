@@ -13,6 +13,9 @@ The numbers, so a narrator can explain a roll:
 - A creature has three stats, `body`, `wits`, `will` (0 to 5), and `skills` (0 to 3 each). Every skill
   leans on one stat: blade, brawl, climb on body; stealth, survival, lore, lockpick, aim on wits; parley, resolve on will.
   lockpick is the locks pack's: `pick` adds the best of lockpick, stealth or craft.
+- Every roll's bonus comes from one place, `bonus(who, skill, ctx)` in scripts/_common.py. A body with a `sheet`
+  (the sheet pack) rolls its attributes and ranks there instead, adds its `grants`, and learns from difficulties the
+  world sets (`learn`); a body without one rolls exactly as below.
 - A check is d20 + stat + skill against a difficulty (`dc`, default 12). Wounded costs 2, thirsty costs 2.
   A skill neither the pack nor the body knows is an untrained roll on wits, and the result says so (`untrained`,
   `note` with the skills there are). A hand from someone is `aid` on the body, a list of {bonus, skill, place, by, why,

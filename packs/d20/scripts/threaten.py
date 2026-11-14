@@ -13,12 +13,14 @@ def check(ctx):
 def apply(ctx):
     me = ctx.actor
     t = ctx.target
-    a = ctx.rand.roll("1d20") + bonus(me, "resolve") + (2 if held(me, "weapon") else 0)
+    a = ctx.rand.roll("1d20") + bonus(me, "resolve", ctx) + (2 if held(me, "weapon") else 0)
     friends = 0
     for p in ctx.children(t.parent, "creature"):
         if p.id != t.id and p.id != me.id and p.state.faction and p.state.faction == t.state.faction and not p.state.down:
             friends = friends + 1
-    d = ctx.rand.roll("1d20") + bonus(t, "resolve") + (2 if friends else 0)
+    d = ctx.rand.roll("1d20") + bonus(t, "resolve", ctx) + (2 if friends else 0)
+    learn(ctx, me, "resolve", d + 1, a > d, t)
+    learn(ctx, t, "resolve", a, a <= d, me)
     if a > d:
         ctx.patch(t, {"cowed_by": me.id})
         ctx.emit("cowed", target=t, reach=1, by=me.id, mine=a, theirs=d)

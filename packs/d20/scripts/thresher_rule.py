@@ -52,9 +52,10 @@ def surface(ctx, place):
         if c.type == "thresher" or c.state.dead:
             continue
         roll = ctx.rand.roll("1d20")
-        mod = bonus(c, "survival")
+        mod = bonus(c, "survival", ctx)
         total = roll + mod
         ok = total >= 13
+        learn(ctx, c, "survival", 13, ok, worm)
         ctx.emit("checked", target=c, reach=1, by=c.id, skill="survival", roll=roll, mod=mod, total=total, dc=13, success=ok, margin=total - 13)
         if not ok:
             hp = int(c.state.hp or 0) - 4

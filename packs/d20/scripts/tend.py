@@ -54,8 +54,9 @@ def apply(ctx):
                 changes["description"] = src.state.description_empty
             ctx.patch(src, changes)
         roll = ctx.rand.roll("1d20")
-        total = roll + bonus(me, "survival")
+        total = roll + bonus(me, "survival", ctx)
         heal = 1 if total >= 12 else 0
+        learn(ctx, me, "survival", 12, heal > 0, t)
     v = min(mx, v + heal)
     changes = {"hp": v}
     if v > mx // 2 and st.wounded:

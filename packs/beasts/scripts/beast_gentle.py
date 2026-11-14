@@ -41,7 +41,7 @@ def apply(ctx):
     trust = dict(b.state.trust or {})
     n = int(trust.get(me.id) or 0)
     roll = ctx.rand.roll("1d20")
-    total = roll + bonus(me, skill)
+    total = roll + bonus(me, skill, ctx)
     if total >= dc:
         n = n + 1
         trust[me.id] = n

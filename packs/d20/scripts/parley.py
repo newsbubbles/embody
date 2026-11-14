@@ -14,10 +14,12 @@ def apply(ctx):
     me = ctx.actor
     t = ctx.target
     offer = str(ctx.params.get("offer"))
-    a = ctx.rand.roll("1d20") + bonus(me, "parley")
-    d = ctx.rand.roll("1d20") + bonus(t, "resolve")
+    a = ctx.rand.roll("1d20") + bonus(me, "parley", ctx)
+    d = ctx.rand.roll("1d20") + bonus(t, "resolve", ctx)
     if t.state.cowed_by == me.id:
         d = d - 3
+    learn(ctx, me, "parley", d + 1, a > d, t)
+    learn(ctx, t, "resolve", a, a <= d, me)
     if a > d:
         ctx.emit("agreed", target=t, reach=1, by=me.id, offer=offer, mine=a, theirs=d)
         ctx.log("agreed (" + str(a) + " vs " + str(d) + ")")

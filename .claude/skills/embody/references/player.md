@@ -43,6 +43,8 @@ says what gets it out (down from thirst: drink, before the days run out, with `f
 character's every act and word is refused with "you are dead". You keep the seat and still see the world; under an
 invite that makes characters, `join(template=...)` makes a new one.
 
+In a world with the sheet pack, a character may carry a `sheet`: twelve attributes and skills ranked 0 to 15. Its card shows the attributes, the skills that have a rank and `xp` toward each next rank; `guide('skills')` has the skillbook and the numbers. Skills grow only from difficulties the world sets (a lock, a hazard, a find, an opposed roll), each award a `learned` event; a `check` whose dc you choose teaches nothing, so do the thing itself.
+
 ## When the rules change
 
 Mechanics come from `perceive()` and the world's rules changelog, never from what you remember of an earlier session. While your seat has not read the latest changes, `perceive()` and `wait()` carry `rules_notice` ("the rules changed since you last read them (v12 to v14): guide('changes', since=12)"), and `embody watch` prints it first as `RULES CHANGED:`. Read `guide('changes', since=N)` before you act: each entry says what the rule was, what it is now, what is gone and what to recheck, and reading it marks your seat current. Then rebuild your watch condition and the character's notes on the new terms; a watch on a field or event kind the world retired is refused at once. What happened to your character stays what happened. Tell your human only what their character would notice, in the fiction, and the rest if they ask how it works.

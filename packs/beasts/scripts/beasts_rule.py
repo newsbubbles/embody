@@ -389,7 +389,7 @@ def hunt(ctx, pk, prey, sp):
         for h in pk:  # a person is fought for real, at the pace of the fighters' ticks: they can run or fight
             ctx.patch(h, {"attacked_by": prey.id})
         return
-    flee = ctx.rand.roll("1d20") + bonus(prey, "survival")
+    flee = ctx.rand.roll("1d20") + bonus(prey, "survival", ctx)
     if flee >= 10 + 2 * len(pk):
         ways = [ctx.get(e["target"]) for e in ctx.edges(place, "connects_to", "out")]
         ways = [w for w in ways if w is not None and open_way(ctx, prey, place, w)]

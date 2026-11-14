@@ -901,6 +901,8 @@ class Session:
         read it), and reading it marks your seat current."""
         if (topic or "").strip().lower() == "changes":
             return self._changes(since)
+        if (topic or "").strip().lower() == "skills":
+            return self._skills_guide()
         root = _skill_root(self.engine)
         if root is None:
             raise Rejected("this server carries no guide", hint="the rules are in the briefing join returns")
@@ -963,6 +965,36 @@ class Session:
             b["rules_notice"] = (f"the rules changed since you last read them (v{seen} to v{v}): "
                                  f"guide('changes', since={seen})")
         return b
+
+    def _skills_guide(self) -> dict[str, Any]:
+        """This world's skillbook and the numbers its sheets roll by (packs/sheet)."""
+        if not self.world_id:
+            raise Rejected("the skillbook is a world's own", hint="use(world_id) first, then guide('skills')")
+        w = self.world
+        books = w.find(type="skillbook", limit=1)
+        if not books:
+            raise Rejected("this world has no skillbook: its bodies roll d20 + body, wits or will + a skill",
+                           hint="guide('player') has the rolls; a world opts in with the sheet pack")
+        root = w.get(w.root_id)
+        rules = (root["state"].get("sheet_rules") or {}) if root else {}
+        lines = ["Skills in " + w.name + ". A body with a sheet rolls d20 + attribute modifier ((score - 10) // 2; two "
+                 "attributes averaged, rounded down) + rank + grants. Wounded and thirsty cost 2 each. A skill not listed "
+                 f"rolls untrained on {rules.get('untrained', 'acuity')}. A related skill lends its rank // "
+                 f"{rules.get('related_div', 3)} when that is more; they never stack.",
+                 "Growth: only a difficulty the world sets teaches (a find, a lock, a hazard, a world verb's dc, an "
+                 "opposed roll); a check whose dc you chose never does. Needed = dc - your natural bonus (no grants). "
+                 f"Experience by needed roll (up to: earned): {rules.get('earn')}, x{rules.get('success_x', 2)} on a "
+                 f"success. Rank r to r + 1 costs {rules.get('rank_cost', 10)} x (r + 1), up to "
+                 f"{rules.get('max_rank', 15)}. At most {rules.get('per_target_day', 3)} teaching rolls a skill, a "
+                 "target, a world day. Each award is a learned event on you.", ""]
+        for name, sk in sorted((books[0]["state"].get("skills") or {}).items()):
+            sk = sk if isinstance(sk, dict) else {}
+            on = sk.get("primary") or "?"
+            if sk.get("secondary"):
+                on += " + " + sk["secondary"]
+            rel = f"; related: {', '.join(sk['related'])}" if sk.get("related") else ""
+            lines.append(f"- {name} ({on}): {sk.get('scope') or ''}{rel}")
+        return {"topic": "skills", "text": "\n".join(lines), "rules": rules, "topics": list(GUIDE_TOPICS)}
 
     def _changes(self, since: int | None) -> dict[str, Any]:
         if not self.world_id:
@@ -1225,7 +1257,7 @@ class Session:
             "world": w.id, "t": w.t,
             "clock": {"running": ck["running"], "rate": ck["rate"], "turn": w.meta().get("turn_seconds")},
             "ambient": self._ambient(here),
-            "you": self._card(ent, full=True),
+            "you": self._sheet_card(self._card(ent, full=True)),
             "goals": [g for g in ent["state"].get("goals") or [] if g.get("status", "active") == "active"],
             "holding": [self._card(c) for c in w.children(me)],
             "here": self._place_card(here) if here else None,
@@ -1687,6 +1719,8 @@ class Session:
                 continue
             if not full and k in secret:
                 continue
+            if not full and k == "sheet" and isinstance(v, dict):
+                v = _sheet_view(v, None)  # others read the attributes and the skills that have a rank
             if not full and k == "templates" and isinstance(v, dict):
                 v = {name: {kk: vv for kk, vv in t.items() if kk in _TEMPLATE_PUBLIC}
                      for name, t in v.items() if isinstance(t, dict)}
@@ -1699,6 +1733,15 @@ class Session:
         out = {k: v for k, v in self.world.schema_defaults(e["type"]).items() if k not in ("rules", "secret", "space")}
         out.update(self._visible_state(e, full=True))
         return out
+
+    def _sheet_card(self, card: dict[str, Any]) -> dict[str, Any]:
+        """Your own card in perceive: a sheet as its attributes, the skills that have a rank and the xp toward each next
+        rank, never the bookkeeping (packs/sheet)."""
+        sheet = card["state"].get("sheet")
+        if isinstance(sheet, dict):
+            root = self.world.get(self.world.root_id)
+            card["state"]["sheet"] = _sheet_view(sheet, (root["state"].get("sheet_rules") or {}) if root else {})
+        return card
 
     def _card(self, e: dict[str, Any], full: bool = False) -> dict[str, Any]:
         w = self.world
@@ -3318,7 +3361,7 @@ _NEWS_KINDS = frozenset({"found", "downed", "killed", "outlawed", "yielded", "tr
                          "lock_picked", "lifted", "caught", "renamed", "destroyed", "burned", "works_done", "stage_done",
                          "challenged", "agreed", "spoiled", "wounded", "rose", "searched", "stopped",
                          "broke_down", "struck"})
-GUIDE_TOPICS = ("narrator", "author", "player", "mind", "hosting", "watch", "scripting", "changes")
+GUIDE_TOPICS = ("narrator", "author", "player", "mind", "hosting", "watch", "scripting", "changes", "skills")
 
 
 def rules_version(w: World) -> int:
@@ -3467,4 +3510,17 @@ def _brief(e: dict[str, Any]) -> dict[str, Any]:
     out = {"id": e["id"], "name": e["name"]}
     if e["state"].get("count") is not None:
         out["count"] = int(e["state"]["count"])
+    return out
+
+
+def _sheet_view(sheet: dict[str, Any], rules: dict[str, Any] | None) -> dict[str, Any]:
+    """A sheet as a card shows it: the attributes and the skills that have a rank. With the world's sheet_rules (your
+    own card), the xp toward each next rank too, as "xp/cost". Never `taught`, the progression's own bookkeeping."""
+    ranks = {k: v for k, v in (sheet.get("skills") or {}).items() if isinstance(v, (int, float)) and v > 0}
+    out: dict[str, Any] = {"attributes": sheet.get("attributes") or {}, "skills": ranks}
+    if rules is not None:
+        cost = int(rules.get("rank_cost") or 10)
+        xp = sheet.get("xp") or {}
+        out["xp"] = {k: f"{int(xp.get(k) or 0)}/{cost * (int(ranks.get(k) or 0) + 1)}" for k in sorted(set(ranks) | set(xp))
+                     if int(xp.get(k) or 0) or k in ranks}
     return out

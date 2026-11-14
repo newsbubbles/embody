@@ -4,16 +4,161 @@ SKILLS = {"blade": "body", "brawl": "body", "climb": "body", "stealth": "wits", 
 def stat_for(skill):
     return SKILLS.get(skill, "wits")
 
-def bonus(who, skill):
-    # stat + skill rank, less the conditions everyone can see
+def bonus(who, skill, ctx=None):
+    # what a body adds to a d20 roll: its natural bonus (natural), less the conditions everyone can see, plus its grants
+    # (with ctx: a grant for one use is spent by this roll). A body with no sheet and no grants rolls stat + skill as ever.
     st = who.state
-    skills = st.skills or {}
-    b = int(st.get(stat_for(skill)) or 0) + int(skills.get(skill) or 0)
+    b = natural(ctx, who, skill)
     if st.wounded:
         b = b - 2
     if st.thirsty:
         b = b - 2
+    if ctx is not None and (st.grants or (st.sheet and st.aid)):
+        b = b + take_grants(ctx, who, skill, who.parent)
     return b
+
+# The sheet (packs/sheet): a body with `sheet` {attributes, skills, xp} rolls an attribute modifier plus a skill rank;
+# the world's skillbook names each skill's attributes, and `sheet_rules` on the root holds every number. Every other
+# body rolls body/wits/will plus a skill, as before. These are only the fallbacks when the root says nothing.
+SHEET_RULES = {"earn": [[7, 0], [12, 1], [16, 2], [20, 3]], "success_x": 2, "rank_cost": 10, "max_rank": 15,
+               "per_target_day": 3, "related_div": 3, "untrained": "acuity", "min_score": 1, "max_score": 20}
+
+def sheet_rules(ctx):
+    rules = dict(SHEET_RULES)
+    if ctx is not None:
+        for k, v in (ctx.root().state.sheet_rules or {}).items():
+            if v is not None:
+                rules[k] = v
+    return rules
+
+def skillbook(ctx):
+    # the world's catalogue {skill: {primary, secondary, scope, related}}, or {} where there is none
+    if ctx is None:
+        return {}
+    for b in ctx.find(type="skillbook", limit=1):
+        return b.state.skills or {}
+    return {}
+
+def attr_mod(sheet, name, rules):
+    score = (sheet.get("attributes") or {}).get(name)
+    score = 10 if score is None else min(int(rules["max_score"]), max(int(rules["min_score"]), int(score)))
+    return (score - 10) // 2
+
+def sheet_rank(sheet, skill, entry, rules):
+    # the rank, or the best related skill's rank // related_div when that is more; related ranks never stack
+    ranks = sheet.get("skills") or {}
+    best = 0
+    for r in entry.get("related") or []:
+        best = max(best, int(ranks.get(r) or 0))
+    return max(int(ranks.get(skill) or 0), best // int(rules["related_div"]))
+
+def natural(ctx, who, skill):
+    # the bonus a body has of its own: no conditions, no grants. This is what progression measures against.
+    st = who.state
+    sheet = st.sheet
+    if not sheet:
+        return int(st.get(stat_for(skill)) or 0) + int((st.skills or {}).get(skill) or 0)
+    rules = sheet_rules(ctx)
+    entry = skillbook(ctx).get(skill) or {}
+    mod = attr_mod(sheet, entry.get("primary") or rules["untrained"], rules)
+    if entry.get("secondary"):
+        mod = (mod + attr_mod(sheet, entry.get("secondary"), rules)) // 2  # the two averaged, rounded down
+    return mod + sheet_rank(sheet, skill, entry, rules)
+
+def known_skill(ctx, who, skill):
+    # whether the skill is one this body's rules know: the d20 ten or its own skills; with a sheet, the skillbook's
+    st = who.state
+    if st.sheet:
+        return skill in skillbook(ctx) or skill in (st.sheet.get("skills") or {})
+    return skill in SKILLS or skill in (st.skills or {})
+
+def take_grants(ctx, who, skill, here):
+    # `grants` on a body: [{source, bonus, skill, place, until, uses, condition}]. Every grant for this skill (none:
+    # any) in this place (none: anywhere), not past `until` (world t), adds its bonus; from one source only the
+    # largest counts. One with `uses` spends one and goes at 0; lapsed ones fall away. `condition` is the narrator's
+    # words, carried, not checked. A sheet body's `aid` (a familiar's hand) is a grant for one use.
+    st = who.state
+    keep = []
+    best = {}
+    for g in st.grants or []:
+        if g.get("until") is not None and float(g.get("until")) < ctx.t:
+            continue
+        if (not g.get("skill") or g.get("skill") == skill) and (not g.get("place") or (here is not None and g.get("place") == here.id)):
+            src = str(g.get("source") or "")
+            if src not in best or int(g.get("bonus") or 0) > best[src]:
+                best[src] = int(g.get("bonus") or 0)
+            if g.get("uses") is not None:
+                if int(g.get("uses")) <= 1:
+                    continue
+                g = dict(g)
+                g["uses"] = int(g.get("uses")) - 1
+        keep.append(g)
+    if st.grants is not None and keep != list(st.grants):
+        ctx.patch(who, {"grants": keep})
+    if st.sheet and st.aid:
+        a = take_aid(ctx, who, skill, here)
+        if a is not None:
+            src = str(a.get("by") or "aid")
+            best[src] = max(best.get(src, int(a.get("bonus") or 0)), int(a.get("bonus") or 0))
+    return sum(best.values())
+
+def learn(ctx, who, skill, dc, success, against=None):
+    # use-based progression for a body with a sheet: only a difficulty the world set teaches (a find, a lock, a hazard,
+    # a world verb's dc, an opposed roll), never a check whose dc the caller chose. The roll it needed is dc less its
+    # natural bonus (no grants, no conditions); sheet_rules' `earn` bands turn that into experience, a success times
+    # `success_x`; rank r to r + 1 costs rank_cost x (r + 1), up to max_rank. At most `per_target_day` teaching rolls
+    # a skill, a target, a world day. Every award is a `learned` event on the body. Returns what it earned.
+    st = who.state
+    sheet = st.sheet
+    if not sheet or not skill or st.dead:
+        return 0
+    rules = sheet_rules(ctx)
+    need = int(dc) - natural(ctx, who, skill)
+    earned = 0
+    if need >= 1:
+        for band in rules["earn"]:
+            if need <= int(band[0]):
+                earned = int(band[1])
+                break
+    if success:
+        earned = earned * int(rules["success_x"])
+    day = int(ctx.t // ctx.day_seconds())
+    key = skill + "|" + (against.id if against is not None else "")
+    taught = {}
+    for k, v in (sheet.get("taught") or {}).items():
+        if v[0] != day:
+            taught[k] = None  # an earlier day's count goes (a patch merges; None deletes)
+    old = (sheet.get("taught") or {}).get(key)
+    n = old[1] if old is not None and old[0] == day else 0
+    if n >= int(rules["per_target_day"]):
+        return 0
+    taught[key] = [day, n + 1]
+    ranks = dict(sheet.get("skills") or {})
+    xps = dict(sheet.get("xp") or {})
+    rank = int(ranks.get(skill) or 0)
+    xp = int(xps.get(skill) or 0) + earned
+    was = rank
+    while rank < int(rules["max_rank"]) and xp >= int(rules["rank_cost"]) * (rank + 1):
+        xp = xp - int(rules["rank_cost"]) * (rank + 1)
+        rank = rank + 1
+    if rank >= int(rules["max_rank"]):
+        xp = 0
+    new = {"taught": taught}
+    if earned:
+        new["skills"] = {skill: rank}
+        new["xp"] = {skill: xp}
+    ctx.patch(who, {"sheet": new})
+    if earned:
+        ctx.emit("learned", target=who, reach=0, skill=skill, need=need, earned=earned, success=bool(success), dc=dc,
+                 against=against.id if against is not None else None, xp=xp, rank=rank, next=int(rules["rank_cost"]) * (rank + 1),
+                 ranked_up=rank > was)
+    return earned
+
+def weapon_skill(who, weapon, old):
+    # a weapon names its skill (`skill`: "short blades"); a body with no sheet, or a weapon that names none, rolls the old one
+    if weapon is not None and who.state.sheet and weapon.state.skill:
+        return weapon.state.skill
+    return old
 
 def take_aid(ctx, who, skill, here):
     # a hand from someone (a familiar's `point`): `aid` on the body is a list of {bonus, skill, place, by, why, until}.
@@ -215,18 +360,23 @@ def strike(ctx, me, t, slow):
     if asleep:
         rolls.append(ctx.rand.roll("1d20"))
         a_roll = max(rolls)
-    a_mod = bonus(me, "blade" if weapon else "brawl")
+    a_skill = weapon_skill(me, weapon, "blade") if weapon else "brawl"
+    a_mod = bonus(me, a_skill, ctx)
     if weapon:
         a_mod = a_mod + int(weapon.state.bonus or 0)
     if slow:
         a_mod = a_mod - 2
     d_roll = ctx.rand.roll("1d20")
-    d_mod = bonus(t, "blade" if melee(t) and not asleep else "brawl")
+    d_skill = weapon_skill(t, melee(t), "blade") if melee(t) and not asleep else "brawl"
+    d_mod = bonus(t, d_skill, ctx)
     if t.state.braced and not asleep:
         d_mod = d_mod + 3
     attack = a_roll + a_mod
     defence = d_roll + d_mod
     hit = attack > defence
+    learn(ctx, me, a_skill, defence + 1, hit, t)  # an opposed roll teaches both sides
+    if not asleep:
+        learn(ctx, t, d_skill, attack, not hit, me)
     dmg = 0
     if hit:
         dmg = int(weapon.state.damage or 1) if weapon else 1
@@ -341,12 +491,16 @@ def shot(ctx, me, t, weapon):
     if asleep:
         rolls.append(ctx.rand.roll("1d20"))
         a_roll = max(rolls)
-    a_mod = bonus(me, "aim") + int(weapon.state.bonus or 0) - (2 if far else 0)
+    a_skill = weapon_skill(me, weapon, "aim")
+    a_mod = bonus(me, a_skill, ctx) + int(weapon.state.bonus or 0) - (2 if far else 0)
     d_roll = ctx.rand.roll("1d20")
-    d_mod = cover(t.parent) + (0 if asleep else bonus(t, "dodge"))  # wits, less the conditions
+    d_mod = cover(t.parent) + (0 if asleep else bonus(t, "dodge", ctx))  # wits, less the conditions
     attack = a_roll + a_mod
     defence = d_roll + d_mod
     hit = attack > defence
+    learn(ctx, me, a_skill, defence + 1, hit, t)
+    if not asleep:
+        learn(ctx, t, "dodge", attack, not hit, me)
     dmg = 0
     if hit:
         dmg = int(weapon.state.damage or 1) + extra

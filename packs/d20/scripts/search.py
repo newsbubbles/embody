@@ -35,8 +35,9 @@ def apply(ctx):
     sly = bool(t.state.asleep and not (t.state.down or t.state.dead))
     if sly:
         roll = ctx.rand.roll("1d20")
-        mod = bonus(ctx.actor, "stealth")
+        mod = bonus(ctx.actor, "stealth", ctx)
         dc = 10 + int(t.state.wits or 0)
+        learn(ctx, ctx.actor, "stealth", dc, roll + mod >= dc, t)
         if roll + mod < dc:
             ctx.emit("caught", target=t, reach=1, by=ctx.actor.id, roll=roll, mod=mod, total=roll + mod, dc=dc)
             ctx.log("stealth: d20 " + str(roll) + " + " + str(mod) + " vs " + str(dc) + ": your hand wakes " + t.name)
