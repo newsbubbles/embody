@@ -32,6 +32,8 @@ Clone it, open it with Claude Code (or any MCP-capable agent), and start buildin
 
 ![Truth, knowledge and belief: the world state holds the true map, each body knows only what it witnessed, and believes what it was told, which may be wrong; the player's own agent memory stays outside the world](docs/diagrams/7-truth-belief.png)
 
+![When the engine breaks, the world remembers: a fault and its fix, the log that keeps both, what each body saw, and the tale they made of it; the host keeps the history, repairs what was unfair and says so outside the world](docs/diagrams/8-two-histories.png)
+
 The pictures are HTML pages in `docs/diagrams/src/`; `uv run python tools/render_diagrams.py` renders them to PNG.
 
 ## Quick start

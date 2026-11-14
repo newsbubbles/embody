@@ -1,0 +1,85 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Two histories, both true</title>
+<style>
+  .col { top: 222px; width: 352px; height: 396px; display: flex; flex-direction: column; padding: 18px 20px; }
+  .col h3 { font-size: 23px; }
+  .col p { font-size: 16px; line-height: 1.36; }
+  .chips { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 7px; }
+  .chips code { font-size: 13px; }
+  .eg { margin-top: auto; border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px; background: rgba(5,6,7,.55); }
+  .eg .label { font-size: 11.5px; }
+  .eg p { font-size: 16px; margin-top: 4px; }
+  .why { left: 64px; top: 674px; width: 1472px; height: 158px; padding: 16px 24px; display: flex; gap: 26px; }
+  .why .head { flex: 0 0 372px; }
+  .why h3 { font-size: 23px; margin-top: 6px; }
+  .why .head p { font-size: 15px; color: var(--bone); margin-top: 8px; line-height: 1.34; }
+  .case { flex: 1; border-left: 1px solid var(--line); padding-left: 20px; }
+  .case p { font-size: 15.5px; line-height: 1.34; margin-top: 5px; }
+  .case b { font-weight: 600; color: var(--salt); }
+  .case.ember b { color: var(--ember-lit); }
+</style></head>
+<body><div class="stage">
+  <div class="abs" style="left:64px; top:46px;">
+    <div class="kicker">embody · how it works · 8</div>
+    <h1>When the engine breaks, the world <em>remembers.</em></h1>
+    <p class="lede" style="max-width: 1440px">A fault in the engine is a real event in the world: it is in the log, and the bodies that saw it remember it. The host fixes the engine and makes the wronged whole, but does not erase what was lived. Two histories, both true.</p>
+  </div>
+
+  <div class="node col quiet" style="left:64px;">
+    <div class="label">1 · Maintenance · the host</div>
+    <h3>A fault, then a fix</h3>
+    <p>Something slipped past a boundary nobody meant to open. The host closes it in the engine, repairs the harm with the same ops an author builds with, and writes down what happened, outside the world.</p>
+    <div class="chips"><code>grants.made</code><code>patch</code><code>remember</code><code>FINDINGS.md</code></div>
+    <div class="eg"><div class="label">the fault</div><p>One invite joined again and again and made <b style="color:var(--salt)">58 bodies</b>. Now an invite makes one.</p></div>
+  </div>
+
+  <div class="node col ember" style="left:438px;">
+    <div class="label ember">2 · Truth · the world state</div>
+    <h3>It happened, in the log</h3>
+    <p>Every body made, every blow and every death is an event with a cause. The repair is events too: the fallen get up, kit goes home. No rollback, so the log holds the harm and the mending both.</p>
+    <div class="chips"><code>events</code><code>caused_by</code><code class="code ember">no rollback</code></div>
+    <div class="eg"><div class="label ember">the night of day 17</div><p>The bodies left empty ran their guard routines, and killed seven.</p></div>
+  </div>
+
+  <div class="node col water" style="left:812px;">
+    <div class="label water">3 · Experience · what they saw</div>
+    <h3>Hollow men from the Scar</h3>
+    <p>Each body saw only what reached it: men in familiar coats, no voice, no reason, blows out of the dark. Then the attackers broke to sand, and the dead woke up.</p>
+    <p class="small">Nobody in the world is told it was a bug. Their memory is true to what they saw.</p>
+    <div class="eg"><div class="label water">Sergeant Marr fell at her post</div><p>and woke with glass dust on her lips.</p></div>
+  </div>
+
+  <div class="node col" style="left:1186px;">
+    <div class="label">4 · Belief · what they make</div>
+    <h3>A tale the world tells itself</h3>
+    <p>Minds compare what they saw, give the thing a name, fear it and go looking. A fault becomes folklore, and the host can build on it: the next quest starts from what they believe.</p>
+    <div class="chips"><code>say</code><code>rumour: "..."</code><code>quest</code></div>
+    <div class="eg"><div class="label">the Reach calls them</div><p class="prose">the glass-wights.</p></div>
+  </div>
+
+  <svg class="wires">
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#a89f90"/></marker>
+      <marker id="e" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d2452d"/></marker>
+    </defs>
+    <path class="wire" d="M417,320 L435,320" marker-end="url(#a)"/>
+    <path class="wire" d="M791,320 L809,320" marker-end="url(#a)"/>
+    <path class="wire" d="M1165,320 L1183,320" marker-end="url(#a)"/>
+    <!-- the host reads the tale and builds on it -->
+    <path class="wire ember dash" d="M1362,620 L1362,652 L240,652 L240,624" marker-end="url(#e)"/>
+    <text class="wire-label ember" x="800" y="642" text-anchor="middle">the host reads what they believe and builds with it, never against it</text>
+  </svg>
+
+  <div class="node quiet why">
+    <div class="head">
+      <div class="label ember">5 · Why it is allowed</div>
+      <h3>Keep the history. Repair what was unfair. Say so outside the world.</h3>
+      <p>Players are told plainly, in the chronicle and in FINDINGS.md. The bodies keep their own story.</p>
+    </div>
+    <div class="case"><div class="label">Play</div><p>Sabotage, theft, a broken truce, done with the world's own verbs. <b>Keep it.</b> That is the game.</p></div>
+    <div class="case"><div class="label">Strategy</div><p>A plan nobody foresaw, inside the rules. <b>Keep it.</b> Surprise is the point of minds that think.</p></div>
+    <div class="case ember"><div class="label ember">Authority escape</div><p>A power the seat was never granted. <b>Close the gap, make the wronged whole, keep the story.</b></p></div>
+  </div>
+
+  <div class="foot"><span><span class="brand"><i>embody</i></span> &nbsp; the engine is fixed; the world keeps what it lived</span><span><b>FINDINGS.md</b> · src/embody/grants.py: made · the chronicle</span></div>
+</div></body></html>
