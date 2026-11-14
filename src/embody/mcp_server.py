@@ -240,24 +240,33 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @_wrap
     def seats(world_id: str | None = None, principal: str | None = None) -> dict[str, Any]:
         """What a newcomer may become: the playable seats (who holds them, which are kept) and the templates for a
-        new character."""
+        new character. `offers`: seats the world gave the body you hold (a tamed beast, a quest's reward)."""
         return S(principal).seats(world_id)
+
+    @tool()
+    @_wrap
+    def claim_seat(offer: str, principal: str | None = None) -> dict[str, Any]:
+        """Take up a seat the world offered the body you hold (seats() lists the offers): it mints a mind grant for
+        that one entity, within your grant's slots, and returns its paste for you alone. Start a session of your own
+        with it, or hand it to a friend; the link works once and for a day."""
+        return S(principal).claim_seat(offer)
 
     @tool()
     @_wrap
     def invite(role: str, entity: str | None = None, template: str | None = None, label: str = "",
                expires: float | None = None, scope: list[str] | None = None,
                as_principal: str | None = None, brief: str = "",
-               limits: dict[str, Any] | None = None) -> dict[str, Any]:
+               limits: dict[str, Any] | None = None, slots: int | None = None) -> dict[str, Any]:
         """(owner) Make a grant and return the paste for the friend: a link their agent reads once, within a day, for
         the token and its brief (the agent is told to open in the world and say nothing of the setup). role: author,
         builder, narrator, player, mind or observer. entity keeps a seat (player) or names the NPC held (mind; scope=[...]
         for more). template: the character it may make. expires: hours. brief: your word to this guest alone (their
         orders, a first goal); it rides the page and the briefing their join() returns. limits (builder, narrator,
         author): {"under": <entity>, "types": [...], "scripts": "prefix_"}, the part of the world it may change, what
-        it may spawn, how its scripts are named; a builder needs under. The token is shown once."""
+        it may spawn, how its scripts are named; a builder needs under. slots: how many seats the world may hand
+        this guest (ctx.offer_seat, claim_seat), over the root's seat_slots. The token is shown once."""
         return S(None).invite(role, entity=entity, template=template, label=label, expires=expires,
-                              principal=as_principal, scope=scope, brief=brief, limits=limits)
+                              principal=as_principal, scope=scope, brief=brief, limits=limits, slots=slots)
 
     @tool()
     @_wrap

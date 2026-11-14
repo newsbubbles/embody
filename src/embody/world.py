@@ -248,7 +248,7 @@ class Ctx(ScriptObject):
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
-        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "ways", "strike_wait", "mark_strike", "embodied", "event_at", "locked", "remember",
+        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "ways", "offer_seat", "withdraw_seat", "strike_wait", "mark_strike", "embodied", "event_at", "locked", "remember",
         "count", "split", "merge", "transfer", "bulk", "load", "may", "member", "chmod", "chown", "rename",
     )
 
@@ -388,6 +388,22 @@ class Ctx(ScriptObject):
         """Whether a body knows the way to a place: any place not `hidden`, a hidden one only when its `known_to`
         names the body or its faction (World.knows_way). A rule that walks or looks along ways asks this."""
         return self._w.knows_way(_ev(self._w, who), _ev(self._w, place))
+
+    def offer_seat(self, entity: Any, to: Any, why: str = "") -> str:
+        """Offer whoever holds the body `to` a seat: a mind grant for `entity` (a tamed beast, a quest's familiar),
+        which they claim with claim_seat on their own session, within their grant's slots. The world never sees a
+        token. The entity must be `seatable` and free. Returns the offer's id; the same open offer is not made twice."""
+        if self._limits:
+            raise Rejected("a script under a grant's limits can't offer seats", hint="the world's own rules offer seats")
+        return self._w.offer_seat(_ev(self._w, entity), _ev(self._w, to), str(why or ""), actor=self._actor,
+                                  caused_by=self._caused_by)["id"]
+
+    def withdraw_seat(self, entity: Any, why: str = "") -> list[str]:
+        """The entity no longer qualifies (the beast went feral, the thing was given away): its open offers close,
+        and a claimed seat's grant is revoked, so the body runs on its behaviors again. Returns the grants revoked."""
+        if self._limits:
+            raise Rejected("a script under a grant's limits can't withdraw seats", hint="the world's own rules do")
+        return self._w.withdraw_seat(_ev(self._w, entity), str(why or ""), actor=self._actor, caused_by=self._caused_by)
 
     def ways(self, a: Any, b: Any, most: int = 8) -> int | None:
         """How many ways apart two bodies (or places) stand: 0 in the same place, 1 next door, None when further
@@ -2129,6 +2145,66 @@ class World:
     def claim_lapse(self) -> float:
         """Real seconds of silence after which an invited principal's seat is released (world meta `claim_lapse`)."""
         return float(self._row["meta"].get("claim_lapse", 900.0))
+
+    def offer_seat(self, entity_id: str, body_id: str, why: str = "", actor: str | None = None,
+                   caused_by: int | None = None) -> dict[str, Any]:
+        """Record a seat offer for `entity_id` to whoever holds `body_id` (ctx.offer_seat), and tell that body. Out of
+        world state: the offer is a row beside the grants, and claim_seat mints the grant."""
+        root = self.get(self.root_id) or {"state": {}}
+        if root["state"].get("seat_offers") is False:
+            raise Rejected("this world offers no seats (its root says seat_offers: false)")
+        e, body = self.need(entity_id), self.need(body_id)
+        if not self.is_a(body["type"], "creature"):
+            raise Rejected(f"a seat is offered to a body, and {body['name'] or body_id} is a {body['type']}")
+        if self.is_a(e["type"], "place") or not e["state"].get("seatable", self.schema_defaults(e["type"]).get("seatable")):
+            raise Rejected(f"{e['name'] or entity_id} is not seatable",
+                           hint="mark it seatable: true (its state or its schema) when the world may hand it out")
+        held = self.embodied(entity_id)
+        if held is not None and held["id"] != body_id:
+            raise Rejected(f"{e['name'] or entity_id} is already held by {held['id']}")
+        for o in self.store.query("seat_offer", "world_id=? AND entity_id=? AND status IN ('open', 'claimed')",
+                                  (self.id, entity_id)):
+            if o["body_id"] == body_id and o["status"] == "open":
+                return o  # the same offer stands
+            raise Rejected(f"{e['name'] or entity_id} is already offered to or held by someone else ({o['id']})",
+                           hint="withdraw_seat(entity) first")
+        # named for the event that announces it, the next in the log, so two offers never share an id
+        o = {"world_id": self.id, "id": f"s{self.store.next_seq(self.id)}", "entity_id": entity_id, "body_id": body_id,
+             "why": why, "created": self.t, "status": "open", "grant_id": None, "claimed": None}
+        self.store.put("seat_offer", o)
+        # `seat`, not `entity`: an offer of a hidden body must still reach the one it is offered to
+        self.emit("seat_offered", actor=actor, target=body_id, reach=0, caused_by=caused_by,
+                  payload={"offer": o["id"], "seat": entity_id, "name": e["name"], "why": why,
+                           "hint": "seats() lists it; claim_seat(offer) gives you a paste to play it in a session of its own"})
+        return o
+
+    def withdraw_seat(self, entity_id: str, why: str = "", actor: str | None = None,
+                      caused_by: int | None = None) -> list[str]:
+        """Close every live offer of this entity; a claimed one's grant is revoked with its children."""
+        out: list[str] = []
+        for o in self.store.query("seat_offer", "world_id=? AND entity_id=? AND status IN ('open', 'claimed')",
+                                  (self.id, entity_id)):
+            if o["status"] == "claimed" and o.get("grant_id"):
+                out += self.revoke_grant(o["grant_id"])
+            self.store.set("seat_offer", self.id, o["id"], status="withdrawn")
+            self.emit("seat_withdrawn", actor=actor, target=o["body_id"], reach=0, caused_by=caused_by,
+                      payload={"offer": o["id"], "seat": entity_id, "why": why})
+        return out
+
+    def revoke_grant(self, grant_id: str) -> list[str]:
+        """Revoke a grant and every grant minted from it (a seat claimed in the world): their principals leave."""
+        g = self.store.get("grants", self.id, grant_id)
+        if g is None:
+            return []
+        out = [grant_id]
+        if not g.get("revoked"):
+            self.store.set("grants", self.id, grant_id, revoked=1)
+        self.leave(g["principal_id"])
+        for c in self.store.query("grants", "world_id=? AND parent_id=? AND revoked=0", (self.id, grant_id)):
+            out += self.revoke_grant(c["id"])
+        for o in self.store.query("seat_offer", "world_id=? AND grant_id=? AND status='claimed'", (self.id, grant_id)):
+            self.store.set("seat_offer", self.id, o["id"], status="withdrawn")
+        return out
 
     def lapsed(self, p: dict[str, Any], now: float | None) -> bool:
         """Only principals that came in on a grant lapse; the owner at the keyboard never loses a seat to silence."""

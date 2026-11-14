@@ -736,11 +736,80 @@ class Session:
                                    "place": templates.get(mine, {}).get("place"), "doc": templates.get(mine, {}).get("doc", "")}],
                     "hint": f"your invite makes a {mine}: ask the human for a name, then join(template='{mine}', name=...); "
                             "description=... (how they look to others) may be set then, and only then"}
-        return {"world": w.id, "seats": self._seat_rows(self.engine.wall()),
-                "templates": [{"template": k, "type": t.get("type"), "place": t.get("place"), "doc": t.get("doc", "")}
-                              for k, t in templates.items()],
-                "hint": "join(world, entity) takes an open seat; join(world, template=..., name=..., description=...) makes "
-                        "someone new, and the description (how they look to others) is set then or never"}
+        out = {"world": w.id, "seats": self._seat_rows(self.engine.wall()),
+               "templates": [{"template": k, "type": t.get("type"), "place": t.get("place"), "doc": t.get("doc", "")}
+                             for k, t in templates.items()],
+               "hint": "join(world, entity) takes an open seat; join(world, template=..., name=..., description=...) makes "
+                       "someone new, and the description (how they look to others) is set then or never"}
+        offers = self._offer_rows()
+        if offers:
+            out["offers"] = offers
+            out["hint"] += "; an offer is a seat the world gave the body you hold: claim_seat(offer) mints its paste"
+        return out
+
+    def _offer_rows(self) -> list[dict[str, Any]]:
+        """Seats the world offered (ctx.offer_seat): the owner sees every one, a body's holder the open ones made to it."""
+        w = self.world
+        if self.role == OWNER:
+            rows = w.store.query("seat_offer", "world_id=?", (w.id,), order="created")
+        else:
+            p = w.principal(self.pid)
+            if p is None or not p.get("entity_id"):
+                return []
+            rows = w.store.query("seat_offer", "world_id=? AND body_id=? AND status='open'", (w.id, p["entity_id"]),
+                                 order="created")
+
+        def nm(i: str) -> str:
+            e = w.get(i)
+            return e["name"] if e else i
+        return [{"offer": o["id"], "seat": o["entity_id"], "name": nm(o["entity_id"]), "to": o["body_id"],
+                 "to_name": nm(o["body_id"]), "why": o["why"], "status": o["status"], "grant": o.get("grant_id")}
+                for o in rows]
+
+    def claim_seat(self, offer: str) -> dict[str, Any]:
+        """Take up a seat the world offered the body you hold (seats() lists the offers): it mints a mind grant for
+        that one entity, counted against your grant's slots, and returns its paste, for you alone. Start a session of
+        your own with it, or hand it to a friend; the link works once and for a day."""
+        self._tick()
+        w = self.world
+        o = w.store.get("seat_offer", w.id, str(offer))
+        me = self._me()
+        if o is None or o["body_id"] != me:
+            raise Rejected(f"no seat offer {offer!r} made to you", hint="seats() lists the offers made to the body you hold")
+        if o["status"] != "open":
+            raise Rejected(f"that offer is {o['status']}", hint="seats() lists the open ones")
+        root = w.get(w.root_id) or {"state": {}}
+        if root["state"].get("seat_offers") is False:
+            raise Rejected("this world offers no seats now (its root says seat_offers: false)")
+        e = w.get(o["entity_id"])
+        if e is None:
+            w.store.set("seat_offer", w.id, o["id"], status="withdrawn")
+            raise Rejected("what was offered is gone, and the offer with it")
+        now = self.engine.wall()
+        held = w.embodied(e["id"])
+        if held is not None and not w.lapsed(held, now):
+            raise Rejected(f"{e['name']} is held by someone already", hint="the world may offer it again when it is free")
+        parent = w.store.get("grants", w.id, self.grant["id"]) if self.grant is not None else None
+        if parent is not None:
+            cap = parent.get("slots")
+            if cap is None:
+                cap = int(root["state"].get("seat_slots") or 0)
+            mine = [g for g in w.store.query("grants", "world_id=? AND parent_id=? AND revoked=0", (w.id, parent["id"]))
+                    if active(g, now)]
+            if len(mine) >= cap:
+                names = ", ".join(w.get(g["entity_id"])["name"] for g in mine if g.get("entity_id") and w.get(g["entity_id"]))
+                raise Rejected(f"your seat slots are full ({len(mine)} of {cap})" + (f": {names}" if names else ""),
+                               hint="a seat you were given frees when the world withdraws it or the host revokes it; "
+                                    "the host sets slots on your invite, or seat_slots on the world's root")
+        holder = w.need(me)["name"]
+        r = self._mint(MIND, entity=e["id"], label=e["name"] or e["id"], parent=parent["id"] if parent else None,
+                       brief=f"{e['name']} is a seat the world gave {holder}" + (f": {o['why']}" if o["why"] else "."))
+        w.store.set("seat_offer", w.id, o["id"], status="claimed", grant_id=r["id"], claimed=now)
+        return {"ok": True, "offer": o["id"], "grant": r["id"], "seat": e["id"], "name": e["name"], "role": MIND,
+                "link": r["link"], "link_expires": r["link_expires"], "paste": r["paste"],
+                "hint": f"start a session of your own with the paste to play {e['name']} (or hand it to a friend); "
+                        "the link works once and for a day, and the seat ends if the world withdraws it or your own "
+                        "grant ends"}
 
     def _from_template(self, template: str, name: str, description: str = "") -> str:
         w = self.world
@@ -808,14 +877,26 @@ class Session:
 
     def invite(self, role: str, entity: str | None = None, template: str | None = None, label: str = "",
                expires: float | None = None, principal: str | None = None,
-               scope: list[str] | None = None, brief: str = "", limits: dict[str, Any] | None = None) -> dict[str, Any]:
+               scope: list[str] | None = None, brief: str = "", limits: dict[str, Any] | None = None,
+               slots: int | None = None) -> dict[str, Any]:
         """(owner) A grant that travels as a token. role: author, builder, narrator, player, mind or observer. entity: the
         seat kept for this invite (player) or the NPC it holds (mind; scope=[...] for more). template: the character
         it may make. expires: hours. brief: the host's word to this guest alone (their orders, their first goal); it
         rides the page and the briefing join() returns. limits (builder, narrator, author): under=<entity>, the part
         of the world it may change; types=[...], what it may spawn; scripts=<prefix>, how its scripts and schemas are
-        named (default: from the principal). A builder needs under. Returns the token once, the link whose page carries it (good
+        named (default: from the principal). A builder needs under. slots: how many seats the world may hand this
+        guest (claim_seat), over the root's `seat_slots`. Returns the token once, the link whose page carries it (good
         once, for a day) and the paste: the link with a line for the friend. Without a public URL the paste is the page."""
+        if slots is not None and (not isinstance(slots, int) or slots < 0):
+            raise Rejected("slots is a whole number, 0 or more", hint="slots=1")
+        return self._mint(role, entity=entity, template=template, label=label, expires=expires, principal=principal,
+                          scope=scope, brief=brief, limits=limits, slots=slots)
+
+    def _mint(self, role: str, entity: str | None = None, template: str | None = None, label: str = "",
+              expires: float | None = None, principal: str | None = None, scope: list[str] | None = None,
+              brief: str = "", limits: dict[str, Any] | None = None, slots: int | None = None,
+              parent: str | None = None) -> dict[str, Any]:
+        """invite's work, also for a seat claimed in the world (`parent`: the grant it was claimed under)."""
         self._tick()
         w = self.world
         if role not in ROLES:
@@ -856,7 +937,7 @@ class Session:
                "entity_id": eid, "template": template, "label": label, "token_hash": token_hash(token),
                "created": now, "expires": exp, "revoked": 0, "last_used": None, "brief": brief or None,
                "code_hash": token_hash(code) if link else None, "code_expires": code_exp if link else None,
-               "page": stored if link else None, "limits": lim}
+               "page": stored if link else None, "limits": lim, "parent_id": parent, "slots": slots}
         w.store.put("grants", row)
         return {"ok": True, "id": row["id"], "principal": pid, "role": role, "entity": eid, "scope": sc, "limits": lim,
                 "template": template, "expires": row["expires"], "token": token, "url": url or None,
@@ -920,16 +1001,15 @@ class Session:
         return out
 
     def revoke(self, id: str) -> dict[str, Any]:
-        """(owner) End a grant: its token stops working and its principal leaves the world."""
+        """(owner) End a grant: its token stops working and its principal leaves the world. The seats the world gave
+        it (claim_seat) end with it."""
         self._tick()
         w = self.world
         g = w.store.get("grants", w.id, id)
         if g is None:
             raise Rejected(f"no grant {id!r}", hint="grants() lists them")
-        g["revoked"] = 1
-        w.store.put("grants", g)
-        w.leave(g["principal_id"])
-        return {"ok": True, "id": id, "principal": g["principal_id"]}
+        gone = w.revoke_grant(id)  # and the seats claimed under it, with theirs
+        return {"ok": True, "id": id, "principal": g["principal_id"], "also": gone[1:]}
 
     def evict(self, principal: str) -> dict[str, Any]:
         """(owner) Release whatever a principal embodies; its body runs on behaviors again."""
@@ -2894,7 +2974,7 @@ INTRODUCE_HOW = {
 }
 
 OPS = [
-    "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats",
+    "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats", "claim_seat",
     "invite", "grants", "revoke", "evict", "requests", "chronicle", "publish_chronicle",
     "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
     "reclaim", "away",
