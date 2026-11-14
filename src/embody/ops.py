@@ -2993,7 +2993,7 @@ UNTIL_DOC = ("until is one Python expression (the embody script subset: no impor
              "seq, t, kind, actor, target, text, player), and helpers heard(word, by=''), did(kind, by=''), "
              "came(name) (is here now), arrived(name) (walked in since the wait began; '' for anyone), state(name) "
              "(the state you can see of someone here or something you hold). Examples: "
-             "\"arrived('Reeve')\", \"heard('ruhl', by='Reeve') or me['hp'] < 3\", \"t >= 43200\", "
+             "\"arrived('Reeve')\", \"heard('ruhl', by='Reeve') or me.get('hp', 0) < 3\", \"t >= 43200\", "
              "\"ambient.get('time_of_day') == 'dusk'\". Names match by part, any case.")
 
 

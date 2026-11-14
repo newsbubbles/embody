@@ -438,7 +438,7 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
         (t, ambient, here, who is present, the new events, cursor); `full=true` returns perceive() instead.
         until="<expression>" waits for a condition instead of any event: arrived('Reeve') (walks in), came('Reeve')
         (is here now: already true fires at once, with already=true), heard('water', by='Ruhl'),
-        me['hp'] < 3, t >= 43200, ambient.get('time_of_day') == 'dusk'. It returns with fired=true and the
+        me.get('hp', 0) < 3, t >= 43200, ambient.get('time_of_day') == 'dusk'. It returns with fired=true and the
         events since it began, or timed_out with nothing moved: call again (pass back `since` if you are not
         embodied). For hours of waiting, run `embody watch` from a shell instead; it loops this for you."""
         import anyio
