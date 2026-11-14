@@ -13,7 +13,7 @@ from typing import Any
 from .world import Rejected
 
 FRAME_KEYS = {"units", "up", "north", "bounds", "geo", "note"}
-LAYOUT_KEYS = {"at", "heading", "radius", "size", "footprint", "floor", "ceiling", "mesh", "note"}
+LAYOUT_KEYS = {"at", "heading", "radius", "size", "footprint", "floor", "ceiling", "mesh", "note", "landmarks", "solid"}
 COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 DEFAULT_FRAME = {"units": "m", "up": "z", "north": "y"}
 
@@ -91,6 +91,12 @@ def check_layout(lay: dict[str, Any]) -> dict[str, Any]:
             out[k] = _num(lay[k], k)
     if "floor" in out and "ceiling" in out and out["ceiling"] <= out["floor"]:
         raise Rejected("ceiling must be above floor")
+    if lay.get("solid") is not None:
+        if not isinstance(lay["solid"], bool):
+            raise Rejected("solid is true or false: false lets others stand in this thing's extent (a rug, a shadow)")
+        out["solid"] = lay["solid"]
+    if lay.get("landmarks") is not None:
+        out["landmarks"] = check_landmarks(lay["landmarks"])
     for k in ("mesh", "note"):
         if lay.get(k) is not None:
             if not isinstance(lay[k], str):
@@ -99,6 +105,34 @@ def check_layout(lay: dict[str, Any]) -> dict[str, Any]:
     if out.get("footprint") and "at" not in out:
         c = centroid(out["footprint"])
         out["at"] = [c[0], c[1], out.get("floor", 0.0)]
+    return out
+
+
+def check_landmarks(lms: Any) -> dict[str, dict[str, Any]]:
+    """A place's named spots: {name: {at, radius?, note?}}, at most 60, in the world frame."""
+    eg = '{"the cistern": {"at": [12, -4, 0], "radius": 3}, "the gate": {"at": [0, 40, 0]}}'
+    if not isinstance(lms, dict):
+        raise Rejected("landmarks is {name: {at, radius}}", hint=eg)
+    if len(lms) > 60:
+        raise Rejected("60 landmarks a place at most", hint="name the spots people would say, not every stone")
+    out: dict[str, dict[str, Any]] = {}
+    for name, v in lms.items():
+        if not isinstance(name, str) or not name.strip() or len(name) > 60:
+            raise Rejected("a landmark's name is a short phrase", hint=eg)
+        if v is None:
+            continue
+        if not isinstance(v, dict) or v.get("at") is None or set(v) - {"at", "radius", "note"}:
+            raise Rejected(f"landmark {name!r} is {{at, radius?, note?}}", hint=eg)
+        at = _vec(v["at"], f"{name} at", 2, 3)
+        row: dict[str, Any] = {"at": at if len(at) == 3 else at + [0.0]}
+        if v.get("radius") is not None:
+            r = _num(v["radius"], f"{name} radius")
+            if r <= 0:
+                raise Rejected(f"{name}: radius must be above zero")
+            row["radius"] = r
+        if v.get("note") is not None:
+            row["note"] = str(v["note"])[:200]
+        out[name.strip()] = row
     return out
 
 
@@ -112,6 +146,14 @@ def merge(old: dict[str, Any] | None, new: dict[str, Any], replace: bool = False
     for k, v in new.items():
         if v is None:
             base.pop(k, None)
+        elif k == "landmarks" and isinstance(v, dict) and not replace:
+            lm = dict(base.get("landmarks") or {})
+            for name, spot in v.items():
+                if spot is None:
+                    lm.pop(name, None)
+                else:
+                    lm[name] = spot
+            base[k] = lm
         else:
             base[k] = v
     return check_layout(base)

@@ -24,6 +24,7 @@ from typing import Any, Callable
 from .grants import (HOST_MARK, LINK_HOURS, link_for, request_origin, new_code, page, AUTHOR_ROLE, BUILDER, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, OWNER, PLAYER, ROLES, ROLE_DOC,
                      active, allowed, caps_for, new_token, paste, principal_id_for, role_for, token_hash)
 from . import layout as geo
+from . import positions as posn
 from .script import Script, ScriptError
 from .store import Store
 from . import access as acl
@@ -1241,6 +1242,10 @@ class Session:
         }
         if layout:
             bundle["layout"] = self._layout_view(me, bundle)
+        if here_id and posn.landmarks(w, here_id):
+            for card in [bundle["you"], *bundle["present"]]:
+                if (spot := posn.spot_words(w, here_id, posn.resolve(w, card["id"])["at"])):
+                    card["spot"] = spot
         self._rules_notice(bundle, me if p is not None else None)
         if p is not None:
             w.set_cursor(self.pid, bundle["cursor"])
@@ -1259,27 +1264,43 @@ class Session:
         return dict((e["state"].get("layout") if e else None) or {})
 
     def _world_at(self, eid: str, depth: int = 0) -> list[float] | None:
-        """Where an entity is in the world frame: its own `at`; else its grid position mapped through its container's
-        space (`frame_origin`, `cell`, `heading`); else wherever its container is."""
+        """Where an entity is in the world frame, by the one rule in positions.py: its own `at`; else its grid position
+        mapped through its container's space; else wherever its container is."""
+        return posn.resolve(self.world, eid)["at"]
+
+    def _how_placed(self, eid: str) -> dict[str, Any]:
+        """{how: own | grid | inherited | none, from: the name it rides on or whose grid it is in}."""
+        w = self.world
+        r = posn.resolve(w, eid)
+        out: dict[str, Any] = {"how": r["how"]}
+        if r["from"]:
+            out["from"] = (w.get(r["from"]) or {}).get("name", r["from"])
+        return out
+
+    def _position_notice(self, eid: str) -> str | None:
+        """An author's write left something directly in a place with no spot of its own: say how to give it one. Only
+        in a world that is laid out (its root has a frame)."""
         w = self.world
         e = w.get(eid)
-        if e is None or depth > 64:
+        if e is None or not self._frame() or not posn.needs_own(w, e) or posn.resolve(w, eid)["how"] in ("own", "grid"):
             return None
-        own = (e["state"].get("layout") or {}).get("at")
-        if own:
-            return list(own)
-        parent = e["parent_id"]
-        if not parent:
-            return None
-        sp = w.space_of(parent) or {}
-        if e["pos"] is not None and sp.get("frame_origin") is not None:
-            o = list(sp["frame_origin"]) + [0.0] * (3 - len(sp["frame_origin"]))
-            cell = float(sp.get("cell") or 1.0)
-            h = math.radians(float(sp.get("heading") or 0.0))
-            p = [float(x) * cell for x in e["pos"]] + [0.0] * (3 - len(e["pos"]))
-            return [o[0] + p[0] * math.cos(h) + p[1] * math.sin(h),
-                    o[1] - p[0] * math.sin(h) + p[1] * math.cos(h), o[2] + p[2]]
-        return self._world_at(parent, depth + 1)
+        parent = w.get(e["parent_id"]) or {}
+        lms = posn.landmark_names(w, e["parent_id"])
+        how = (f"at=\"{lms[0]}\" (a landmark here; also {', '.join(lms[1:6])})" if len(lms) > 1 else
+               f"at=\"{lms[0]}\" (a landmark here)" if lms else
+               f"at=[x, y, z], or name {parent.get('name', 'the place')}'s spots with layout(placements=[{{\"entity\": "
+               f"\"{parent.get('name', '')}\", \"landmarks\": {{\"the gate\": {{\"at\": [x, y, z], \"radius\": 3}}}}}}])")
+        return (f"{e['name'] or eid} has no spot of its own in {parent.get('name', 'its place')}, so the map draws it at "
+                f"the place's centre: give it {how}, with move(..., at=) or layout(placements=[{{\"entity\": ..., "
+                f"\"at\": ...}}]). verify() lists everything still unplaced.")
+
+    def _place_at(self, eid: str, at: Any) -> None:
+        """Set an entity's own spot from at= (coordinates, a landmark, or beside something), in its container."""
+        w = self.world
+        e = w.need(eid)
+        spot, _ = posn.resolve_at(w, e["parent_id"], at, skip=eid)
+        w.patch(eid, {"layout": geo.merge(self._own_layout(eid), {"at": spot})}, actor=self._actor_or_none(),
+                replace=True)
 
     def _path_rows(self, ids: set[str]) -> list[dict[str, Any]]:
         """The connects_to paths between the given places, one row a pair: the drawn route (or the straight line when
@@ -1399,6 +1420,8 @@ class Session:
                 raise Rejected("each placement names its entity", hint='{"entity": "The Hold", "at": [0, 0, 0], "radius": 40}')
             eid = self._resolve(p["entity"])
             new = {k: v for k, v in p.items() if k != "entity"}
+            if isinstance(new.get("at"), str):  # a landmark's name, or beside something in the same container
+                new["at"] = posn.resolve_at(w, w.need(eid)["parent_id"], new["at"], skip=eid)[0]
             checked.append((eid, geo.merge(self._own_layout(eid), new, replace=replace)))
         for eid, lay in checked:
             w.patch(eid, {"layout": lay}, actor=self._actor_or_none(), replace=True)
@@ -1449,12 +1472,15 @@ class Session:
                 rows.append((c, d + 1))
                 if d + 1 < depth:
                     frontier.append((c["id"], d + 1))
-        items, unplaced = [], []
+        items, unplaced, no_spot = [], [], []
         for c, d in rows:
             lay = self._own_layout(c["id"])
             at = self._world_at(c["id"])
             row = {"id": c["id"], "name": c["name"], "type": c["type"], "parent": c["parent_id"], "level": d,
-                   "own": bool(lay.get("at")), "at": [round(x, 1) for x in at] if at else None}
+                   "own": bool(lay.get("at")), "at": [round(x, 1) for x in at] if at else None,
+                   **self._how_placed(c["id"])}
+            if at and (spot := posn.spot_words(w, (posn._places_up(w, c["parent_id"]) or [None])[0], at)):
+                row["spot"] = spot
             if lay:
                 row["layout"] = lay
                 if geo.area(lay):
@@ -1464,16 +1490,69 @@ class Session:
             items.append(row)
             if not lay.get("at") and w.is_a(c["type"], "place"):
                 unplaced.append(c["name"])
+            elif row["how"] not in ("own", "grid") and posn.needs_own(w, c):
+                no_spot.append(c["name"])
         places = {r["id"] for r in items if w.is_a(r["type"], "place")}
         tl = self._own_layout(top)
         out: dict[str, Any] = {"frame": self._frame(), "under": {"id": top, "name": w.need(top)["name"],
                                "layout": tl or None}, "entities": items, "paths": self._path_rows(places),
                                "not_laid_out": unplaced, "warnings": self._layout_warnings([r["id"] for r in items])}
+        if no_spot:
+            out["no_spot"] = {"count": len(no_spot), "names": no_spot[:40],
+                              "hint": "directly in a place with no spot of their own: verify(under=...) gives each a fix"}
         if sketch:
             drawn = [{"name": r["name"], "at": r["at"], "layout": r.get("layout")} for r in items if r["own"]]
             if tl.get("at"):
                 drawn.insert(0, {"name": w.need(top)["name"], "at": tl["at"], "layout": tl})
             out["sketch"] = geo.sketch(drawn, [p for p in out["paths"] if p.get("route")], width=max(24, min(int(width), 120)))
+        return out
+
+    def verify(self, under: str | None = None, depth: int = 3, offset: int = 0, limit: int = 50,
+               apply: bool = False) -> dict[str, Any]:
+        """The positions audit of a subtree (default the world) to `depth` levels: every entity on the map must resolve
+        to a spot (own, a grid cell, or its carrier's), stand inside its container's extent, and not stand inside
+        something solid. Each problem comes with its fix (an `at` to use, the landmarks there). Paged: `offset` and
+        `limit` (at most 200), `next` for the next page. apply=true (author) gives every problem on this page its
+        suggested spot, in one layout pass."""
+        self._tick()
+        w = self.world
+        top = self._resolve(under) if under else w.root_id
+        depth = max(1, min(int(depth), 12))
+        limit = max(1, min(int(limit), 200))
+        rows, frontier, checked = [], [(top, 0)], 0
+        reserved: dict[str, list[list[float]]] = {}  # each suggestion takes its spot, so the next one goes elsewhere
+        while frontier and checked < 5000:
+            eid, d = frontier.pop(0)
+            for c in w.children(eid):
+                checked += 1
+                for pr in posn.problems(w, c, reserved):
+                    rows.append({"id": c["id"], "name": c["name"], "type": c["type"],
+                                 "in": (w.get(c["parent_id"]) or {}).get("name"), **pr})
+                if d + 1 < depth:
+                    frontier.append((c["id"], d + 1))
+        page = rows[int(offset):int(offset) + limit]
+        counts: dict[str, int] = {}
+        for r in rows:
+            counts[r["problem"]] = counts.get(r["problem"], 0) + 1
+        out: dict[str, Any] = {"under": w.need(top)["name"], "checked": checked, "problems": len(rows),
+                               "by_problem": counts, "page": page,
+                               "next": int(offset) + limit if int(offset) + limit < len(rows) else None}
+        bare = sorted({r["in"] for r in rows if r.get("in") and not posn.landmark_names(w, w.need(r["id"])["parent_id"])})
+        if bare:  # name a place's spots once and everything in it can be placed by name
+            out["no_landmarks"] = {"places": bare[:40], "hint": "layout(placements=[{\"entity\": <place>, \"landmarks\": "
+                                   "{\"the gate\": {\"at\": [x, y, z], \"radius\": 3}}}]), then at=\"the gate\""}
+        if checked >= 5000:
+            out["note"] = "stopped at 5000 entities: verify a smaller part (under=...)"
+        if not self._frame():
+            out["hint"] = "this world has no frame yet: layout(frame={...}, placements=[...]) lays out the places first"
+        if apply:
+            self._need(AUTHOR)
+            fixes = [{"entity": r["id"], "at": r["fix"]["at"]} for r in page if isinstance(r.get("fix"), dict)
+                     and r["fix"].get("at")]
+            if fixes:
+                done = self.layout(placements=fixes)
+                out["applied"] = done["laid_out"]
+                out["warnings"] = done["warnings"]
         return out
 
     def measure(self, a: str, b: str | None = None, point: list[float] | None = None) -> dict[str, Any]:
@@ -1487,7 +1566,8 @@ class Session:
         pa = self._world_at(ea)
         if pa is None:
             raise Rejected(f"{w.need(ea)['name']} is not laid out, nor is anything it is in", hint="layout(placements=[...]) first")
-        out: dict[str, Any] = {"a": {"id": ea, "name": w.need(ea)["name"], "at": pa, "own": bool(la.get("at"))}}
+        out: dict[str, Any] = {"a": {"id": ea, "name": w.need(ea)["name"], "at": pa, "own": bool(la.get("at")),
+                                     **self._how_placed(ea)}}
         if la.get("at"):
             out["a"].update({k: v for k, v in la.items() if k in ("radius", "size", "footprint", "heading", "floor", "ceiling")})
             if geo.area(la):
@@ -1502,7 +1582,7 @@ class Session:
             pb = self._world_at(eb)
             if pb is None:
                 raise Rejected(f"{w.need(eb)['name']} is not laid out, nor is anything it is in")
-            out["b"] = {"id": eb, "name": w.need(eb)["name"], "at": pb, "own": bool(lb.get("at"))}
+            out["b"] = {"id": eb, "name": w.need(eb)["name"], "at": pb, "own": bool(lb.get("at")), **self._how_placed(eb)}
         else:
             pb = geo._vec(point, "point", 2, 3)
             pb = pb if len(pb) == 3 else pb + [0.0]
@@ -2717,16 +2797,24 @@ class Session:
         return {"id": id, "source": row["source"], "doc": row["doc"], "version": row["version"]}
 
     def spawn(self, type: str, parent: str, name: str = "", state: dict[str, Any] | None = None,
-              pos: list[float] | None = None) -> dict[str, Any]:
+              pos: list[float] | None = None, at: Any = None) -> dict[str, Any]:
+        """at: its spot in the world frame, [x, y, z] or a landmark's name in the place ("the cistern")."""
         self._need(AUTHOR)
+        where = self._resolve(parent)
+        if at is not None:  # resolved before the write, so a bad name refuses the whole call
+            spot = posn.resolve_at(self.world, where, at)[0]
+            state = {**(state or {}), "layout": {**((state or {}).get("layout") or {}), "at": spot}}
         self._record("spawn", type=type, parent=parent, name=name or None, state=state, pos=pos)
-        eid = self.world.spawn(type, self._resolve(parent), name=name, state=state, pos=pos, actor=self._actor_or_none())
-        return self._card(self.world.need(eid), full=True)
+        eid = self.world.spawn(type, where, name=name, state=state, pos=pos, actor=self._actor_or_none())
+        out = self._card(self.world.need(eid), full=True)
+        if (n := self._position_notice(eid)):
+            out["position_notice"] = n
+        return out
 
     def introduce(self, type: str, parent: str, name: str, how: str, known_by: dict[str, str],
                   state: dict[str, Any] | None = None, scene: str | None = None, by: str | None = None,
                   remembers: list[str] | None = None, pos: list[float] | None = None,
-                  after: float | None = None) -> dict[str, Any]:
+                  after: float | None = None, at: Any = None) -> dict[str, Any]:
         """Bring something new into the world the way the world would have it, in one call: where it is, how it
         came (INTRODUCE_HOW), who already knows it and what they know, and for a person what it knows itself.
         always_there arrives without a sound; every other way shows the room a scene. known_by {entity: note} writes
@@ -2752,6 +2840,9 @@ class Session:
                            hint="after=259200 for three days, with how='arrived' or 'delivered'")
         w.schema(type)
         where = self._resolve(parent)
+        if at is not None:  # its spot: [x, y, z] or a landmark's name in the place
+            spot = posn.resolve_at(w, where, at)[0]
+            state = {**(state or {}), "layout": {**((state or {}).get("layout") or {}), "at": spot}}
         knowers = {self._resolve(k): str(note) for k, note in known_by.items()}  # every name resolves before a write
         maker = self._resolve(by) if by else None
         self._record("introduce", type=type, parent=parent, name=name, how=how, known_by=known_by, state=state,
@@ -2767,6 +2858,8 @@ class Session:
         eid = w.land(spec, actor=self._actor_or_none())
         out = self._card(w.need(eid), full=True)
         out.update(how=how, known_by=sorted(knowers), remembers=len(remembers or []))
+        if (n := self._position_notice(eid)):
+            out["position_notice"] = n
         return out
 
     def patch(self, entity: str, changes: dict[str, Any], replace: bool = False) -> dict[str, Any]:
@@ -2985,12 +3078,21 @@ class Session:
         acc = self.world.set_access(eid, owner=who, group=group, actor=self._actor_or_none())
         return {"ok": True, "entity": eid, "access": acc}
 
-    def move(self, entity: str, parent: str, pos: list[float] | None = None) -> dict[str, Any]:
+    def move(self, entity: str, parent: str, pos: list[float] | None = None, at: Any = None) -> dict[str, Any]:
+        """at: its spot in the new container, [x, y, z] or a landmark's name there ("the gate")."""
         self._need(AUTHOR)
         eid = self._resolve(entity)
-        self._record("move", entity=entity, parent=parent, pos=pos)
-        self.world.move(eid, self._resolve(parent), pos=pos, actor=self._actor_or_none())
-        return self._card(self.world.need(eid), full=True)
+        to = self._resolve(parent)
+        if at is not None:
+            posn.resolve_at(self.world, to, at, skip=eid)  # a bad name refuses before anything moves
+        self._record("move", entity=entity, parent=parent, pos=pos, at=at)
+        self.world.move(eid, to, pos=pos, actor=self._actor_or_none())
+        if at is not None:
+            self._place_at(eid, at)
+        out = self._card(self.world.need(eid), full=True)
+        if (n := self._position_notice(eid)):
+            out["position_notice"] = n
+        return out
 
     def destroy(self, entity: str) -> dict[str, Any]:
         self._need(AUTHOR)
@@ -3201,7 +3303,7 @@ OPS = [
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
     "measure", "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
-    "chmod", "chown", "program", "unprogram", "programs", "review", "guide", "rules_changed",
+    "chmod", "chown", "program", "unprogram", "programs", "review", "guide", "rules_changed", "verify",
 ]
 
 

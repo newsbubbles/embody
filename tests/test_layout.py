@@ -66,7 +66,7 @@ def test_the_ruler_measures_distance_bearing_height_and_containment():
     assert gm.measure("Cell")["a"]["z_range"] == [0.0, 3.0]
 
 
-def test_a_body_that_changes_place_drops_its_own_spot_and_carries_what_it_holds():
+def test_a_body_that_changes_place_stands_where_the_way_comes_in_and_carries_what_it_holds():
     eng, w, i, gm, r = laid_out()
     gm.layout(placements=[{"entity": "Prisoner", "at": [-1, 2, 0], "size": [0.5, 0.3, 1.8]}])
     s = eng.session("nate")
@@ -75,7 +75,7 @@ def test_a_body_that_changes_place_drops_its_own_spot_and_carries_what_it_holds(
     assert gm.measure("Rusty key")["a"]["at"] == [-1, 2, 0] and not gm.measure("Rusty key")["a"]["own"]
     gm.move("Prisoner", "Hall")
     me = gm.measure("Prisoner")["a"]
-    assert me["at"] == [0, 20, 0] and not me["own"]  # somewhere in the hall until placed
+    assert me["at"] == [0, 12, 0] and me["own"]  # where the drawn way from the cell comes into the hall
     assert w.get(i["Prisoner"])["state"]["layout"]["size"] == [0.5, 0.3, 1.8]  # the body keeps its own size
 
 

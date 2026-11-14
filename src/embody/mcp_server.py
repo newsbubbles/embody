@@ -494,24 +494,26 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def spawn(type: str, parent: str, name: str = "", state: dict[str, Any] | None = None,
-              pos: list[float] | None = None) -> dict[str, Any]:
-        """(author) Create an entity inside a parent. Something improvised during play gets state {"improvised": true}."""
-        return s.spawn(type, parent, name=name, state=state, pos=pos)
+              pos: list[float] | None = None, at: Any = None) -> dict[str, Any]:
+        """(author) Create an entity inside a parent. Something improvised during play gets state {"improvised": true}.
+        at: its spot in the world frame, [x, y, z] or a landmark's name in the place ("the cistern"); anything put
+        directly in a place needs one, and the reply says so when it has none."""
+        return s.spawn(type, parent, name=name, state=state, pos=pos, at=at)
 
     @tool()
     @_wrap
     def introduce(type: str, parent: str, name: str, how: str, known_by: dict[str, str],
                   state: dict[str, Any] | None = None, scene: str | None = None, by: str | None = None,
                   remembers: list[str] | None = None, pos: list[float] | None = None,
-                  after: float | None = None) -> dict[str, Any]:
+                  after: float | None = None, at: Any = None) -> dict[str, Any]:
         """(author) Bring something new into the world with a past, in one call; prefer it to spawn for anything a
         player or mind could meet. how: always_there (no sound; it was here all along), arrived, delivered (by=),
         built (by=) or appeared; every way but always_there needs the scene the room sees. known_by {entity: note}
         is who already knows it and what they know, written to their memory ({} = nobody). remembers: for a
         person, what it knows itself. after: world seconds until it arrives (sent for, on its way); known_by
-        learn of it now, the thing and its scene land then."""
+        learn of it now, the thing and its scene land then. at: its spot, [x, y, z] or a landmark's name there."""
         return s.introduce(type, parent, name, how, known_by, state=state, scene=scene, by=by, remembers=remembers,
-                           pos=pos, after=after)
+                           pos=pos, after=after, at=at)
 
     @tool()
     @_wrap
@@ -572,9 +574,10 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
-    def move(entity: str, parent: str, pos: list[float] | None = None) -> dict[str, Any]:
-        """(author) Reparent an entity (teleport, hand over, put inside)."""
-        return s.move(entity, parent, pos=pos)
+    def move(entity: str, parent: str, pos: list[float] | None = None, at: Any = None) -> dict[str, Any]:
+        """(author) Reparent an entity (teleport, hand over, put inside). at: its spot in the new container, [x, y, z]
+        or a landmark's name there ("the gate"); without it, a thing put down lies where its holder stands."""
+        return s.move(entity, parent, pos=pos, at=at)
 
     @tool()
     @_wrap
@@ -644,7 +647,9 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
         """(author, narrator) Lay out many entities at once in the world's one frame (metres, z up, y north). The tree
         says how the story moves; a layout says where things are, and neither bends the other. placements:
         [{entity, at: [x, y, z], heading (degrees from north), one extent: radius | size [w, d, h] | footprint
-        [[x, y], ...], floor, ceiling, mesh (a reference for clients), note}]. paths: [{a, b, route: [[x, y, z], ...],
+        [[x, y], ...], floor, ceiling, mesh (a reference for clients), note, solid (false: others may stand in its
+        extent), landmarks {name: {at, radius}} (a place's named spots; None deletes one)}]; at may be a landmark's
+        name or the name of something beside it in the same container. paths: [{a, b, route: [[x, y, z], ...],
         length}] on the connects_to edge between two places. frame: {units, bounds, geo: {lat, lon}} on the root.
         Keys merge (None deletes one); replace=true sets each layout whole. Answers with warnings, not refusals,
         for what only looks wrong. Read it back with map(); measure() is the ruler."""
@@ -657,6 +662,16 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
         the world) to `depth` levels with its position (own or inherited) and extent, the paths between the places
         with their lengths and bearings, what is not laid out yet, warnings, and a top-down text sketch (north up)."""
         return s.map(under=under, depth=depth, sketch=sketch, width=width)
+
+    @tool()
+    @_wrap
+    def verify(under: str | None = None, depth: int = 3, offset: int = 0, limit: int = 50,
+               apply: bool = False) -> dict[str, Any]:
+        """(author, narrator, observer) The positions audit of a subtree (default the world): everything on the map
+        must resolve to a spot (its own, a grid cell, or what carries it), stand inside its container and out of
+        anything solid. Each problem comes with a fix (an `at`, the landmarks there). Paged: offset, limit (200 at
+        most), next. apply=true (author): give every problem on this page its suggested spot in one pass."""
+        return s.verify(under=under, depth=depth, offset=offset, limit=limit, apply=apply)
 
     @tool()
     @_wrap
