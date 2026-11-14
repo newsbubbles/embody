@@ -7,6 +7,13 @@ through someone who explains it. No spoilers: a mystery stays out of this list u
 Format: one `## date: title` heading per entry (date is the real-world day it went live), then two or three
 sentences. `status: coming` under a heading means it is built or being built and not live yet.
 
+## 2026-11-14: Belt wards from the House
+
+The dawn crawler after the moon brought a long black oak case to the Hold under House Varrick's seal: six belt wards
+from the House's own store, with a letter from the steward to the Reeve. A ward that is switched on turns aside every
+quick blow and every shot; only a slow, heavy blow gets through it. The Reeve gives them to the men who stand nearest
+him.
+
 ## 2026-11-14: One health bar, and death that stays
 
 Health is one number now, and how you are doing reads in plain words. Down is not dead, and
