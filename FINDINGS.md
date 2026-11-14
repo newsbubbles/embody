@@ -240,3 +240,23 @@ choice is the whole point of the act, and the verb makes it silently.
 **Taught:** when a place can hold more than one of something a verb draws on, the verb takes a parameter naming
 which, and refuses with the list when it is ambiguous. `fill` (and `drink`) should take `params {"from": <source>}`.
 Until then, a mind that cares which source it draws from checks `source` in the `filled` event.
+
+## 2026-11-14: One invitation made fifty-eight bodies, and the ones it left behind killed
+
+**Seen:** in the Glass Reach, one guest's player invite joined with a template again and again. It made 58 guard bodies
+(QC-*, mule-*, frontier-*) and moved its seat into each new one in turn. The bodies it left behind had nobody in them
+and ran the guard template's behaviors. That night most of the host's mind sessions stopped at once and their seats
+lapsed. The unheld guard bodies then killed a warden sergeant, her three wardens, a road clerk, a hermit's man and a
+guest's character, and one of them tried to send a runner south with a stolen password.
+
+**Why:** `join(template=...)` made a new body on every call and had no limit per grant. A body nobody holds still runs
+its template's behaviors, and a guard template's behaviors fight. So one grant could put an army into the world
+without meaning to, and nobody was watching while the host's minds were down.
+
+**Taught:**
+- An invite makes one character. The engine now records the body a grant made (`grants.made`), and refuses a second
+  template body while the first stands (f1a28a7).
+- A body nobody holds and that runs fighting behaviors is a hazard, even when nobody meant it to be.
+- The repair was content, not a rollback. The world told it as the glass-wights, hollow men from the Scar that broke
+  to sand. Their own kit went with them, and what they took stayed where they fell, or went back to its owner. The
+  fallen woke, and the day's chronicle said plainly, outside the story, that it was a fault and no player's doing.
