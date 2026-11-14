@@ -7,6 +7,7 @@ failure is a `Rejected` with a reason, a hint and alternatives.
 
 from __future__ import annotations
 
+import ast
 import collections
 import contextlib
 import functools
@@ -1997,6 +1998,7 @@ class Session:
         tid = None
         try:
             tid = self._resolve_for(me, target, verb, params) if target else None
+            self._stray_params(me, verb, tid, params)
             r = self.world.act(me, verb, tid, params, principal_id=self.pid)
         except Rejected as why:
             self._refused(me, verb, target, tid, params, why)
@@ -2007,6 +2009,30 @@ class Session:
         r["cursor"] = w.store.next_seq(w.id) - 1
         w.set_cursor(self.pid, r["cursor"])
         return r
+
+    def _stray_params(self, me: str, verb: str, tid: str | None, params: dict[str, Any] | None) -> None:
+        """A param nothing reads is dropped without a word and the deed goes out empty (talk with `topic` for `about`
+        answered with the default line). Refuse it, naming the params the verb takes. A key is known when the verb
+        declares it, its script names it, or any script reads it from params (a rule reading an attack's weapon)."""
+        if not params:
+            return
+        w = self.world
+        try:
+            adef, _ = w.resolve_action(me, verb, tid)
+            s = w.script(adef["script"])
+        except Rejected:
+            return  # the act says why
+        declared = adef.get("params") or {}
+        stray = [k for k in params if k not in declared and k not in _named_in(s)]
+        if stray:
+            read = set().union(*(_read_keys(w.script(r["id"])) for r in w.scripts()))
+            stray = [k for k in stray if k not in read]
+        if not stray:
+            return
+        takes = ", ".join(declared) or "no params"
+        raise Rejected(f"{verb} takes {takes}, not {', '.join(stray)}",
+                       hint="; ".join(f"{k}: {d}" for k, d in declared.items()) + ". Say it again with those names"
+                       if declared else f"act({verb!r}, target) without params")
 
     def _refused(self, me: str, verb: str, asked: str | None, tid: str | None, params: dict[str, Any] | None,
                  why: Rejected) -> None:
@@ -3041,6 +3067,26 @@ _NEWS_KINDS = frozenset({"found", "downed", "killed", "outlawed", "yielded", "tr
                          "lock_picked", "lifted", "caught", "renamed", "destroyed", "burned", "works_done", "stage_done",
                          "challenged", "agreed", "spoiled", "wounded", "rose", "searched", "stopped",
                          "broke_down", "struck"})
+def _named_in(s: Any) -> set[str]:
+    """Every string and attribute name in a script: the params it could read (`params.get("about")`, `params.count`)."""
+    if getattr(s, "named", None) is None:
+        s.named = {n.value for n in ast.walk(s.tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)} |                   {n.attr for n in ast.walk(s.tree) if isinstance(n, ast.Attribute)}
+    return s.named
+
+
+def _read_keys(s: Any) -> set[str]:
+    """The keys a script reads by name: `x.get("k")` and `x["k"]`, so a rule that reads an act's params counts."""
+    if getattr(s, "read", None) is None:
+        out = set()
+        for n in ast.walk(s.tree):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "get" and n.args                     and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str):
+                out.add(n.args[0].value)
+            elif isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Constant) and isinstance(n.slice.value, str):
+                out.add(n.slice.value)
+        s.read = out
+    return s.read
+
+
 def _trimmed(params: dict[str, Any] | None, n: int = 160) -> dict[str, Any]:
     """An act's params for the log: at most 8 keys, each value cut to n characters of its JSON."""
     out: dict[str, Any] = {}
