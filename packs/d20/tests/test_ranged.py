@@ -33,8 +33,8 @@ def shootable(you):
 def test_a_shot_one_way_over_spends_an_arrow_that_lands_where_they_stand():
     eng, gm, you = reach()
     me = range_of(gm)
-    gm.spawn("person", "Range B", "Bandit", state={"vigor": 30, "max_vigor": 30})
-    gm.spawn("person", "Range C", "Lurker", state={"vigor": 30, "max_vigor": 30})
+    gm.spawn("person", "Range B", "Bandit", state={"hp": 30, "max_hp": 30})
+    gm.spawn("person", "Range C", "Lurker", state={"hp": 30, "max_hp": 30})
     can = shootable(you)
     assert can["Bandit"]["ok"] and "Lurker" not in can  # the hidden way is not one he knows
     with pytest.raises(Rejected, match="cannot see"):
@@ -44,7 +44,7 @@ def test_a_shot_one_way_over_spends_an_arrow_that_lands_where_they_stand():
     r = you.act("shoot", "Bandit")
     assert {"shot", "hit"} <= set(kinds(r)) and r["result"]["far"] is True
     hit = [e for e in r["events"] if e["kind"] == "hit"][0]["payload"]
-    assert hit["ranged"] is True and hit["dmg"] == 2 and state(gm, "Bandit")["vigor"] == 28
+    assert hit["ranged"] is True and hit["dmg"] == 2 and state(gm, "Bandit")["hp"] == 28
     held = {c["name"]: c for c in gm.world.children(me)}
     assert held["Arrows"]["state"]["count"] == 2
     landed = [c for c in gm.world.children(gm.inspect("Range B")["id"]) if c["name"] == "Arrows"]
@@ -75,7 +75,7 @@ def test_a_weapon_that_must_be_loaded_and_a_blade_still_strikes():
     eng, gm, you = reach()
     me = range_of(gm)
     gm.patch("Short bow", {"loaded": False})
-    gm.spawn("person", "Range A", "Bandit", state={"vigor": 30, "max_vigor": 30})
+    gm.spawn("person", "Range A", "Bandit", state={"hp": 30, "max_hp": 30})
     with pytest.raises(Rejected, match="not loaded"):
         you.act("shoot", "Bandit")
     gm.patch("Short bow", {"loaded": True})
@@ -91,7 +91,7 @@ def test_a_weapon_that_must_be_loaded_and_a_blade_still_strikes():
 def test_a_warden_with_a_bow_covers_the_road():
     eng, gm, you = reach()
     me = range_of(gm)
-    gm.patch(me, {"vigor": 50, "max_vigor": 50})
+    gm.patch(me, {"hp": 50, "max_hp": 50})
     gm.spawn("fighter", "Range B", "Warden", state={"faction": "House Varrick", "wits": 40})
     warden = gm.inspect("Warden")["id"]
     gm.spawn("thing", warden, "Long bow", state={"weapon": True, "ranged": True, "ammo": "arrow", "damage": 1})
@@ -110,7 +110,7 @@ def test_a_warden_with_a_bow_covers_the_road():
 def test_a_fighter_waits_out_its_cooldown_longer_on_a_seated_player():
     eng, gm, you = reach()
     me = range_of(gm)
-    gm.patch(me, {"vigor": 80, "max_vigor": 80})
+    gm.patch(me, {"hp": 80, "max_hp": 80})
     gm.spawn("fighter", "Range A", "Brute", state={"body": 40, "attacked_by": me})
     brute = gm.inspect("Brute")["id"]
     blows = lambda: [e["t"] for e in gm.world.events(0, kinds=["hit", "missed"], limit=5000) if e["payload"].get("by") == brute]
@@ -133,8 +133,8 @@ def test_a_fighter_waits_out_its_cooldown_longer_on_a_seated_player():
 def test_a_heavy_weapon_holds_a_players_next_blow_longer_and_a_light_one_shorter():
     eng, gm, you = reach()
     me = range_of(gm)
-    gm.spawn("person", "Range B", "Bandit", state={"vigor": 30, "max_vigor": 30})
-    gm.spawn("person", "Range A", "Thug", state={"vigor": 30, "max_vigor": 30})
+    gm.spawn("person", "Range B", "Bandit", state={"hp": 30, "max_hp": 30})
+    gm.spawn("person", "Range A", "Thug", state={"hp": 30, "max_hp": 30})
     bandit, thug = gm.inspect("Bandit")["id"], gm.inspect("Thug")["id"]
     gm.clock(run=True, rate=4)
     base = gm.world.strike_cooldown(me, bandit)

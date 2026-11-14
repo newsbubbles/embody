@@ -19,8 +19,8 @@ WORLD = {"id": "wild", "name": "The wild", "seed": 7, "description": "A brake, a
          "requires": ["village", "d20", "beasts"]}
 
 THORN = {"eats": ["root", "pulp"], "fed_max": 3, "young_name": "Thornback pup",
-         "stages": [{"name": "young", "from": 0, "state": {"body": 1, "vigor": 3, "max_vigor": 3, "skills": {}}},
-                    {"name": "adult", "from": 6, "state": {"body": 3, "vigor": 6, "max_vigor": 6, "skills": {"brawl": 1}},
+         "stages": [{"name": "young", "from": 0, "state": {"body": 1, "hp": 3, "max_hp": 3, "skills": {}}},
+                    {"name": "adult", "from": 6, "state": {"body": 3, "hp": 6, "max_hp": 6, "skills": {"brawl": 1}},
                      "names": {"m": "Thornback boar", "f": "Thornback sow"},
                      "parts": [{"name": "Snout", "state": {"weapon": True, "damage": 1, "portable": False}}]},
                     {"name": "old", "from": 30, "state": {"body": 2}}],
@@ -238,15 +238,15 @@ def test_a_species_with_a_season_breeds_only_in_it(wild):
 
 GOAT = {"eats": ["graze"], "fed_max": 3, "young_name": "Kid", "breed_chance": 0.3, "gestation": 5, "litter": [1, 2],
         "lifespan": 70, "carcass": 8,
-        "stages": [{"name": "young", "from": 0, "state": {"body": 1, "vigor": 3, "max_vigor": 3}},
-                   {"name": "adult", "from": 8, "state": {"body": 2, "vigor": 5, "max_vigor": 5, "skills": {"brawl": 1}},
+        "stages": [{"name": "young", "from": 0, "state": {"body": 1, "hp": 3, "max_hp": 3}},
+                   {"name": "adult", "from": 8, "state": {"body": 2, "hp": 5, "max_hp": 5, "skills": {"brawl": 1}},
                     "names": {"m": "Billy", "f": "Nanny"}},
                    {"name": "old", "from": 50, "state": {"body": 1}}]}
 JACKAL = {"eats": ["meat", "carrion"], "preys_on": ["goat"], "fed_max": 3, "starve_days": 4, "young_name": "Jackal pup",
           "breed_chance": 0.2, "gestation": 8, "litter": [1, 2], "lifespan": 80, "tame_dc": {"young": 12}, "tame_at": {"young": 4},
           "wanders_in": {"at": "Dunes", "prey": 6, "count": [2, 2]},
-          "stages": [{"name": "young", "from": 0, "state": {"body": 1, "vigor": 3, "max_vigor": 3}},
-                     {"name": "adult", "from": 10, "state": {"body": 2, "vigor": 5, "max_vigor": 5, "skills": {"brawl": 2}},
+          "stages": [{"name": "young", "from": 0, "state": {"body": 1, "hp": 3, "max_hp": 3}},
+                     {"name": "adult", "from": 10, "state": {"body": 2, "hp": 5, "max_hp": 5, "skills": {"brawl": 2}},
                       "names": {"m": "Jackal dog", "f": "Jackal bitch"},
                       "parts": [{"name": "Fangs", "state": {"weapon": True, "damage": 2, "portable": False}}]},
                      {"name": "old", "from": 60, "state": {"body": 1}}]}
@@ -266,10 +266,10 @@ def test_hunters_and_their_herd_both_last_ninety_days_and_swing(wild):
     hunting_ground(gm)
     for i, sex in enumerate(["m", "f", "f", "f"]):
         gm.spawn("beast", "Ridge", f"Goat {i}", state={"species": "goat", "sex": sex, "age": 12 + i * 5, "stage": "adult",
-                                                    "fed": 3, "home": "Ridge", "vigor": 5, "max_vigor": 5, "body": 2})
+                                                    "fed": 3, "home": "Ridge", "hp": 5, "max_hp": 5, "body": 2})
     for i, sex in enumerate(["m", "f", "f"]):
         j = gm.spawn("beast", "Dunes", f"Jackal {i}", state={"species": "jackal", "sex": sex, "age": 15 + i * 5, "stage": "adult",
-                                                          "fed": 2, "home": "Dunes", "pack": True, "vigor": 5, "max_vigor": 5,
+                                                          "fed": 2, "home": "Dunes", "pack": True, "hp": 5, "max_hp": 5,
                                                           "body": 2, "skills": {"brawl": 2}})["id"]
         gm.spawn("thing", j, "Fangs", state={"weapon": True, "damage": 2, "portable": False})
     goats, jackals = [], []

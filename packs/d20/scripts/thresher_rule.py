@@ -57,9 +57,9 @@ def surface(ctx, place):
         ok = total >= 13
         ctx.emit("checked", target=c, reach=1, by=c.id, skill="survival", roll=roll, mod=mod, total=total, dc=13, success=ok, margin=total - 13)
         if not ok:
-            vigor = int(c.state.vigor or 0) - 4
-            ctx.patch(c, {"vigor": vigor, "braced": False})
-            ctx.emit("hit", target=c, reach=1, by=worm.id, dmg=4, weapon="the Thresher", attack=0, defence=0, vigor=vigor)
+            hp = int(c.state.hp or 0) - 4
+            ctx.patch(c, {"hp": hp, "braced": False})
+            ctx.emit("hit", target=c, reach=1, by=worm.id, dmg=4, weapon="the Thresher", attack=0, defence=0, hp=hp)
             settle(ctx, c, worm.id)
         if safe is not None:
             ctx.move(c, safe)

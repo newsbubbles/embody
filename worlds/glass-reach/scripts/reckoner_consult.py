@@ -49,7 +49,7 @@ def hold_water(ctx, st):
         for it in ctx.children(pid) if pid else []:
             if it.state.dew:
                 water = water + int(it.state.left or 0)
-            if it.state.vigor is not None and not it.state.dead and not it.state.beast:
+            if it.state.hp is not None and not it.state.dead and not it.state.beast:
                 souls = souls + 1
     return water, souls
 

@@ -93,12 +93,12 @@ def stage_for(sp, age):
     return cur
 
 def stage_state(st_def, sex, growing, b):
-    # what a stage sets on the body; growing up keeps the wounds it has (vigor moves by what max_vigor gains)
+    # what a stage sets on the body; growing up keeps the wounds it has (hp moves by what max_hp gains)
     changes = dict(st_def.get("state") or {})
     changes["stage"] = st_def.get("name")
-    if growing and "max_vigor" in changes:
-        old_max = int(b.state.max_vigor or 0)
-        changes["vigor"] = max(1, min(int(changes["max_vigor"]), int(b.state.vigor or 0) + int(changes["max_vigor"]) - old_max))
+    if growing and "max_hp" in changes:
+        old_max = int(b.state.max_hp or 0)
+        changes["hp"] = max(1, min(int(changes["max_hp"]), int(b.state.hp or 0) + int(changes["max_hp"]) - old_max))
     return changes
 
 def stage_name(st_def, sex):
@@ -135,7 +135,7 @@ def carcass(ctx, b):
     sp = species_of(ctx, b)
     n = sv(b, sp, "carcass", None)
     if n is None:
-        n = max(1, int(b.state.max_vigor or 4))
+        n = max(1, int(b.state.max_hp or 4))
     ctx.patch(b, {"food": ["meat", "carrion"], "meals": int(n), "carcass_day": today(ctx)})
 
 def eat_carcass(ctx, place, eats, need):

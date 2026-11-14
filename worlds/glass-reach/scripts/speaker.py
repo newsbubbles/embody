@@ -58,7 +58,7 @@ def clip(s, n):
     return s if len(s) <= n else s[:n].rstrip() + "..."
 
 def bodied(e):
-    return e is not None and e.type != "place" and e.state.vigor is not None
+    return e is not None and e.type != "place" and e.state.hp is not None
 
 def where_of(slab):
     # who holds it, and the place its picture stands up in; a slab shut in a box or a pack shows to nobody

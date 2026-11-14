@@ -19,7 +19,7 @@ The numbers, so a narrator can explain a roll:
   until}: the next check of that skill (no skill: any) in that place (no place: anywhere), before `until` (world t),
   adds the bonus and uses it up; the result and the `checked` event carry it. A familiar's `point` writes one.
 - An attack is opposed: d20 + body + blade (+ the weapon's bonus) against the defender's d20 + body + blade
-  (+3 if braced). Ties go to the defender. A hit does the weapon's `damage` (bare hands 1) to `vigor`.
+  (+3 if braced). Ties go to the defender. A hit does the weapon's `damage` (bare hands 1) to `hp`.
 - A `ward` that is switched on hardens against anything fast: a normal attack cannot reach through it. A slow
   attack (`params {"slow": true}`) passes the ward at -2 to hit.
 - `shoot` fires what you hold that fires (a weapon with `ranged`; `ammo` names the kind it takes, matched to a
@@ -38,8 +38,8 @@ The numbers, so a narrator can explain a roll:
   Strikes; a minute of real time when a player or a mind holds either side, 15 s when neither does, nothing on a
   paused clock). Blows and shots, a player's or a fighter's, wait times the weapon's `cooldown_x` (2 for a maul).
   A world's own strike verbs say `strikes: true` and their `cooldown_x` and `cost`.
-- At half vigor you are `wounded`; at 0 you are `down` and can only yield, drink or crawl; `kill` finishes
-  someone down; striking someone who yielded to you is `dishonor` and every faction hears of it.
+- One bar, `hp`. At half hp you are `wounded`; at 0 you are `down` and can only yield, drink or crawl; `kill`
+  finishes someone down, and only a deliberate `kill` or a thirst left too long ends a life; striking someone who yielded to you is `dishonor` and every faction hears of it.
 - A `challenge` makes a duel between two people in a place. While it stands nobody else there may strike,
   and the two may strike only each other. It ends when one is down, dead or yields, when one agrees to the
   other's `parley` (that is a yield on terms), or when one walks out of the ring: that one lost, and their own
@@ -50,8 +50,12 @@ The numbers, so a narrator can explain a roll:
 - Water: `water` (0 to 10) falls by 1 a beat under shade and 2 on open ground, nothing beside a source (a
   place with `water_source`, or a cask or cistern here with something `left`). The beat is a minute in a
   turn-based story; a hosted world sets its own with `set_pace` (the Reach: one point every 2.4 world hours).
-  At 3 you are thirsty; at 0 you lose vigor instead, down to 0 and no further: thirst puts a body down
-  (`downed_by: thirst`), it never kills, and a drink brings it back up (`rose`). `drink` from a waterskin (+4; a
+  At 3 you are thirsty; at 0 you lose hp instead, down to 0 and no further: thirst puts a body down
+  (`downed_by: thirst`) and a drink brings it back up (`rose`). Left down and dry it dies: `fading` each world
+  day it lasts (with `day` and `of`), `died` (`why: thirst`) when its days are spent, counted from when it went
+  down. The days go by `body`: 1 for a body of 2 or less, 2 for 3, 3 for 4 and up. A world sets
+  `thirst_death_days` on its root in the same shape (`{"0": 1, "3": 2, "4": 3}`: the days for a body of at least
+  that much), or false for a thirst that never kills. `drink` from a waterskin (+4; a
   full body refuses, so no draw is poured away), `fill` one at a source. A body nobody embodies looks after
   itself (the `quench` behavior): thirsty, it drinks from a skin in hand, else from a source here; with nothing
   here it walks toward the nearest water it knows the way to (up to six steps, one step a look; hidden places
@@ -71,9 +75,9 @@ The numbers, so a narrator can explain a roll:
   are free; works labour pays in its own tick. A world sets `sweat` on its root to tune it: a table by key (a verb,
   or `fight` and `heavy_walk`) laid over the default `{fight: 1, harvest: 1, dig: 1, dress: 1, break: 1,
   heavy_walk: 1}`, or `false` for none.
-- Mending: rest heals. A body with water in it (more than 3) mends a point of `vigor` a beat (`mended`): the
+- Mending: rest heals. A body with water in it (more than 3) mends a point of `hp` a beat (`mended`): the
   `mend` behavior, a beat of ten minutes in a turn-based story, the world's own with `set_pace` (the Reach: one point
-  every six world hours). Above half vigor the wound closes (`wounded` off). A body a wound put down gets up on its
+  every six world hours). Above half hp the wound closes (`wounded` off). A body a wound put down gets up on its
   own at 2 (`rose`, by rest); thirst's down is water's to undo, and a dry body does not mend. Mending is thirsty
   work: every second point mended costs a point of water. `tend` someone down here: a draw of water washes the
   wound (from a skin in hand, else a cask or source here; spent whether the binding holds or not) and survival
@@ -97,12 +101,14 @@ The numbers, so a narrator can explain a roll:
 - Deep sand (`deep_sand` on a place) keeps a `tremor` count: each loud arrival adds 1, each harvest adds 2, a
   quiet arrival adds nothing. Two minutes of quiet and the count drops by one, down to zero, when a `tremor`
   event says the dune is still. At 3 the thresher is thirty seconds away. When it surfaces everyone there
-  rolls survival against 13: pass and you reach the nearest rock; fail and it takes 4 vigor off you first.
+  rolls survival against 13: pass and you reach the nearest rock; fail and it takes 4 hp off you first.
 """
+
+import json
 
 PACK = {"name": "d20", "description": "Table-top rules as verbs: d20 checks, opposed attacks, wards, duels, thirst, factions, the thresher."}
 
-COMBATANT_STATE = {"body": 1, "wits": 1, "will": 1, "skills": {}, "vigor": 6, "max_vigor": 6, "water": 10, "max_water": 10,
+COMBATANT_STATE = {"body": 1, "wits": 1, "will": 1, "skills": {}, "hp": 6, "max_hp": 6, "water": 10, "max_water": 10,
                    "wounded": False, "down": False, "dead": False, "braced": False, "yielded": None, "thirsty": False,
                    "cowed_by": None, "attacked_by": None, "faction": None, "asleep": False}
 
@@ -137,7 +143,7 @@ COMBATANT_ACTIONS = {
 def define(s):
     """Scripts and the base schemas. Idempotent: run it again and entities pick up the new code."""
     s.define_schema("combatant", extends="creature",
-                    doc="Someone the d20 rules apply to: three stats, skills, vigor, water, and the verbs of a fight.",
+                    doc="Someone the d20 rules apply to: three stats, skills, hp, water, and the verbs of a fight.",
                     state=COMBATANT_STATE, actions=COMBATANT_ACTIONS,
                     behaviors=[{"script": "thirst", "every": 60, "always": True},
                                {"script": "quench", "every": 60, "idle": True},
@@ -154,7 +160,7 @@ def define(s):
                     state={"portable": False, "ember": 3},
                     actions={"harvest": {"script": "harvest", "doc": "Dig a shard out (20 s, and the sand hears it)", "duration": 20}})
     s.define_schema("thresher", extends="creature", doc="What lives under the deep sand. It comes to rhythm.",
-                    state={"body": 8, "vigor": 40, "max_vigor": 40, "home": None,
+                    state={"body": 8, "hp": 40, "max_hp": 40, "home": None,
                            "description": "You do not see it. You see the dune move."})
 
 
@@ -179,8 +185,49 @@ def keep_behaviors(w, scripts=("mend",)):
     return n
 
 
+def _renamed(v):
+    """A value with every vigor key in it renamed: vigor to hp, max_vigor to max_hp, at any depth (a species'
+    stages, a template's state, a kit). None when nothing in it changes."""
+    if isinstance(v, dict):
+        out, changed = {}, False
+        for k, x in v.items():
+            nk = HP_KEYS.get(k, k)
+            nx = _renamed(x)
+            changed = changed or nk != k or nx is not None
+            out[nk] = x if nx is None else nx
+        return out if changed else None
+    if isinstance(v, list):
+        items = [_renamed(x) for x in v]
+        return [x if n is None else n for x, n in zip(v, items)] if any(n is not None for n in items) else None
+    return None
+
+
+HP_KEYS = {"vigor": "hp", "max_vigor": "max_hp"}
+
+
+def hp_from_vigor(w):
+    """One health bar (2026-11-14): every body's vigor becomes its hp, and max_vigor its max_hp, the way a creature's
+    core hp already reads. Tables that carry them (a species' stages, the root's templates) are renamed too, and the
+    old keys go. Returns how many entities changed. Idempotent: a world with no vigor left is untouched."""
+    n = 0
+    for e in w.find(limit=1000000):
+        st = e["state"]
+        if not any(k in json.dumps(st) for k in ('"vigor"', '"max_vigor"')):
+            continue
+        new = _renamed(st)
+        if new is None:
+            continue
+        changes = {k: v for k, v in new.items() if st.get(k) != v}
+        changes.update({k: None for k in st if k not in new})  # the old keys, gone
+        w.patch(e["id"], changes, replace=True)
+        n += 1
+    return n
+
+
 def install_rules(s, root):
-    """The four world rules on the root. set_rule is idempotent."""
+    """The four world rules on the root. set_rule is idempotent. A world made when health was `vigor` has it renamed
+    to hp on the way (hp_from_vigor)."""
+    hp_from_vigor(s.world if hasattr(s, "world") else s)
     s.set_rule(root, "rules_guard", kinds=["before_act", "act"])
     s.set_rule(root, "duel_rule", kinds=["before_act", "downed", "killed", "yielded", "arrived", "agreed"])
     s.set_rule(root, "factions_rule", kinds=["hit", "killed", "cowed", "agreed", "given", "dishonor"])

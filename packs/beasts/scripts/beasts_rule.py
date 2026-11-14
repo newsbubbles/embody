@@ -373,7 +373,7 @@ def pick_prey(ctx, pk, sp, hd):
                 continue  # a person only alone, and only to the bold or the starving
             herd = len([x for x in here if x.state.beast and x.state.species == c.state.species and not x.state.down and x.id != c.id])
             weak = 0 if c.state.stage in ["young", "old"] else 3
-            score = int(c.state.vigor or 0) + weak + 2 * herd + (2 if c.state.owner else 0)
+            score = int(c.state.hp or 0) + weak + 2 * herd + (2 if c.state.owner else 0)
             if best is None or score < best_s:
                 best = c
                 best_s = score

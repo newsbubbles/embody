@@ -40,7 +40,7 @@ SENN_TALK = {
     "high landing|platform|slow star|station|ship|orbit|sky": "'The High Landing. The Guild's own ground, above "
         "everyone's. You will see it cross before dawn if you look east. One day the Reach may be asked up.'",
 }
-SENN = {"faction": "the Carriers", "factor": True, "body": 2, "wits": 4, "will": 4, "vigor": 7, "max_vigor": 7,
+SENN = {"faction": "the Carriers", "factor": True, "body": 2, "wits": 4, "will": 4, "hp": 7, "max_hp": 7,
         "water": 10, "max_water": 10, "carry": 24, "bids": {},
         "description": "A narrow grey man in a Guild coat cut close, the sleeves whole, a ledger-case on a strap and a dark "
                        "glass slab in his left hand that he never quite puts down.",
@@ -51,7 +51,7 @@ SENN = {"faction": "the Carriers", "factor": True, "body": 2, "wits": 4, "will":
                  "carry the gate's slab until then. You are not a cruel man and not an honest one: the Guild's tally is "
                  "what matters, and a house that adds glass to it is easier to recognize. Explain the speakers to anyone "
                  "who is given one: what they are, how they work, what they cost. Never take a side aloud."}
-QUIST = {"faction": "the Carriers", "reckoner": True, "body": 2, "wits": 5, "will": 5, "vigor": 6, "max_vigor": 6,
+QUIST = {"faction": "the Carriers", "reckoner": True, "body": 2, "wits": 5, "will": 5, "hp": 6, "max_hp": 6,
          "water": 10, "max_water": 10, "carry": 6,
          "description": "A small woman with a shaved head, a seam of dull metal behind her left ear, and Guild tally "
                         "marks inlaid in a ring around one wrist, sitting "

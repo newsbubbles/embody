@@ -29,11 +29,14 @@ def tick(ctx):
     if roused:
         ctx.emit("woke", target=me, reach=1, by=me.id, why="thirst")
     if water == 0:
-        # dry: vigor goes down to the floor and no further. Thirst puts a body down; it does not kill. Water brings it up.
-        v = int(st.vigor or 0)
+        # dry: hp goes down to the floor. Thirst puts a body down, and one left down and dry fades and dies in a few
+        # world days (fade). Water brings it up while it still breathes.
+        v = int(st.hp or 0)
         if v > 0:
-            ctx.patch(me, {"vigor": v - 1})
-            ctx.emit("parched", target=me, reach=0, vigor=v - 1)
+            ctx.patch(me, {"hp": v - 1})
+            ctx.emit("parched", target=me, reach=0, hp=v - 1)
             if v - 1 <= 0 and not st.down:
-                ctx.patch(me, {"downed_by": "thirst"})
+                ctx.patch(me, {"downed_by": "thirst", "dry_since": ctx.t})
             settle(ctx, me, "thirst")
+        elif st.down and st.downed_by == "thirst":
+            fade(ctx, me)

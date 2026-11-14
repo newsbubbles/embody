@@ -29,7 +29,7 @@ def populate(s):
     well = s.spawn("place", root, "Well", state={"water_source": True})["id"]
     tent = s.spawn("place", root, "Tent")["id"]
     s.connect(well, tent)
-    ada = s.spawn("person", tent, "Ada", state={"wits": 1, "vigor": 2, "max_vigor": 8})["id"]
+    ada = s.spawn("person", tent, "Ada", state={"wits": 1, "hp": 2, "max_hp": 8})["id"]
     s.spawn("thing", ada, "Purse", state={"portable": True})
     s.spawn("person", tent, "Bel", state={"wits": 2, "skills": {"stealth": 3}})
     s.spawn("person", tent, "Cass")
@@ -72,14 +72,14 @@ def test_asleep_it_mends_twice_as_fast_for_the_same_water(camp):
     eng, gm, ada, bel = camp
     gm.clock(step=600)
     awake = gm.inspect("Ada")["state"]
-    assert awake["vigor"] == 3
+    assert awake["hp"] == 3
     ada.act("sleep")
     gm.clock(step=600)
     gm.clock(step=600)
     st = gm.inspect("Ada")["state"]
-    assert st["vigor"] == 7  # 3, then 5, then 7
+    assert st["hp"] == 7  # 3, then 5, then 7
     mended = [e for e in kinds(eng, "mended")]
-    assert [e["payload"]["vigor"] for e in mended] == [3, 5, 7]
+    assert [e["payload"]["hp"] for e in mended] == [3, 5, 7]
     assert st["mend_owed"] == 1  # water is owed by the beat, not the point: three beats paid one, owe one, asleep or not
 
 

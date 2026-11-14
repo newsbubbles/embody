@@ -11,7 +11,7 @@ def check(ctx):
     return True
 
 def apply(ctx):
-    ctx.patch(ctx.target, {"dead": True, "vigor": 0})
+    ctx.patch(ctx.target, {"dead": True, "hp": 0})
     ctx.emit("killed", target=ctx.target, reach=-1, by=ctx.actor.id)
     if ctx.target.state.yielded == ctx.actor.id:
         ctx.emit("dishonor", target=ctx.actor, reach=-1, against=ctx.target.id)

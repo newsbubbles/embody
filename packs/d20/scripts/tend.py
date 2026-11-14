@@ -6,8 +6,8 @@ def check(ctx):
         return "they are not here"
     if t.state.dead:
         return "they are past tending"
-    v = int(t.state.vigor or 0)
-    if not t.state.down and v >= int(t.state.max_vigor or 6):
+    v = int(t.state.hp or 0)
+    if not t.state.down and v >= int(t.state.max_hp or 6):
         return "they are whole: nothing to tend"
     med = medicine_in_hand(me)
     if med is None and not t.state.down:
@@ -35,8 +35,8 @@ def apply(ctx):
     me = ctx.actor
     t = ctx.target
     st = t.state
-    v = int(st.vigor or 0)
-    mx = int(st.max_vigor or 6)
+    v = int(st.hp or 0)
+    mx = int(st.max_hp or 6)
     med = medicine_in_hand(me)
     roll = None
     washed = None
@@ -57,20 +57,22 @@ def apply(ctx):
         total = roll + bonus(me, "survival")
         heal = 1 if total >= 12 else 0
     v = min(mx, v + heal)
-    changes = {"vigor": v}
+    changes = {"hp": v}
     if v > mx // 2 and st.wounded:
         changes["wounded"] = False
     rose = bool(st.down and v >= 1)
     if rose:
         changes["down"] = False
         changes["downed_by"] = None
+        changes["dry_since"] = None
+        changes["fading"] = None
     ctx.patch(t, changes)
     ctx.emit("tended", target=t, reach=1, by=me.id, medicine=med.name if med is not None else None,
-             washed_with=washed, roll=roll, success=heal > 0, vigor=v)
+             washed_with=washed, roll=roll, success=heal > 0, hp=v)
     if rose:
         ctx.emit("rose", target=t, reach=1, by=me.id)
     if heal <= 0:
         ctx.log("survival " + str(roll) + ": the binding slips and the water is gone; try again")
     else:
-        ctx.log("vigor " + str(v) + (", on their feet" if rose else "") + (" (" + med.name + ")" if med is not None else ""))
-    return {"vigor": v, "rose": rose, "success": heal > 0}
+        ctx.log("hp " + str(v) + (", on their feet" if rose else "") + (" (" + med.name + ")" if med is not None else ""))
+    return {"hp": v, "rose": rose, "success": heal > 0}

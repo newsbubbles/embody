@@ -112,16 +112,54 @@ def revive(ctx, who, water):
     # a body thirst put down gets up when it has drunk; a blade's work stays done until someone sees to it
     st = who.state
     if st.down and st.downed_by == "thirst" and water > 3:
-        ctx.patch(who, {"down": False, "downed_by": None, "vigor": max(1, int(st.vigor or 0))})
+        ctx.patch(who, {"down": False, "downed_by": None, "hp": max(1, int(st.hp or 0)), "dry_since": None, "fading": None})
         ctx.emit("rose", target=who, reach=1, by="water")
 
-def settle(ctx, who, cause):
-    # derive the conditions from vigor and say what changed
+# how many world days a body left down and dry lasts, by its body: the days for a body of at least that much. A world
+# tunes it with `thirst_death_days` on its root (the same shape), or false for a thirst that never kills.
+THIRST_DEATH_DAYS = {"0": 1, "3": 2, "4": 3}
+
+def thirst_days(ctx, who):
+    table = ctx.root().state.thirst_death_days
+    if table is False:
+        return None
+    table = table or THIRST_DEATH_DAYS
+    body = int(who.state.body or 0)
+    days = None
+    best = -1
+    for k in table:
+        if int(k) <= body and int(k) > best:
+            best = int(k)
+            days = table[k]
+    return days
+
+def fade(ctx, who):
+    # a body thirst put down that stays dry: `fading` each world day it lasts, so whoever finds it sees the time
+    # running out, and `died` (why thirst) when its days are spent. The count starts when it went down.
     st = who.state
-    v = int(st.vigor or 0)
-    mx = int(st.max_vigor or 6)
+    days = thirst_days(ctx, who)
+    if days is None:
+        return
+    if st.dry_since is None:
+        ctx.patch(who, {"dry_since": ctx.t})  # down before deaths by thirst existed: its days start now
+        return
+    gone = (ctx.t - float(st.dry_since)) / ctx.day_seconds()
+    if gone >= float(days):
+        ctx.patch(who, {"dead": True, "hp": 0, "dry_since": None, "fading": None})
+        ctx.emit("died", target=who, reach=-1, why="thirst", days=days)
+        return
+    n = int(gone)
+    if n >= 1 and n > int(st.fading or 0):
+        ctx.patch(who, {"fading": n})
+        ctx.emit("fading", target=who, reach=1, why="thirst", day=n, of=days)
+
+def settle(ctx, who, cause):
+    # derive the conditions from hp and say what changed
+    st = who.state
+    v = int(st.hp or 0)
+    mx = int(st.max_hp or 6)
     if v <= 0 and not st.down:
-        ctx.patch(who, {"down": True, "wounded": True, "vigor": 0, "braced": False})
+        ctx.patch(who, {"down": True, "wounded": True, "hp": 0, "braced": False})
         ctx.emit("downed", target=who, reach=1, by=cause)
     elif v <= mx // 2 and not st.wounded:
         ctx.patch(who, {"wounded": True})
@@ -192,9 +230,9 @@ def strike(ctx, me, t, slow):
     dmg = 0
     if hit:
         dmg = int(weapon.state.damage or 1) if weapon else 1
-        vigor = int(t.state.vigor or 0) - dmg
-        ctx.patch(t, {"vigor": vigor, "braced": False})
-        ctx.emit("hit", target=t, reach=1, by=me.id, dmg=dmg, weapon=wname, attack=attack, defence=defence, vigor=vigor,
+        hp = int(t.state.hp or 0) - dmg
+        ctx.patch(t, {"hp": hp, "braced": False})
+        ctx.emit("hit", target=t, reach=1, by=me.id, dmg=dmg, weapon=wname, attack=attack, defence=defence, hp=hp,
                  rolls=rolls, asleep=asleep)
         settle(ctx, t, me.id)
     else:
@@ -312,9 +350,9 @@ def shot(ctx, me, t, weapon):
     dmg = 0
     if hit:
         dmg = int(weapon.state.damage or 1) + extra
-        vigor = int(t.state.vigor or 0) - dmg
-        ctx.patch(t, {"vigor": vigor, "braced": False})
-        ctx.emit("hit", target=t, reach=1, by=me.id, dmg=dmg, weapon=wname, attack=attack, defence=defence, vigor=vigor,
+        hp = int(t.state.hp or 0) - dmg
+        ctx.patch(t, {"hp": hp, "braced": False})
+        ctx.emit("hit", target=t, reach=1, by=me.id, dmg=dmg, weapon=wname, attack=attack, defence=defence, hp=hp,
                  rolls=rolls, asleep=asleep, ranged=True)
         settle(ctx, t, me.id)
     else:

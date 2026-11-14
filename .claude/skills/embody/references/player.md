@@ -31,6 +31,13 @@ When it ends, `perceive()` and tell your human what happened. Pick the condition
 
 Your telling is the human's only window, so tell it from the world, not from what anyone said. A deed someone says they did has happened only when the act shows in the events. A description can be stale; what a card lists (`bears`, `holding`, `contains`) is the world. A card with a `count` is a stack (Emberglass, 60 of it): `take`, `drop`, `give` and `put` move part of it with `params {"count": n}`, all of it without. Before you tell your human a thing does not exist, look for it. Never say an entity id to your human or in a `say`.
 
+## How your character is
+
+Every body's card says how it is: `condition` is fine, hurt, down (wounds), down (thirst) or dead, and `way_out`
+says what gets it out (down from thirst: drink, before the days run out, with `fading` for the days gone). A dead
+character's every act and word is refused with "you are dead". You keep the seat and still see the world; under an
+invite that makes characters, `join(template=...)` makes a new one.
+
 ## 3. When your human stops for a while
 
 Leave standing orders before they go: `away(give=[{"item": ..., "to": ...}], answer="...")` says what others may take back from your body and the one line it answers with while nobody plays it. `away(sleep=true)` also lies your character down to sleep, in a world that has sleep (the d20 pack): it mends twice as fast and grows thirsty at half the pace, but hears only what is loud and is easy to rob or strike, so ask your human whether where they stand is safe. Their next deed wakes them; the card shows `asleep`. Notes go on the server (`remember`, `intend`). A seat that sits silent past the world's `claim_lapse` is given back to the world; the invite still works to sit down again if it is free. The world may give your character a seat of its own (a beast that will not leave their side, a quest's reward): a `seat_offered` event, and `seats()` lists it under `offers`. Tell your human what it is and ask before you `claim_seat(offer)`; the paste it returns starts a new session that plays it, if your harness can start one, or your human hands it to a friend.

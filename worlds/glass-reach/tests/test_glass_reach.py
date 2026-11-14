@@ -145,7 +145,7 @@ def test_downing_dram_drops_the_letter_and_with_the_truce_the_hold_stands():
     you.act("go", "The Gate Yard")
     gm.clock(step=240)
     gm.patch("Reeve Ansel Varrick", {"body": 25})
-    gm.patch("Dram Hollis", {"vigor": 1})
+    gm.patch("Dram Hollis", {"hp": 1})
     r = you.act("attack", "Dram Hollis", {"slow": True})
     assert "downed" in kinds(r) and story(gm)["dram_done"] is True
     assert gm.inspect("Sealed letter")["parent"] == gm.inspect("The Gate Yard")["id"]
@@ -157,7 +157,7 @@ def test_downing_dram_drops_the_letter_and_with_the_truce_the_hold_stands():
     story_id = gm.find(type="story")[0]["id"]
     gm.patch(story_id, {"truce": True})
     # the end check runs on the next story event; a scene at the hold says it
-    gm.patch("Dram Hollis", {"down": False, "vigor": 2})
+    gm.patch("Dram Hollis", {"down": False, "hp": 2})
     gm.patch(story_id, {"dram_done": False})
     r = you.act("attack", "Dram Hollis", {"slow": True})
     assert story(gm)["done"] is True and gm.inspect(gm.summary()["root"])["state"]["story"] == "complete"
@@ -521,11 +521,11 @@ def test_a_reach_from_before_rest_mends_and_iska_carries_the_salve_once():
     assert len({p["entity_id"] for p in mends}) == len(mends)  # one each, never two
     assert len(gm.find(name="Glassroot salve")) == 1 and gm.inspect("Glassroot salve")["state"]["doses"] == 0  # not refilled
     # Corin's case: a thresher put him down; half a day of rest with water in him and he is up
-    gm.patch("Captain Ruhl", {"vigor": 0, "down": True, "wounded": True, "water": 10})
+    gm.patch("Captain Ruhl", {"hp": 0, "down": True, "wounded": True, "water": 10})
     gm.clock(step=21601)
     gm.clock(step=21601)
     ruhl = gm.inspect("Captain Ruhl")["state"]
-    assert not ruhl["down"] and ruhl["vigor"] >= 2
+    assert not ruhl["down"] and ruhl["hp"] >= 2
 
 
 def test_the_reach_is_laid_out_from_the_canon_once_and_a_live_edit_survives_the_reboot():
@@ -1472,13 +1472,13 @@ def test_the_riders_hollow_fills_at_the_fires_and_what_is_done_there_counts_at_t
 def test_the_thornbrake_bites_at_night_and_tessels_steading_keeps_a_dew_still_and_a_deed():
     eng, gm = hosted(truce=True)
     me = newcomer(eng, gm, "guard", "Tam")
-    gm.patch("Tam", {"vigor": 30, "max_vigor": 30, "carry": 40})
+    gm.patch("Tam", {"hp": 30, "max_hp": 30, "carry": 40})
     gm.patch("Story", {"wild_night": True})
     gm.move("Tam", "The Gate Yard")
     me.act("go", "The Thornbrake")
     kinds = lambda k: gm.world.store.count("event", "world_id=? AND kind=?", (gm.world.id, k))
     assert kinds("hit") + kinds("missed") == 3  # the pack goes for you at night
-    gm.patch("The thornback boar", {"vigor": 0})
+    gm.patch("The thornback boar", {"hp": 0})
     gm.patch("Tam", {"skills": {"blade": 20}})
     me.act("attack", "The thornback boar")
     assert gm.inspect("Thornback sow")["state"]["hidden"]  # the leader down, the rest run
@@ -1513,16 +1513,16 @@ def test_weeping_rock_stings_until_it_is_smoked():
     me = newcomer(eng, gm, "keth", "Ani")
     gm.move("Ani", "The Salt Road")
     me.act("go", "Weeping Rock")
-    v0 = gm.inspect("Ani")["state"]["vigor"]
+    v0 = gm.inspect("Ani")["state"]["hp"]
     gm.clock(step=121)
-    assert gm.inspect("Ani")["state"]["vigor"] < v0
+    assert gm.inspect("Ani")["state"]["hp"] < v0
     with pytest.raises(Rejected, match="smudge"):
         me.act("smoke", "The wasps' nest")
     gm.move(next(c["id"] for c in gm.world.children(gm.inspect("The Deepwell")["id"]) if c["name"] == "Glassthorn smudge"), "Ani")
     me.act("smoke", "The wasps' nest")
-    v1 = gm.inspect("Ani")["state"]["vigor"]
+    v1 = gm.inspect("Ani")["state"]["hp"]
     gm.clock(step=600)
-    assert gm.inspect("Ani")["state"]["vigor"] == v1
+    assert gm.inspect("Ani")["state"]["hp"] == v1
     notes = [n["text"] for n in gm.world.get(gm.inspect("Elder Taan")["id"])["state"]["memory"]]
     assert any("child's well" in n for n in notes)
 

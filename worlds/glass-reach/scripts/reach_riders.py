@@ -62,7 +62,7 @@ def put_out(ctx, hollow, who, why):
     if bones is None or len(eyes) == 0 or who.parent is None or who.parent.id != hollow.id:
         return
     ctx.move(who, bones)
-    ctx.patch(who, {"vigor": max(0, int(who.state.vigor or 0) - 1)})
+    ctx.patch(who, {"hp": max(0, int(who.state.hp or 0) - 1)})
     scene(ctx, hollow, eyes[0].name + " is on " + who.name + " before " + why + " is done: two riders, a horse's "
           "shoulder, and " + who.name + " is run out north into the dark at a stumble.")
     ctx.emit("scene", target=who, reach=0, text="They run you out past the rib with a rope's end across the back and leave "

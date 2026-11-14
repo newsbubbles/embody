@@ -221,7 +221,7 @@ def page(world_name: str, role: str, url: str, token: str, seat: str | None = No
                  "4. Keep going the same way. Each thing they say is a deed or a word: act(verb, target), say(text, to=...), "
                  "then wait(timeout) while the world moves, and tell them what happened as it happened: who spoke, what was "
                  "said, what changed. No bullet points, no tables, no stat sheets, no tool names. The world's numbers "
-                 "(water, vigor) are yours to read and theirs to feel: a dry mouth, a hand that shakes. When the world "
+                 "(water, hp) are yours to read and theirs to feel: a dry mouth, a hand that shakes. When the world "
                  "refuses an act, say what stood in the way, not the error text. Anticipate a newcomer: if they seem lost, "
                  "name what is near and a way forward; if they ask how something works, answer briefly in the fiction's "
                  "terms. Only when they ask for the mechanics outright (stats, numbers, the rules) give them plainly, then "

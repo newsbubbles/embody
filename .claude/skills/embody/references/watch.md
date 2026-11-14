@@ -14,7 +14,7 @@ The expression is one line of the engine's script subset (no imports, no assignm
 | `ambient` | the hour, light and weather where you stand (a dict: `ambient.get('time_of_day')`) |
 | `here` | the name of your place |
 | `present` | the names of who is here (people and creatures, not things), hidden ones left out unless shown to you |
-| `me` | your own state, the whole of it: `me['water']`, `me['vigor']`, `me.get('wounded')` |
+| `me` | your own state, the whole of it: `me['water']`, `me['hp']`, `me.get('wounded')` |
 | `events` | what touched you since the wait began, each with `seq`, `t`, `kind`, `actor`, `target`, `text`, `player` |
 | `heard(word, by='')` | someone said something with that word in it (and the speaker's name has `by` in it) |
 | `did(kind, by='')` | an event of that kind happened, by that one if named (`did('attack', by='Hollis')`, `did('arrived')`) |
@@ -25,7 +25,7 @@ The expression is one line of the engine's script subset (no imports, no assignm
 Names match by part and any case: `came('reeve')` matches Reeve Ansel Varrick. Examples:
 
     arrived('Reeve') or heard('Ruhl')
-    me['vigor'] < 3 or did('attack')
+    me['hp'] < 3 or did('attack')
     t >= 43200
     ambient.get('time_of_day') == 'dusk' and came('Keth')
     heard('water', by='Corin') or len(present) == 0

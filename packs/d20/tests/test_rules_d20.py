@@ -97,10 +97,10 @@ def test_a_ward_stops_the_fast_blow_and_the_slow_stroke_passes_it():
     strong(gm, "Captain Ruhl")
     r = you.act("attack", "Reeve Ansel Varrick")
     assert r["result"]["warded"] is True and "warded" in kinds(r)
-    assert state(gm, "Reeve Ansel Varrick")["vigor"] == 6
+    assert state(gm, "Reeve Ansel Varrick")["hp"] == 6
     r = you.act("attack", "Reeve Ansel Varrick", {"slow": True})
     assert r["result"]["hit"] is True and r["result"]["dmg"] == 2
-    assert state(gm, "Reeve Ansel Varrick")["vigor"] == 4
+    assert state(gm, "Reeve Ansel Varrick")["hp"] == 4
     # the ward off, the fast blow lands
     gm.act_as("Reeve Ansel Varrick", "toggle", "Belt ward")
     r = you.act("attack", "Reeve Ansel Varrick")
@@ -113,7 +113,7 @@ def test_blows_wound_then_down_and_the_down_can_only_yield_drink_or_crawl():
     gm.act_as("Reeve Ansel Varrick", "toggle", "Belt ward")
     strong(gm, "Captain Ruhl")
     r = you.act("attack", "Reeve Ansel Varrick")
-    assert state(gm, "Reeve Ansel Varrick")["vigor"] == 4
+    assert state(gm, "Reeve Ansel Varrick")["hp"] == 4
     r = you.act("attack", "Reeve Ansel Varrick")
     assert "wounded" in kinds(r) and state(gm, "Reeve Ansel Varrick")["wounded"] is True
     r = you.act("attack", "Reeve Ansel Varrick")
@@ -139,7 +139,7 @@ def test_kill_needs_a_downed_foe_and_the_dead_do_nothing():
     gm.act_as("Reeve Ansel Varrick", "go", "The Gate Yard")
     with pytest.raises(Rejected):
         you.act("kill", "Reeve Ansel Varrick")
-    gm.patch("Reeve Ansel Varrick", {"down": True, "vigor": 0})
+    gm.patch("Reeve Ansel Varrick", {"down": True, "hp": 0})
     r = you.act("kill", "Reeve Ansel Varrick")
     assert "killed" in kinds(r) and state(gm, "Reeve Ansel Varrick")["dead"] is True
     with pytest.raises(Rejected):
@@ -197,7 +197,7 @@ def test_thirst_on_the_open_road_and_water_from_a_skin_or_a_source():
     me = state(gm, "Reeve Ansel Varrick")
     assert me["water"] == 0
     ev = [e["kind"] for e in you.perceive(cursor=0, events=500)["events"]]
-    assert "parched" in ev and me["vigor"] == 5
+    assert "parched" in ev and me["hp"] == 5
     # a thirsty check is two worse
     r = you.act("check", params={"skill": "lore", "dc": 10})
     assert r["result"]["mod"] == 2
@@ -239,7 +239,7 @@ def test_the_ring_holds_during_a_duel():
     with pytest.raises(Rejected):
         you.act("attack", "Bystander")
     strong(gm, "Reeve Ansel Varrick", body=40)  # a defence roll may reach 27: d20 + 40 beats it whatever the seed
-    gm.patch("Captain Ruhl", {"vigor": 1})
+    gm.patch("Captain Ruhl", {"hp": 1})
     r = you.act("attack", "Captain Ruhl")
     assert "downed" in kinds(r) and "duel_over" in kinds(r)
     over = [e for e in r["events"] if e["kind"] == "duel_over"][0]["payload"]
@@ -255,7 +255,7 @@ def test_fighters_strike_back_and_in_a_duel_they_strike_on_their_own():
     strong(gm, "Captain Ruhl")
     you.act("attack", "Captain Ruhl")
     gm.clock(step=6)
-    assert state(gm, "Reeve Ansel Varrick")["vigor"] < 6
+    assert state(gm, "Reeve Ansel Varrick")["hp"] < 6
     assert any(e["kind"] == "hit" and e["payload"]["by"] == gm.inspect("Captain Ruhl")["id"]
                for e in you.perceive(cursor=0, events=500)["events"])
 
@@ -271,19 +271,19 @@ def test_factions_remember_and_outlaw_and_their_fighters_act_on_it():
     standing = lambda: {e["target"]: e["data"]["value"] for e in gm.world.edges(me, "standing", "out")}[varrick["id"]]
     assert standing() == -2
     strong(gm, "Sefa of the Keth")
-    gm.patch("Captain Ruhl", {"vigor": 20, "max_vigor": 20, "body": 0, "skills": {}})
+    gm.patch("Captain Ruhl", {"hp": 20, "max_hp": 20, "body": 0, "skills": {}})
     r = you.act("attack", "Captain Ruhl")
     assert "hit" in kinds(r) and standing() == -4
     assert "outlawed" in kinds(r)
     assert gm.inspect("House Varrick")["state"]["hostile"].get(me) is True
     # Ruhl's tick now turns on her even without a duel; another Varrick fighter would too
     gm.spawn("fighter", "The Gate Yard", "Hold guard", state={"faction": "House Varrick", "body": 25})
-    gm.patch("Sefa of the Keth", {"vigor": 30, "max_vigor": 30})
+    gm.patch("Sefa of the Keth", {"hp": 30, "max_hp": 30})
     for _ in range(5):  # a few ticks: the rolls are seeded by the log, a miss or two is not a failure
         gm.clock(step=6)
-        if state(gm, "Sefa of the Keth")["vigor"] < 30:
+        if state(gm, "Sefa of the Keth")["hp"] < 30:
             break
-    assert state(gm, "Sefa of the Keth")["vigor"] < 30
+    assert state(gm, "Sefa of the Keth")["hp"] < 30
     events = you.perceive(cursor=0, events=500)["events"]
     assert any(e["kind"] == "hit" and e["payload"]["by"] == gm.inspect("Hold guard")["id"] for e in events)
 
@@ -379,7 +379,7 @@ def test_a_fighter_on_his_own_keeps_out_of_a_ring_he_is_not_in():
     you.act("go", "The Gate Yard")
     gm.spawn("fighter", "The Gate Yard", "Hired blade", state={"faction": "House Dreyer"})
     strong(gm, "Captain Ruhl")
-    gm.patch("Hired blade", {"vigor": 1})
+    gm.patch("Hired blade", {"hp": 1})
     varrick = gm.inspect("House Varrick")["id"]
     blade = gm.inspect("Hired blade")["id"]
     gm.patch(varrick, {"hostile": {blade: True}})
@@ -556,25 +556,25 @@ def test_show_follow_stay_and_watch():
 
 
 def test_thirst_puts_a_body_down_and_no_further_and_water_brings_it_up():
-    # Nico on the ridge, dry: vigor falls to the floor and stays there; a skin put in his hand gets him up
+    # Nico on the ridge, dry: hp falls to the floor and stays there; a skin put in his hand gets him up
     eng, gm, you = reach()
-    gm.patch("Nico", {"water": 0, "vigor": 1, "thirsty": True})
+    gm.patch("Nico", {"water": 0, "hp": 1, "thirsty": True})
     gm.clock(step=60)
     nico = state(gm, "Nico")
-    assert nico["down"] and nico["vigor"] == 0 and nico["downed_by"] == "thirst"
+    assert nico["down"] and nico["hp"] == 0 and nico["downed_by"] == "thirst"
     gm.clock(step=60)
     gm.clock(step=60)
     nico = state(gm, "Nico")
-    assert nico["vigor"] == 0 and not nico["dead"] and gm.inspect("Nico")["parent"] == gm.inspect("Red Ridge")["id"]
+    assert nico["hp"] == 0 and not nico["dead"] and gm.inspect("Nico")["parent"] == gm.inspect("Red Ridge")["id"]
     nico_id = gm.inspect("Nico")["id"]
     assert len([e for e in gm.world.events(0, kinds=["parched"], limit=5000) if e["target_id"] == nico_id]) == 1
     gm.spawn("waterskin", "Nico", "Gift skin", state={"left": 2})
     gm.clock(step=60)
     nico = state(gm, "Nico")
-    assert not nico["down"] and nico["vigor"] == 1 and nico["water"] == 4 and nico.get("downed_by") is None
+    assert not nico["down"] and nico["hp"] == 1 and nico["water"] == 4 and nico.get("downed_by") is None
     assert any(e["target_id"] == nico_id for e in gm.world.events(0, kinds=["rose"], limit=5000))
     # a blade's work is not undone by water
-    gm.patch("Captain Ruhl", {"vigor": 0, "down": True, "wounded": True, "water": 2, "thirsty": True})
+    gm.patch("Captain Ruhl", {"hp": 0, "down": True, "wounded": True, "water": 2, "thirsty": True})
     gm.spawn("waterskin", "Captain Ruhl", "Ruhl's skin", state={"left": 2})
     gm.clock(step=60)
     ruhl = state(gm, "Captain Ruhl")
@@ -616,30 +616,30 @@ def test_rest_mends_a_point_a_beat_and_a_wound_put_down_gets_up_at_two():
     eng, gm, you = reach()
     yard = gm.inspect("Captain Ruhl")["parent"]
     gm.spawn("thing", yard, "Test well", state={"water_source": True, "portable": False})  # no thirst beside it
-    gm.patch("Captain Ruhl", {"vigor": 0, "down": True, "wounded": True, "water": 9})
+    gm.patch("Captain Ruhl", {"hp": 0, "down": True, "wounded": True, "water": 9})
     gm.clock(step=600)
     ruhl = state(gm, "Captain Ruhl")
-    assert ruhl["vigor"] == 1 and ruhl["down"] and ruhl["water"] == 9
+    assert ruhl["hp"] == 1 and ruhl["down"] and ruhl["water"] == 9
     gm.clock(step=600)
     ruhl = state(gm, "Captain Ruhl")
-    assert ruhl["vigor"] == 2 and not ruhl["down"] and ruhl["wounded"] and ruhl["water"] == 8  # every second point costs water
+    assert ruhl["hp"] == 2 and not ruhl["down"] and ruhl["wounded"] and ruhl["water"] == 8  # every second point costs water
     ruhl_id = gm.inspect("Captain Ruhl")["id"]
     assert any(e["target_id"] == ruhl_id and e["payload"].get("by") == "rest" for e in gm.world.events(0, kinds=["rose"], limit=5000))
     for _ in range(3):
         gm.clock(step=600)
     ruhl = state(gm, "Captain Ruhl")
-    assert ruhl["vigor"] == 5 and not ruhl["wounded"] and ruhl["water"] == 7  # above half the wound closes
+    assert ruhl["hp"] == 5 and not ruhl["wounded"] and ruhl["water"] == 7  # above half the wound closes
     # a dry body does not mend; thirst's down is water's
-    gm.patch("Nico", {"water": 2, "vigor": 2, "thirsty": True})
+    gm.patch("Nico", {"water": 2, "hp": 2, "thirsty": True})
     gm.clock(step=600)
-    assert state(gm, "Nico")["vigor"] <= 2
+    assert state(gm, "Nico")["hp"] <= 2
 
 
 def test_tend_gets_the_down_up_and_medicine_heals_anyone_hurt():
     eng, gm, you = reach()
     here = gm.inspect("Reeve Ansel Varrick")["parent"]
     gm.move("Captain Ruhl", here)
-    gm.patch("Captain Ruhl", {"vigor": 0, "down": True, "wounded": True, "water": 2})
+    gm.patch("Captain Ruhl", {"hp": 0, "down": True, "wounded": True, "water": 2})
     gm.patch("Reeve Ansel Varrick", {"wits": 25, "skills": {"survival": 0}})
     with pytest.raises(Rejected) as ex:
         gm.act_as("Captain Ruhl", "tend", "Reeve Ansel Varrick")
@@ -660,7 +660,7 @@ def test_tend_gets_the_down_up_and_medicine_heals_anyone_hurt():
     gm.patch("Reeve Ansel Varrick", {"wits": 25})
     r = you.act("tend", "Captain Ruhl")
     ruhl = state(gm, "Captain Ruhl")
-    assert "tended" in kinds(r) and "rose" in kinds(r) and not ruhl["down"] and ruhl["vigor"] == 1
+    assert "tended" in kinds(r) and "rose" in kinds(r) and not ruhl["down"] and ruhl["hp"] == 1
     assert state(gm, "Wash skin")["left"] == 0
     with pytest.raises(Rejected) as ex:
         you.act("tend", "Captain Ruhl")
@@ -668,13 +668,13 @@ def test_tend_gets_the_down_up_and_medicine_heals_anyone_hurt():
     gm.spawn("medicine", "Reeve Ansel Varrick", "Glassroot salve", state={"doses": 1, "heals": 3})
     r = you.act("tend", "Captain Ruhl")
     ruhl = state(gm, "Captain Ruhl")
-    assert ruhl["vigor"] == 4 and ruhl["wounded"] and state(gm, "Glassroot salve")["doses"] == 0  # half of 8: still wounded
+    assert ruhl["hp"] == 4 and ruhl["wounded"] and state(gm, "Glassroot salve")["doses"] == 0  # half of 8: still wounded
     with pytest.raises(Rejected):
         you.act("tend", "Captain Ruhl")  # the pouch is empty and he is standing
-    gm.patch("Reeve Ansel Varrick", {"vigor": 2, "wounded": True})
+    gm.patch("Reeve Ansel Varrick", {"hp": 2, "wounded": True})
     gm.spawn("medicine", "Reeve Ansel Varrick", "More salve", state={"doses": 2})
     you.act("tend", "Reeve Ansel Varrick")  # yourself, with medicine
-    assert state(gm, "Reeve Ansel Varrick")["vigor"] == 5
+    assert state(gm, "Reeve Ansel Varrick")["hp"] == 5
 
 
 def test_a_secret_side_is_not_given_away_and_a_loan_is_not_a_gift():

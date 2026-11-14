@@ -16,7 +16,7 @@ may also sit on a beast itself, which wins over its species:
 
 - `stages`: [{"name": "young", "from": 0, "state": {...}}, {"name": "adult", "from": 6, ...}, {"name": "old", "from":
   60, ...}], `from` in days of age. On the day a beast's `age` reaches a stage it takes that stage's `state` (body,
-  vigor and max_vigor, skills, carry, description: a wound it has stays, vigor moves by what max_vigor gains) and its
+  hp and max_hp, skills, carry, description: a wound it has stays, hp moves by what max_hp gains) and its
   `parts` (things spawned on it once, such as tusks with `weapon`). A born beast (`stage_names`) also takes the stage's
   name: `names` {"m": "Thornback boar", "f": "Thornback sow"}; an authored name stays.
 - `lifespan` (days): past it, each day a chance `old_death` (default 0.2) that it dies in its sleep.
@@ -66,7 +66,7 @@ grow as fast as their keepers feed them. `gestation` days later `litter` young a
 age 0, wild or kept as she is, following her owner.
 
 Carnivores and hunting. A species with `preys_on` (species ids) hunts; it eats `meat` and `carrion`, which only the
-dead give. A dead beast is a carcass where it lies: `meals` (its species' `carcass`, default its max_vigor) of meat
+dead give. A dead beast is a carcass where it lies: `meals` (its species' `carcass`, default its max_hp) of meat
 and carrion, carrion only after a day, bones after three; beasts whose diet matches eat it at the day, and people cut
 a meal off with `butcher` to carry (the way to keep a tamed hunter fed: the dearest beast to keep). A `killed` beast
 becomes a carcass too. Once a night (the kinds `install_rules` names as `night`; with none, at the start of the day),
@@ -100,7 +100,7 @@ PACK = {"name": "beasts", "description": "Animals that grow up, eat what the lan
 BEAST_STATE = {"beast": True, "species": None, "sex": None, "age": 0, "stage": None, "fed": 3, "hungry": False,
                "hungry_days": 0, "owner": None, "herd": None, "loyalty": None, "follows": None, "staying": False,
                "home": None, "pack": False, "leader": False, "carrying": None, "trust": {}, "gentled": {}, "fed_by": {},
-               "body": 2, "wits": 1, "will": 1, "skills": {}, "vigor": 6, "max_vigor": 6, "down": False, "dead": False,
+               "body": 2, "wits": 1, "will": 1, "skills": {}, "hp": 6, "max_hp": 6, "down": False, "dead": False,
                "wounded": False, "attacked_by": None, "asleep": False}
 
 BEAST_ACTIONS = {

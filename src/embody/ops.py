@@ -1508,6 +1508,8 @@ class Session:
                 card["idle"] = True  # the seat has done nothing for a while; standing_orders in its state say what holds
         if e["state"].get("asleep"):
             card["asleep"] = True  # it hears only what is loud or done to it, and wakes to a hand or a noise
+        if w.is_a(e["type"], "creature"):
+            card.update(self._condition(e))
         kids = w.children(e["id"])
         if not full and acl.KEY in e["state"] and not self._readable(e):
             kids = []
@@ -1525,6 +1527,30 @@ class Session:
             if bears:
                 card["bears"] = bears  # a blade at the hip shows, whatever the description still says
         return card
+
+    def _condition(self, e: dict[str, Any]) -> dict[str, Any]:
+        """How a body is, in one word anyone can read, with its way out: fine, hurt (half its hp or less: -2 on its
+        rolls), down (wounds), down (thirst), or dead. The root's `condition_notes` ({condition: text}) rewords a way
+        out for a world whose rules differ."""
+        w = self.world
+        st = {**w.schema_defaults(e["type"]), **e["state"]}
+        hp, mx = int(st.get("hp") or 0), int(st.get("max_hp") or 0)
+        if st.get("dead"):
+            c = "dead"
+        elif st.get("down"):
+            c = "down (thirst)" if st.get("downed_by") == "thirst" else "down (wounds)"
+        elif st.get("wounded") or (mx and hp <= mx // 2):
+            c = "hurt"
+        else:
+            c = "fine"
+        root = w.get(w.root_id)
+        way = {**_WAYS_OUT, **((root["state"].get("condition_notes") or {}) if root else {})}.get(c)
+        out: dict[str, Any] = {"condition": c}
+        if way:
+            out["way_out"] = way
+        if c == "down (thirst)" and st.get("fading"):
+            out["fading"] = int(st["fading"])  # world days it has lain dry; thirst kills in a few
+        return out
 
     def _place_card(self, e: dict[str, Any]) -> dict[str, Any]:
         w = self.world
@@ -2141,6 +2167,8 @@ class Session:
         minds are capped: one line is at most _SAY_MAX characters, and at most _SAY_BURST lines a minute."""
         self._tick()
         me = self._me()
+        if self.world.need(me)["state"].get("dead"):
+            raise Rejected("you are dead", hint="the dead say nothing; perceive still shows the world to you")
         self._acted()
         if not self._privileged():
             if len(text) > _SAY_MAX:
@@ -2961,11 +2989,11 @@ def call(session: Session, op: str, **kw: Any) -> Any:
 
 UNTIL_DOC = ("until is one Python expression (the embody script subset: no imports, no lambdas) over what you may "
              "know: t (world seconds), ambient (dict: time_of_day, light, ...), here (your place's name), present "
-             "(names of who is here), me (your own state: water, vigor, wounded, ...), events (since the wait began: "
+             "(names of who is here), me (your own state: water, hp, wounded, ...), events (since the wait began: "
              "seq, t, kind, actor, target, text, player), and helpers heard(word, by=''), did(kind, by=''), "
              "came(name) (is here now), arrived(name) (walked in since the wait began; '' for anyone), state(name) "
              "(the state you can see of someone here or something you hold). Examples: "
-             "\"arrived('Reeve')\", \"heard('ruhl', by='Reeve') or me['vigor'] < 3\", \"t >= 43200\", "
+             "\"arrived('Reeve')\", \"heard('ruhl', by='Reeve') or me['hp'] < 3\", \"t >= 43200\", "
              "\"ambient.get('time_of_day') == 'dusk'\". Names match by part, any case.")
 
 
@@ -3024,6 +3052,11 @@ def _trimmed(params: dict[str, Any] | None, n: int = 160) -> dict[str, Any]:
 
 _CHRONICLE_QUIET = frozenset({"spawned", "patched", "linked", "unlinked", "related", "unrelated", "laid_out", "moved",
                               "left", "chronicled", "scene", "say", "unscheduled", "ledger_received"})
+
+
+# A body's way out of its condition (Session._condition); a world rewords them with `condition_notes` on its root.
+_WAYS_OUT = {"hurt": "-2 on every roll until rest mends you past half", "down (wounds)": "rest with water, or someone tends you",
+             "down (thirst)": "drink, before the days run out"}
 
 
 _PLAY_OR_WATCH = frozenset({"worlds", "use", "summary", "seats", "join", "leave", "perceive", "inspect", "find", "history",

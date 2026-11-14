@@ -168,13 +168,13 @@ function lockOf(e) { const st = e.state || {}; if (st.locked) return e; return k
 function bulkOf(e) { const st = e.state || {}; const each = st.bulk !== undefined && st.bulk !== null ? Number(st.bulk) : (st.capacity !== undefined && st.capacity !== null ? 2 : 1); return each * (num(st.count) ?? 1); }
 function hm(sec) { sec = Math.max(0, sec); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? h + "h" + (m ? String(m).padStart(2, "0") : "") : m + "m"; }
 function ago(sec) { return sec < 90 ? Math.round(sec) + "s" : sec < 5400 ? Math.round(sec / 60) + "m" : (sec / 3600).toFixed(1) + "h"; }
-// the box's status line: a body's water and vigor and what is wrong with it, a stack, a lock, a well's level,
+// the box's status line: a body's water and hp and what is wrong with it, a stack, a lock, a well's level,
 // a hidden place and who knows it, a works' stage and labour
 function status(e, k) {
   const st = e.state || {}, out = [], bad = [];
   if (st.water !== undefined && st.water !== null && k === "creature") {
-    out.push("w " + st.water + "/" + (st.max_water ?? 10), "v " + (st.vigor ?? "?") + "/" + (st.max_vigor ?? 6));
-  } else if (st.hp !== undefined) out.push("hp " + st.hp);
+    out.push("w " + st.water + "/" + (st.max_water ?? 10), "hp " + (st.hp ?? "?") + "/" + (st.max_hp ?? "?"));
+  } else if (st.hp !== undefined) out.push("hp " + st.hp + (st.max_hp !== undefined ? "/" + st.max_hp : ""));
   ["dead", "down", "asleep", "wounded", "thirsty"].forEach(f => { if (st[f]) bad.push(f); });
   if (st.left !== undefined && st.left !== null && (st.capacity !== undefined || st.water_source || st.max_left !== undefined))
     out.push("left " + st.left + ((st.capacity ?? st.max_left) !== undefined ? "/" + (st.capacity ?? st.max_left) : ""));

@@ -88,7 +88,7 @@ SEFA = {"role": "scout", "faction": "the Keth", "playable": True, "body": 3, "wi
                  "and the Keth have not shared water with the Hold since. The Deepwell is yours to keep secret or to show. "
                  "You know the Flats and how to walk them quiet."}
 
-RUHL = {"faction": "House Varrick", "playable": True, "body": 4, "wits": 2, "will": 3, "skills": {"blade": 3, "resolve": 2}, "vigor": 8, "max_vigor": 8,
+RUHL = {"faction": "House Varrick", "playable": True, "body": 4, "wits": 2, "will": 3, "skills": {"blade": 3, "resolve": 2}, "hp": 8, "max_hp": 8,
         "description": "Captain of the Hold's guard. Grey, square, a scar across the knuckles of the sword hand.",
         "brief": "You are Captain Ruhl. Nine men, a wall that wants twenty, a reeve who talks well and has not bled yet, and a "
                  "clerk inside your gate who stands like a blade. Keep the reeve alive. In the ring you hold the ring; outside it "
@@ -106,7 +106,7 @@ RUHL = {"faction": "House Varrick", "playable": True, "body": 4, "wits": 2, "wil
             "back|stand|support|help|side|behind": "'In the ring I hold the ring, Reeve. I do not step into it. Outside the ring, say the word and the Hold's blades are yours. That is the law, and it is what I would do anyway.'",
         }}
 
-DRAM = {"faction": "House Dreyer", "playable": True, "body": 3, "wits": 3, "will": 3, "skills": {"blade": 3, "stealth": 1, "resolve": 2}, "vigor": 7, "max_vigor": 7,
+DRAM = {"faction": "House Dreyer", "playable": True, "body": 3, "wits": 3, "will": 3, "skills": {"blade": 3, "stealth": 1, "resolve": 2}, "hp": 7, "max_hp": 7,
         "secret": ["dialog", "gives", "gave", "faction", "orders", "brief", "word_left"], "orders": "the reeve, in the ring, before the moon turns",
         "waiting": False,
         "brief": "You are Dram Hollis, Dreyer's blade under a Carrier's papers. Your orders: the reeve, in the ring, before the moon "
@@ -188,7 +188,7 @@ TEMPLATES = {
                 "brief": "You came in with the water convoy and stayed when it left. The Guild carries for whoever holds the gate; "
                          "Ossa keeps the tally. Water is a skin for a shard. Whatever else you are here for is yours to decide."},
     "guard": {"type": "person", "place": "The Gate Yard", "doc": "one of Ruhl's nine, in the Gate Yard",
-              "state": {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "vigor": 6, "max_vigor": 6, "carry": 8},
+              "state": {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "hp": 6, "max_hp": 6, "carry": 8},
               "kit": [{"type": "waterskin", "name": "Varrick waterskin", "state": {"capacity": 4, "left": 4}},
                       {"type": "thing", "name": "Varrick blade", "state": VARRICK_BLADE}],
               "brief": "You hold a blade for House Varrick under Captain Ruhl: nine men for a wall that wants twenty, a new reeve, "
@@ -233,7 +233,7 @@ HOSTED = {"rate": 4, "claim_lapse": 3600,
           # what everyone in the Reach knows is coming: timers() tells a player or a mind the next of each
           "public_timers": ["heat", "dusk", "night", "dawn", "moon_turns"],
           # a body's water in the hosted day: one point every 2.4 world hours (36 real minutes of play at 4x), a look for
-          # water every ten world minutes; a point of vigor mended every six world hours (a wound closes in a day or
+          # water every ten world minutes; a point of HP mended every six world hours (a wound closes in a day or
           # two, a body a wound put down gets up in half a day); the turn-based story keeps the pack's beats
           "pace": {"thirst": 8640, "quench": 600, "mend": 21600},
           "spine": [("heat", 21600, 86400), ("dram_moves", 28800, None), ("dusk", 43200, 86400),
@@ -427,7 +427,7 @@ def define(s):
                     actions={"grub": {"script": "grub_root", "duration": 600,
                                       "doc": "Grub a root out by hand (ten minutes): food for a thornback, or a goat. "
                                              "What you take, the pack here does not eat"}})
-    s.define_schema("nest", extends="thing", doc="A swarm's nest. Everyone in its place loses a point of vigor a minute, to one, until it is smoked.",
+    s.define_schema("nest", extends="thing", doc="A swarm's nest. Everyone in its place loses a point of HP a minute, to one, until it is smoked.",
                     state={"portable": False, "swarm": True, "calm_until": None},
                     actions={"smoke": {"script": "wasp_smoke", "doc": "Burn a glassthorn smudge under the nest: the swarm sleeps a day", "duration": 10}},
                     behaviors=[{"script": "wasp_tick", "every": 60}])
@@ -787,7 +787,7 @@ HOUSE_TANK = {"portable": False, "water_source": True,
                              "make the trip back. House Dreyer's own water, rationed by Mother Sallow."}
 CAMP_SECRET = ["dialog", "gives", "gave", "faction", "word_left"]
 HALVARD = {"faction": "House Dreyer", "secret": CAMP_SECRET,
-           "body": 3, "wits": 4, "will": 4, "skills": {"blade": 2, "parley": 2, "lore": 1}, "vigor": 7, "max_vigor": 7,
+           "body": 3, "wits": 4, "will": 4, "skills": {"blade": 2, "parley": 2, "lore": 1}, "hp": 7, "max_hp": 7,
            "description": "A lean man in a dust-grey coat cut like a rider's, close-cropped, a scar through one eyebrow. A "
                           "house cousin by the cut of him, and he listens longer than he talks.",
            "brief": "You are Halvard Dreyer, cousin to the house, and you hold the Dry Camp for the moon's turn. The Crown "
@@ -849,7 +849,7 @@ SALLOW["dialog"]["wound|hurt|salve|medicine|heal|bleed|sick"] = ("'The chest by 
                                                                   "you need and tell me, so I can count it.'")
 SALLOW["gives"].update(SALLOW_SALVE)
 
-GUARD = {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "vigor": 6, "max_vigor": 6}
+GUARD = {"faction": "House Varrick", "body": 3, "wits": 2, "will": 3, "skills": {"blade": 2, "resolve": 1}, "hp": 6, "max_hp": 6}
 # Ruhl's nine, in the order they are filled: a world that already has some of the Hold's men (a guest's guard, the
 # old man lent to the Keth) gets only the rest. Six of them can hold a blade; the old man, the boy and the cook cannot.
 NINE = [
@@ -970,7 +970,7 @@ SALT_WORKS = ("Brine pans gone to crust west of the road, a collapsed boiling sh
               "someone to pay them for something.")
 SEEP = {"portable": False, "water_source": True,
         "description": "A brackish seep strained through cloth into a stone trough. It tastes of salt and keeps you alive."}
-DRIFTER = {"body": 3, "wits": 2, "will": 2, "skills": {"blade": 1, "survival": 1}, "vigor": 6, "max_vigor": 6,
+DRIFTER = {"body": 3, "wits": 2, "will": 2, "skills": {"blade": 1, "survival": 1}, "hp": 6, "max_hp": 6,
            "drifter": True, "secret": ["dialog", "turncoat", "bought_by", "word_left"]}
 DRIFTER_WORK = {"work|hire|pay|wall|sign|fight": "'A shard of glass or a skin with water in it, and I go where you send "
                                                  "me. I do not ask whose wall.'",
@@ -993,7 +993,7 @@ PITCH = {"portable": True, "bulk": 2, "description": "A clay pot of Guild crawle
 # The Guild's road wardens (scripts/reach_wardens.py): a post on the Salt Road where every road in the Reach meets.
 # Three spears and two bows, fighters who strike back when struck, under a sergeant who keeps the ledger.
 WARDEN = {"faction": "the Carriers", "warden": True, "body": 3, "wits": 3, "will": 3, "skills": {"blade": 3, "resolve": 2},
-          "vigor": 8, "max_vigor": 8, "water": 20, "max_water": 20, "secret": ["dialog", "word_left"]}
+          "hp": 8, "max_hp": 8, "water": 20, "max_water": 20, "secret": ["dialog", "word_left"]}
 SPEAR = {"weapon": True, "damage": 2, "bonus": 1, "portable": True,
          "description": "A Guild warden's spear, ash shaft gone grey, the head bound on with wire."}
 BOW = {"weapon": True, "damage": 2, "bonus": 1, "portable": True,
@@ -1477,7 +1477,7 @@ CROSSBOW = {"weapon": True, "damage": 3, "bonus": 0, "portable": True,
             "description": "A Guild crossbow with a steel prod and a cranequin, a case of bolts strapped to the stock."}
 GUILD_SPEAR = {"weapon": True, "damage": 2, "bonus": 1, "portable": True,
                "description": "A Guild warden's spear, ash shaft gone grey, the head bound on with wire."}
-CREW_STATE = {"faction": "the Carriers", "yard": True, "body": 3, "wits": 3, "will": 3, "vigor": 8, "max_vigor": 8,
+CREW_STATE = {"faction": "the Carriers", "yard": True, "body": 3, "wits": 3, "will": 3, "hp": 8, "max_hp": 8,
               "water": 10, "max_water": 10, "carry": 8,
               "secret": ["dialog", "gives", "gave", "word_left", "brief"]}
 CREW_WORK = {"yard|guild|wright|chief": "'The yard is the Guild's. Business with it goes through the wright, or through "
@@ -1742,7 +1742,7 @@ HOLLOW_FULL = ("A long hollow under a second rib of black rock, full of horses a
                "A tank on a wheeled bed squats at the end of the picket line, and a man is tied to its wheel.")
 DRY_CAMP_TRACK = "Past the rib a trodden track runs on south toward a second rib of black rock."
 RIDER = {"faction": "House Dreyer", "rider": True, "secret": CAMP_SECRET, "body": 3, "wits": 2, "will": 3,
-         "skills": {"blade": 2, "survival": 1}, "vigor": 7, "max_vigor": 7,
+         "skills": {"blade": 2, "survival": 1}, "hp": 7, "max_hp": 7,
          "description": "A Dreyer rider in dust-grey, saber at the hip, face wrapped to the eyes.",
          "default_line": "The rider looks at you over the fire and says nothing at all.",
          "dialog": {"captain|strake|who leads": "'The captain is by the pennant. Go and ask him, if you like your teeth.'",
@@ -1751,7 +1751,7 @@ SABER = {"weapon": True, "damage": 2, "bonus": 0, "portable": True,
          "description": "A rider's saber, plain and well kept, the well-and-bar stamped on the guard."}
 RIDER_NAMES = ["Corran", "Hesk", "Lusk", "Tamsin", "Varro", "Edric"]
 STRAKE = {"faction": "House Dreyer", "rider": True, "captain": True, "secret": CAMP_SECRET, "body": 4, "wits": 3,
-          "will": 4, "skills": {"blade": 3, "resolve": 2, "parley": 1}, "vigor": 9, "max_vigor": 9,
+          "will": 4, "skills": {"blade": 3, "resolve": 2, "parley": 1}, "hp": 9, "max_hp": 9,
           "description": "A big quiet man in a rider's coat gone white at the seams, grey in the beard, the well-and-bar "
                          "on a ring he turns while he listens.",
           "brief": "You are Captain Iven Strake, sworn to the old lord of House Dreyer, and you bring his riders up to "
@@ -1771,7 +1771,7 @@ STRAKE_SABER = {"weapon": True, "damage": 3, "bonus": 1, "portable": True,
                 "description": "A heavy saber with a basket guard, older than the man who carries it."}
 PAYCHEST_KEY = {"portable": True, "key": True, "description": "A small brass key on a chain, warm from a pocket."}
 SEL = {"faction": "the Carriers", "bound": True, "free_dc": 12, "home": None, "body": 3, "wits": 3, "will": 3,
-       "skills": {"survival": 2, "craft": 1}, "vigor": 5, "max_vigor": 7,
+       "skills": {"survival": 2, "craft": 1}, "hp": 5, "max_hp": 7,
        "description": "A thin man in what was a Guild coat, roped by the wrists to the wheel of the riders' water cart. "
                       "Driver's calluses, a cracked lip, eyes that do not stop moving.",
        "description_free": "A thin man in what was a Guild coat, rope-burned at both wrists, driver's calluses on his hands.",
@@ -1943,10 +1943,10 @@ NEST = {"description": "A nest like a hanging lantern of grey paper, high in the
 TUSKS = {"weapon": True, "damage": 2, "bonus": 0, "portable": False, "description": "Tusks of glass-hard bone."}
 SNOUT = {"weapon": True, "damage": 1, "bonus": 0, "portable": False, "description": "A snout plated in glass scale."}
 BOAR = {"beast": True, "pack": True, "leader": True, "body": 4, "wits": 2, "will": 3, "skills": {"brawl": 2},
-        "vigor": 9, "max_vigor": 9,
+        "hp": 9, "max_hp": 9,
         "description": "A thornback boar the size of a calf, plated in glass-glazed scale, tusks like broken bottles. "
                        "It leads the pack."}
-SOW = {"beast": True, "pack": True, "body": 3, "wits": 2, "will": 2, "skills": {"brawl": 1}, "vigor": 6, "max_vigor": 6,
+SOW = {"beast": True, "pack": True, "body": 3, "wits": 2, "will": 2, "skills": {"brawl": 1}, "hp": 6, "max_hp": 6,
        "description": "A thornback, low and quick, its back a ridge of glassy scale."}
 WILD_KNOWS = {
     "Elder Taan": "There is sweet water in a cleft of the Scar wall north of the Hold, west of the road: the child's "
@@ -2041,10 +2041,10 @@ def keep_wild(s, names):
 # feeds is what the pack does not eat. Idris at the steading remembers old Tessel raising pups; Taan and Iska know the
 # goats.
 THORNBACK = {"eats": ["root", "carrion"], "fed_max": 3, "young_name": "Thornback pup",
-             "stages": [{"name": "young", "from": 0, "state": {"body": 2, "vigor": 4, "max_vigor": 4, "skills": {},
+             "stages": [{"name": "young", "from": 0, "state": {"body": 2, "hp": 4, "max_hp": 4, "skills": {},
                                                                 "description": "A thornback pup, all legs and soft grey "
                                                                                "scale, the glass only starting at its spine."}},
-                        {"name": "adult", "from": 6, "state": {"body": 3, "vigor": 6, "max_vigor": 6, "skills": {"brawl": 1},
+                        {"name": "adult", "from": 6, "state": {"body": 3, "hp": 6, "max_hp": 6, "skills": {"brawl": 1},
                                                                 "description": SOW["description"]},
                          "names": {"m": "Thornback boar", "f": "Thornback sow"}, "parts": [{"name": "Snout", "state": SNOUT}]},
                         {"name": "old", "from": 60, "state": {"body": 2, "description": "An old thornback, its scale gone "
@@ -2055,9 +2055,9 @@ THORNBACK = {"eats": ["root", "carrion"], "fed_max": 3, "young_name": "Thornback
 GOAT_MILK = {"portable": True, "bulk": 0, "left": 1, "max_left": 1, "food": "milk",
              "description": "A gourd of warm goat's milk, a draw's worth: drink it."}
 RIDGE_GOAT = {"eats": ["graze", "root"], "fed_max": 3, "young_name": "Ridge kid",
-              "stages": [{"name": "young", "from": 0, "state": {"body": 1, "vigor": 3, "max_vigor": 3, "skills": {},
+              "stages": [{"name": "young", "from": 0, "state": {"body": 1, "hp": 3, "max_hp": 3, "skills": {},
                                                                  "description": "A ridge kid, red-brown and bouncing."}},
-                         {"name": "adult", "from": 4, "state": {"body": 2, "vigor": 4, "max_vigor": 4, "skills": {},
+                         {"name": "adult", "from": 4, "state": {"body": 2, "hp": 4, "max_hp": 4, "skills": {},
                                                                  "description": "A ridge goat, rust-red to match the rock, "
                                                                                 "with a Keth knot of blue cord in one ear."},
                           "names": {"m": "Ridge billy", "f": "Ridge nanny"}},
@@ -2116,7 +2116,7 @@ def keep_beasts(s, names):
             if n not in names:
                 s.spawn("beast", ridge, n, state={"species": "ridge goat", "sex": sex, "age": age, "stage": "adult",
                                                   "fed": 3, "home": ridge, "herd": "the Keth", "loyalty": 4,
-                                                  "body": 2, "vigor": 4, "max_vigor": 4,
+                                                  "body": 2, "hp": 4, "max_hp": 4,
                                                   "description": RIDGE_GOAT["stages"][1]["state"]["description"]})
     idris = names.get("Idris")
     if idris:

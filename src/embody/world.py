@@ -248,7 +248,7 @@ class Ctx(ScriptObject):
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
-        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "ways", "offer_seat", "withdraw_seat", "strike_wait", "mark_strike", "embodied", "event_at", "locked", "remember",
+        "emit", "say", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "ways", "day_seconds", "offer_seat", "withdraw_seat", "strike_wait", "mark_strike", "embodied", "event_at", "locked", "remember",
         "count", "split", "merge", "transfer", "bulk", "load", "may", "member", "chmod", "chown", "rename",
     )
 
@@ -404,6 +404,10 @@ class Ctx(ScriptObject):
         if self._limits:
             raise Rejected("a script under a grant's limits can't withdraw seats", hint="the world's own rules do")
         return self._w.withdraw_seat(_ev(self._w, entity), str(why or ""), actor=self._actor, caused_by=self._caused_by)
+
+    def day_seconds(self) -> float:
+        """How long a world day is, in world seconds (the world's meta `day_seconds`, 86400 by default)."""
+        return float(self._w.meta().get("day_seconds") or 86400)
 
     def ways(self, a: Any, b: Any, most: int = 8) -> int | None:
         """How many ways apart two bodies (or places) stand: 0 in the same place, 1 next door, None when further
@@ -1693,6 +1697,10 @@ class World:
 
     def _prepare(self, actor_id: str, verb: str, target_id: str | None, params: dict[str, Any] | None,
                  dry: bool) -> tuple[dict[str, Any], str, Script]:
+        if self.need(actor_id)["state"].get("dead"):
+            # first, before any other reason: a mind that hears "the door is shut" never learns it has died
+            raise Rejected("you are dead", hint="nothing you do reaches the world now; perceive still shows it. A guest "
+                                                "whose invite makes characters may join(template=...) for a new one")
         adef, owner = self.resolve_action(actor_id, verb, target_id)
         if owner != actor_id:
             me = self.need(actor_id)
