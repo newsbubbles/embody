@@ -21,7 +21,7 @@ BUILDER = "builder"
 ROLES = (OWNER, AUTHOR_ROLE, BUILDER, NARRATOR, PLAYER, MIND, OBSERVER_ROLE)
 
 # Ops by what they are for. A role is a union of these.
-_ANYONE = {"worlds", "use", "summary", "seats", "leave", "clock"}
+_ANYONE = {"worlds", "use", "summary", "seats", "leave", "clock", "guide"}
 _PLAY = {"join", "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
          "timers", "reclaim", "away", "program", "unprogram", "programs", "claim_seat"}
 _WATCH = {"perceive", "inspect", "find", "history", "recall", "timers", "schemas", "scripts", "script_source", "wait",
@@ -197,8 +197,10 @@ def page(world_name: str, role: str, url: str, token: str, seat: str | None = No
         who = ", ".join(scope_names or []) or "the NPCs your grant names"
         begin = (f"2. Call join() and you are {who}; with more than one, join(entity=<name>) picks. What it returns is for "
                  f"you: the world's paragraph, your character's secret brief, the pace.\n"
-                 f"3. Then loop on wait(): answer what reaches you with say(text, to=...), act when your character would, "
-                 f"remember() what you decide, intend() what you want. Stay in character; you are not a narrator to anyone.")
+                 f"3. Then wait on what matters to your character, never a bare wait(): wait(until=\"to_me()\", timeout=120) "
+                 f"wakes you when someone speaks to you or says your name. Answer with say(text, to=...), act when your "
+                 f"character would, remember() what you decide, intend() what you want. Stay in character; you are not a "
+                 f"narrator to anyone. guide('mind') is your whole guide and guide('watch') the waiting: read them once.")
     elif role == PLAYER:
         if seat:
             begin2 = f"2. Call join(): you are {seat}, a seat kept for them. What it returns is for you, not for them."
@@ -219,7 +221,8 @@ def page(world_name: str, role: str, url: str, token: str, seat: str | None = No
                  "what they see and hear, who is near and what those people are doing, what they carry, what the body "
                  "feels (heat, thirst, a sore leg). Then ask what they do, in one line, the way a game master does.\n"
                  "4. Keep going the same way. Each thing they say is a deed or a word: act(verb, target), say(text, to=...), "
-                 "then wait(timeout) while the world moves, and tell them what happened as it happened: who spoke, what was "
+                 "then wait on the answer you are owed (wait(until=\"heard('', by='<name>')\", timeout=120); guide('watch') has "
+                 "the grammar) while the world moves, and tell them what happened as it happened: who spoke, what was "
                  "said, what changed. No bullet points, no tables, no stat sheets, no tool names. The world's numbers "
                  "(water, hp) are yours to read and theirs to feel: a dry mouth, a hand that shakes. When the world "
                  "refuses an act, say what stood in the way, not the error text. Anticipate a newcomer: if they seem lost, "
@@ -269,7 +272,8 @@ def page(world_name: str, role: str, url: str, token: str, seat: str | None = No
         parts += ["", "Waiting, in a world that does not wait for anyone: after your character speaks or acts and someone "
                       "owes an answer, wait(until=\"heard('', by='<their name>')\", timeout=120) before you tell your "
                       "human, so they hear the reply in the same turn (arrived('<name>') waits for someone to walk in, "
-                      "came('<name>') is true while they are here, did('attack') waits for a deed). Never loop on a bare wait(): it wakes on every footstep. Between your human's turns, "
+                      "came('<name>') is true while they are here, did('attack') waits for a deed, to_me() for anyone "
+                      "speaking to your character or saying its name). Never loop on a bare wait(): it wakes on every footstep. Between your human's turns, "
                       "if your harness can run a command in the background and wake you when it ends, keep one watch "
                       "going so the world can come to them, and perceive() and tell them when it fires:",
                   f"   for i in $(seq 1 60); do curl -s -X POST {base}/op/wait -H \"Authorization: Bearer {token}\" "

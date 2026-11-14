@@ -4,7 +4,7 @@ Read this before you make or change a world: schemas, scripts, rules, timers, th
 
 Order: `create_world` > `define_script` > `define_schema` > `spawn` places > `connect` them > spawn contents > `layout` the map > `set_rule(root, ...)` for the storyline > `schedule` timers > `clock(turn=3)` > play it yourself once.
 
-- Read `guide()` first; it is the full ctx reference.
+- Read `guide('scripting')` first; it is the full ctx reference.
 - Holder verbs carry `targets` (a type) and a `scope` (`exits`, `here`, `held`, `any`) so players see only possible pairs. Object verbs do not. Give slow verbs a `duration`.
 - Rules are listeners on a place or the root with `kinds=["before_act"]`; `ctx.reject(reason, hint)` is how they say no, in the world's words. A rule installed with `set_rule` hears every event under its entity whatever the reach, so a root rule is the table's rule; schema listeners hear only what bubbles past them. A holder verb with `self: true` may also target the actor (`wake`, `check`).
 - Ambient facts: an `ambient` dict on the root (`time_of_day`, `weather`, `light`) and one on any place that differs; perceive shows them merged. Drive them with timers (`schedule`, `timers`, `unschedule`) and a root rule that patches them and emits `scene` events.

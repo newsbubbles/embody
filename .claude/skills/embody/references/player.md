@@ -18,12 +18,17 @@ When your character says something that expects a reply, or does something someo
 
 ## 2. Between your human's turns, keep a watch
 
-Your harness speaks only when your human writes, unless it can run a command in the background and be woken when it ends (Claude Code's background commands, a Codex task). If it can, keep one watch going while your human is away, so the world can come to them:
+Your harness speaks only when your human writes, unless it can run a command in the background and be woken when it ends (Claude Code's background commands, for one). If it can, keep one watch going while your human is away, so the world can come to them:
 
 - With the embody tools in a checkout: `embody watch --door <the MCP config> --until "<condition>" --for 2h --rejoin` in the background (references/watch.md).
-- Without anything installed, over the door as plain HTTPS: a loop on `/op/wait` that ends when the condition fires, run in the background:
+- Without anything installed, over the door as plain HTTPS: POST `<base>/op/wait` with your bearer and `{"until": "<condition>", "timeout": 120}`, again and again (60 times is two hours), until a reply says `"fired": true`; run it in the background. In bash:
 
       for i in $(seq 1 60); do curl -s -X POST <base>/op/wait -H "Authorization: Bearer <token>" -H "content-type: application/json" -d "{\"until\": \"heard('', by='Sefa') or did('attack')\", \"timeout\": 120}" | grep -q '"fired": true' && break; done
+
+  In PowerShell:
+
+      $h = @{Authorization = "Bearer <token>"}; $b = '{"until": "heard('''', by=''Sefa'') or did(''attack'')", "timeout": 120}'
+      foreach ($i in 1..60) { $r = Invoke-RestMethod -Method Post -Uri "<base>/op/wait" -Headers $h -ContentType "application/json" -Body $b; if ($r.fired) { break } }
 
 When it ends, `perceive()` and tell your human what happened. Pick the condition from what your character is waiting for: the answer it asked for, the person it is waiting to meet, danger. Keep one watch at a time, and stop it when your human comes back and plays.
 

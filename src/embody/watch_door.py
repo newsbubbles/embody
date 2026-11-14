@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -32,7 +33,13 @@ def cause(e: BaseException) -> str:
 
 def read_door(path: str, server: str | None = None) -> tuple[str, str]:
     """The URL and the Authorization header from a .mcp.json (an http server entry), or from any text file with
-    an https URL ending in /mcp and 'Bearer <token>' in it (an invite paste)."""
+    an https URL ending in /mcp and 'Bearer <token>' in it (an invite paste), or the URL itself with the token in
+    EMBODY_TOKEN (a harness that keeps its servers in its own config has no file to point at)."""
+    if re.match(r"https?://", path):
+        tok = os.environ.get("EMBODY_TOKEN", "").strip()
+        if not tok:
+            raise SystemExit(f"{path}: a URL door needs the token in EMBODY_TOKEN")
+        return path, tok if tok.lower().startswith("bearer ") else f"Bearer {tok}"
     text = Path(path).read_text(encoding="utf-8")
     try:
         servers = json.loads(text).get("mcpServers") or {}

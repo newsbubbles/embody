@@ -381,7 +381,8 @@ def main(argv: list[str] | None = None) -> int:
                                       "embody watch --door .mcp.json --until \"came('Reeve')\" --for 8h")
     c.add_argument("--until", default="", help="the condition, one expression (see wait's until); empty: any event near you")
     c.add_argument("--for", dest="for_", default="1h", help="how long to watch in real time: 90s, 20m, 8h (default 1h)")
-    c.add_argument("--door", help="a .mcp.json (or a file with the URL and 'Bearer <token>'): watch a hosted world over its door")
+    c.add_argument("--door", help="a .mcp.json (or a file with the URL and 'Bearer <token>'), or the server's URL with the "
+                                  "token in EMBODY_TOKEN: watch a hosted world over its door")
     c.add_argument("--server", help="which server in the .mcp.json (default: the first http one)")
     c.add_argument("--principal", help="watch as this sub-principal of the connection (a mind run over the same grant)")
     c.add_argument("--rejoin", action="store_true", help="if the seat lapsed, take it again with join() and keep watching")

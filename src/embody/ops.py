@@ -870,7 +870,10 @@ class Session:
         else:
             pace = "the world is paused between acts: each of yours moves it a turn"
         how = ["perceive() is your eyes; act(verb, target) your hands; say(text, to=...) your voice",
-               "wait(timeout) blocks until something happens near you",
+               "wait(until=\"heard('', by='<name>')\", timeout=120) returns when what you wait for happens; never "
+               "loop on a bare wait(), it wakes on every footstep (guide('watch') has the grammar)",
+               f"guide('{self.role if self.role in GUIDE_TOPICS else 'player'}') is the whole guide for your part: read it "
+               "before you play",
                "a refusal says why and what would work; do not retry the same call",
                "tell the human what happens as a story, in prose, in the fiction: no bullets, no stat sheets, no tool names"]
         if self.role == PLAYER:
@@ -886,6 +889,28 @@ class Session:
         if self.grant and self.grant.get("brief"):
             out["from_the_host"] = self.grant["brief"]  # this guest's own orders; nobody else's briefing carries them
         return out
+
+    def guide(self, topic: str = "") -> dict[str, Any]:
+        """The embody skill, served over the door, so an agent in any harness reads the rules the host's agents read.
+        No topic: the index and the rules for every role. A topic (narrator, author, player, mind, hosting, watch):
+        that part's whole guide; scripting: the ctx reference (docs/SCRIPTING.md). A pointer to another part reads as
+        guide('<part>')."""
+        root = _skill_root(self.engine)
+        if root is None:
+            raise Rejected("this server carries no guide", hint="the rules are in the briefing join returns")
+        t = (topic or "").strip().lower()
+        if t and t not in GUIDE_TOPICS:
+            raise Rejected(f"no guide {topic!r}", hint="guide() for the index; topics: " + ", ".join(GUIDE_TOPICS))
+        path = (root.parents[2] / "docs" / "SCRIPTING.md" if t == "scripting"
+                else root / ("references/" + t + ".md" if t else "SKILL.md"))
+        if not path.exists():
+            raise Rejected(f"this server carries no guide {t!r}", hint="guide() for the index")
+        text = path.read_text(encoding="utf-8")
+        if text.startswith("---"):
+            text = text.split("---", 2)[2].lstrip()  # the skill's frontmatter is for the harness that loads it
+        text = re.sub(r"references/(\w+)\.md", r"guide('\1')", text)
+        text = text.replace("is in `references/`, beside this file", "is in guide('<part>'), one call per part")
+        return {"topic": t or "index", "text": text, "topics": list(GUIDE_TOPICS)}
 
     def leave(self) -> dict[str, Any]:
         if self.world_id and self.world.principal(self.pid):
@@ -2481,6 +2506,15 @@ class Session:
         def arrived(name: str = "") -> bool:
             return any(e["kind"] == "arrived" and low(name) in low(e["who"]) for e in data["events"])
 
+        mine = ent["name"] if ent else ""
+        parts = [p for p in re.findall(r"[a-z]+", low(mine)) if len(p) > 2]
+
+        def to_me() -> bool:
+            # someone else spoke to you (say to you, talk to you) or said your name in your hearing
+            return any(e["kind"] in ("say", "talked") and e["actor"] and e["actor"] != mine
+                       and (e["target"] == mine or any(re.search(r"\b" + p + r"\b", low(e["text"])) for p in parts))
+                       for e in data["events"])
+
         def state(name: str) -> dict[str, Any]:
             for n, st in data["cards"].items():
                 if low(name) == low(n) or low(name) in low(n):
@@ -2494,7 +2528,7 @@ class Session:
             return {}
 
         view = {k: v for k, v in data.items() if k != "cards"}
-        view.update(heard=heard, did=did, came=came, arrived=arrived, state=state)
+        view.update(heard=heard, did=did, came=came, arrived=arrived, to_me=to_me, state=state)
         return view
 
     def _watch_reply(self, me: str | None, until: str, seen: list[dict[str, Any]], hi: int,
@@ -2676,7 +2710,7 @@ class Session:
     def program(self, thing: str, verb: str, source: str, doc: str = "", params: dict[str, Any] | None = None,
                 frame: str | None = None) -> dict[str, Any]:
         """Put a verb on one machine, with a maker's frame in hand. `source` is a script with def apply(ctx) (and
-        check(ctx) if you like), the language of every verb (guide()). The frame's `maker` names the kinds of thing
+        check(ctx) if you like), the language of every verb (guide('scripting')). The frame's `maker` names the kinds of thing
         it programs, and the thing's access must give you w. The code runs held: it changes only the machine and
         what it holds, plus whoever chose the verb; it reads public state; it makes nothing from nothing and sets
         no rules; what it says reaches others marked untrusted. With the frame's `review` on, the verb waits for
@@ -2722,7 +2756,7 @@ class Session:
         text = LIMITS_HEAD + json.dumps(limits, sort_keys=True) + "\n" + src if limits else src
         try:
             if not Script(text, name=sid).has("apply"):
-                raise Rejected("a verb needs def apply(ctx)", hint="guide() has the language")
+                raise Rejected("a verb needs def apply(ctx)", hint="guide('scripting') has the language")
         except ScriptError as x:
             raise Rejected(x.reason, hint=x.hint) from None
         self._record("program", thing=thing, verb=verb, source=source, doc=doc or None, params=params,
@@ -3017,7 +3051,8 @@ UNTIL_DOC = ("until is one Python expression (the embody script subset: no impor
              "know: t (world seconds), ambient (dict: time_of_day, light, ...), here (your place's name), present "
              "(names of who is here), me (your own state: water, hp, wounded, ...), events (since the wait began: "
              "seq, t, kind, actor, target, text, player), and helpers heard(word, by=''), did(kind, by=''), "
-             "came(name) (is here now), arrived(name) (walked in since the wait began; '' for anyone), state(name) "
+             "came(name) (is here now), arrived(name) (walked in since the wait began; '' for anyone), to_me() "
+             "(someone spoke to you or said your name: the default for a mind or a player owed nothing in particular), state(name) "
              "(the state you can see of someone here or something you hold). Examples: "
              "\"arrived('Reeve')\", \"heard('ruhl', by='Reeve') or me.get('hp', 0) < 3\", \"t >= 43200\", "
              "\"ambient.get('time_of_day') == 'dusk'\". Names match by part, any case.")
@@ -3053,7 +3088,7 @@ OPS = [
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
     "measure", "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
-    "chmod", "chown", "program", "unprogram", "programs", "review",
+    "chmod", "chown", "program", "unprogram", "programs", "review", "guide",
 ]
 
 
@@ -3067,6 +3102,19 @@ _NEWS_KINDS = frozenset({"found", "downed", "killed", "outlawed", "yielded", "tr
                          "lock_picked", "lifted", "caught", "renamed", "destroyed", "burned", "works_done", "stage_done",
                          "challenged", "agreed", "spoiled", "wounded", "rose", "searched", "stopped",
                          "broke_down", "struck"})
+GUIDE_TOPICS = ("narrator", "author", "player", "mind", "hosting", "watch", "scripting")
+
+
+def _skill_root(engine: Any) -> Path | None:
+    """Where the embody skill lives: beside the workspace (the server's image carries it), else beside the package."""
+    ws = getattr(engine, "workspace", None)
+    for base in ([ws.root] if ws is not None else []) + [Path(__file__).resolve().parents[2]]:
+        p = Path(base) / ".claude" / "skills" / "embody"
+        if (p / "SKILL.md").exists():
+            return p
+    return None
+
+
 def _named_in(s: Any) -> set[str]:
     """Every string and attribute name in a script: the params it could read (`params.get("about")`, `params.count`)."""
     if getattr(s, "named", None) is None:

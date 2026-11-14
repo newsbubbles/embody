@@ -362,7 +362,8 @@ def test_http_door_needs_a_bearer_and_serves_the_grants_session():
         status, body = _post(url, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token=inv["token"])
         names = {t["name"] for t in body["result"]["tools"]}
         assert {"join", "say", "act", "wait", "remember", "principals"} <= names  # a player sees what a player may call
-        assert not names & {"spawn", "invite", "define_script", "guide", "load_world", "act_as"}
+        assert "guide" in names  # the rules, for every harness
+        assert not names & {"spawn", "invite", "define_script", "load_world", "act_as"}
         status, body = _post(url, {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
                                    "params": {"name": "join", "arguments": {}}}, token=inv["token"])
         assert status == 200, body

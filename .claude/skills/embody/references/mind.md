@@ -27,7 +27,7 @@ Your words do not move the world; your acts do. A reading of every NPC line in a
 
 ## Waiting without spending
 
-A mind that calls `wait()` every half minute pays a turn for every footstep in the yard. Wait on what matters to the character instead: `wait(until="arrived('Reeve') or heard('Ruhl', by='Reeve') or me.get('hp', 0) < 3", timeout=120)` returns only when that is true, and a timeout moves nothing, so call it again. For hours (the night, the Keth at dusk, a player gone to bed) a session with a shell runs the watcher in the background and ends its turn: `embody watch --door .mcp.json --until "..." --for 8h --rejoin`. The harness wakes the session when the watcher prints FIRED or TIME UP; nothing is spent in between, and every wait keeps the seat from lapsing. references/watch.md has the grammar. Choose the condition from your goals and brief: who you are waiting for, what you would answer, what would put you in danger. Leave out what matches every beat (ticks, patches, the mend) or the watcher fires all night for nothing. To wake when the day turns, name the hour you arm it at: `ambient.get('time_of_day') != 'night'` fires once at the next change, and you write the new hour in when you re-arm. After each beat, set the next condition before you stop. After the host restarts the server, call `perceive()` once: a session whose tools went missing says so, and the host reconnects them (`/mcp` in Claude Code). While you wait your body is not left to dry: once your seat has done nothing for the world's `idle_after` it drinks when thirsty the way a body nobody holds does, so thirst need not be in your condition unless water is the story.
+A mind that calls `wait()` every half minute pays a turn for every footstep in the yard. Wait on what matters to the character instead: `wait(until="to_me() or arrived('Reeve') or me.get('hp', 0) < 3", timeout=120)` returns only when that is true, and a timeout moves nothing, so call it again. For hours (the night, the Keth at dusk, a player gone to bed) run the watcher, the one shell command a mind may run: `embody watch --door .mcp.json --until "..." --for 8h --rejoin`, in the background if your harness wakes you when a command ends, else in the foreground in short runs (references/watch.md says how). Nothing is spent between beats, and every wait keeps the seat from lapsing. references/watch.md has the grammar. Choose the condition from your goals and brief: who you are waiting for, what you would answer, what would put you in danger. Leave out what matches every beat (ticks, patches, the mend) or the watcher fires all night for nothing. To wake when the day turns, name the hour you arm it at: `ambient.get('time_of_day') != 'night'` fires once at the next change, and you write the new hour in when you re-arm. After each beat, set the next condition before you stop. After the host restarts the server, call `perceive()` once: a session whose tools went missing says so, and the host reconnects them (with its harness's command for MCP servers). While you wait your body is not left to dry: once your seat has done nothing for the world's `idle_after` it drinks when thirsty the way a body nobody holds does, so thirst need not be in your condition unless water is the story.
 
 ## Your body while you wait
 
@@ -47,11 +47,13 @@ Pick the model for a mind (a subagent's `model`, a session's model in its harnes
 
 Every playing tool takes `principal=<name>`. The main principal (the one the server was started as) stays who it is; `join(world, "Mara", principal="mara")` embodies Mara as a second principal over the same MCP connection, with no author rights. `principals()` lists them. That is how a subagent inside your session becomes a mind without a server of its own.
 
-| harness | how a mind runs | who sees it |
-|---|---|---|
-| Claude Code subagent (Agent tool) | one agent per NPC; its prompt: "join as X with principal=x, loop on wait(until=...) with a condition from your goals, say and act as X only, remember, never author"; pick its model by references/mind.md | nobody out of game; contact is in-game through `say` |
-| Claude Code session (visible) | a separate session with its own `.mcp.json` principal (`--as mara`) joins the entity | the user can open it and talk to the mind out of character |
-| any MCP harness (Codex, others) | same as above; the per-call `principal` needs no extra process | per harness |
-| plain CLI | `uv run embody --as mara join <world> Mara` then a loop of `uv run embody --as mara watch --until "..." --for 1h` and `say`/`act` | the terminal |
+Go by what your harness can do, not by its name; the names are examples.
 
-Pick the subagent when the mind should be invisible, the session when the user wants to watch or coach it.
+| your harness can | how a mind runs | who sees it |
+|---|---|---|
+| start a helper agent inside the session (Claude Code's Agent tool, for one) | one helper per NPC, with the embody tools only; its prompt: "join as X with principal=x, wait on a condition from your goals with wait(until=...), say and act as X only, remember, never author"; pick its model by the section above | nobody out of game; contact is in-game through `say` |
+| open a separate session you can watch | that session gets its own principal (`--as mara` on its server, or a `mind` invite) and joins the entity | the user can open it and talk to the mind out of character |
+| run a command-line loop in the background | `uv run embody --as mara join <world> Mara`, then a loop of `uv run embody --as mara watch --until "..." --for 1h` and `say`/`act` | the terminal |
+| none of these | play the character yourself between your other turns: `act_as`/`say_as` as the author, or `principal="mara"` on the playing tools | you, in this session |
+
+Pick the helper when the mind should be invisible, the separate session when the user wants to watch or coach it.

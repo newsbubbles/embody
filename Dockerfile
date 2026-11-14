@@ -19,6 +19,9 @@ RUN uv sync --frozen --no-dev --extra mcp
 COPY packs ./packs
 COPY worlds ./worlds
 COPY deploy ./deploy
+# the skill, served over the door by guide() so a guest's agent reads the rules the host's agents read
+COPY .claude/skills/embody ./.claude/skills/embody
+COPY docs/SCRIPTING.md ./docs/SCRIPTING.md
 
 # the database lives on the platform volume mounted at /data; the hosting principal is `host`
 ENV PATH=/app/.venv/bin:$PATH \

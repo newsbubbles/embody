@@ -20,10 +20,12 @@ The expression is one line of the engine's script subset (no imports, no assignm
 | `did(kind, by='')` | an event of that kind happened, by that one if named (`did('attack', by='Hollis')`, `did('arrived')`) |
 | `came(name)` | someone of that name is here now (true already when you arm it? it fires at once, every time, with `already: true`) |
 | `arrived(name)` | someone of that name walked in since the wait began (`''` for anyone, your own steps included) |
+| `to_me()` | someone else spoke to you (a line said to you, a talk aimed at you) or said your name, any part of it |
 | `state(name)` | the public state of someone here or a thing you hold; the owner and narrators see anyone's |
 
-Names match by part and any case: `came('reeve')` matches Reeve Ansel Varrick. Examples:
+Names match by part and any case: `came('reeve')` matches Reeve Ansel Varrick. Start from `to_me()`, the line that is never wrong for a character people talk to: a question put into the room with your name in it is not said to you, and a watch on `heard(..., by=...)` alone sleeps through it. Then add what your goals name. Examples:
 
+    to_me() or arrived('Keth')
     arrived('Reeve') or heard('Ruhl')
     me.get('hp', 0) < 3 or did('attack')
     t >= 43200
@@ -38,8 +40,13 @@ MCP clients drop a call after a minute or two, so a wait of hours runs from a sh
 
     embody watch --door .mcp.json --until "arrived('Reeve') or ambient.get('time_of_day') == 'dusk'" --for 8h --rejoin
 
-`--door` is the `.mcp.json` of a hosted session (or any file with the URL and `Bearer <token>`); without it, `embody --as <name> watch ...` watches this machine's database. It calls `wait(until=...)` in pieces of under a minute, reconnects when the line drops or the server redeploys, takes the seat again with `--rejoin` if it lapsed, and exits printing `FIRED: <condition>` with the events, or `TIME UP`. `--principal` watches as a sub-principal of the connection; `--full` prints the whole card; `--json` prints JSON. Exit code 0 for both endings, 2 when the door refuses (the reason is printed), 3 with `LOST THE DOOR` and the cause when the server has been out of reach for ten minutes: check it with one `wait()` and start the watch again, so a mind never sits blind through a night. Without `--until` it wakes on the first event near you.
+`--door` is the `.mcp.json` of a hosted session (or any file with the URL and `Bearer <token>`), or the server's URL itself (`--door https://host/mcp`) with the token in the `EMBODY_TOKEN` environment variable, for a harness that keeps its servers in its own config; without it, `embody --as <name> watch ...` watches this machine's database. It calls `wait(until=...)` in pieces of under a minute, reconnects when the line drops or the server redeploys, takes the seat again with `--rejoin` if it lapsed, and exits printing `FIRED: <condition>` with the events, or `TIME UP`. `--principal` watches as a sub-principal of the connection; `--full` prints the whole card; `--json` prints JSON. Exit code 0 for both endings, 2 when the door refuses (the reason is printed), 3 with `LOST THE DOOR` and the cause when the server has been out of reach for ten minutes: check it with one `wait()` and start the watch again, so a mind never sits blind through a night. Without `--until` it wakes on the first event near you.
 
-In Claude Code: run it as a background command (`run_in_background`), then end your turn. The harness wakes the session when it exits, so a night of nothing costs nothing. On waking: read what fired, act as the character, set the next condition, start the next watch, stop. Every wait keeps your seat from lapsing.
+How to run it depends on what your harness can do, not on its name:
+
+- It can run a command in the background and wake you when the command ends (Claude Code's background commands, for one): start the watch that way, then end your turn. A night of nothing costs nothing.
+- It cannot: run the watch in the foreground with a `--for` under your harness's time limit for one command (a few minutes, often), and run it again when it prints `TIME UP`. Each run is one call, still far cheaper than a bare `wait()` loop.
+
+On waking: read what fired, act as the character, set the next condition, start the next watch, stop. Every wait keeps your seat from lapsing.
 
 Pick a `--for` that ends the watch at a time you would want to look anyway (a game hour or two of real time), so a condition you got wrong costs one wasted wake, not a dead night.
