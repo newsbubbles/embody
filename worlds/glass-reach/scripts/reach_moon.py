@@ -513,7 +513,9 @@ BOARDS = [("hold_call", "yard", "The captain's notice", "Captain Ruhl nails a no
            "word written on it.")]
 
 def days_left(ctx, st):
-    return int(max(0, (st.moon_due or ctx.t) - ctx.t) / 86400 + 0.5)
+    # dawns between now and the moon: the moon late on day 20 is "tonight" all of day 20 (rounding said "1 day")
+    day = ctx.day_seconds()
+    return max(0, int((st.moon_due or ctx.t) // day) - int(ctx.t // day))
 
 def say_days(d):
     return "Tonight" if d == 0 else (str(d) + (" day" if d == 1 else " days"))
