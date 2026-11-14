@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import os
 import sqlite3
@@ -155,7 +156,12 @@ class Reader:
                                 "forked_from": None, "turn": None, "built": False, "folder": f"worlds/{d.name}"})
         return out
 
-    def state(self, world_id: str | None, since: int, limit: int) -> dict:
+    def state(self, world_id: str | None, since: int, limit: int, after: int | None = None,
+              sig: str | None = None) -> dict:
+        """The world for the viewer. after=<the highest updated_seq the page holds> makes it a diff: only the entities
+        changed since, `ids` (every id there is, so the page drops the destroyed), and the edges, hyperedges and schemas
+        only when their signature differs from `sig`. The scheduled ticks come summed up either way: a world of a few
+        hundred bodies has a tick each, and the page only counts them."""
         with self.conn() as c:
             if not world_id:
                 row = c.execute("SELECT id FROM world ORDER BY rowid DESC LIMIT 1").fetchone()
@@ -165,16 +171,30 @@ class Reader:
             w = c.execute("SELECT * FROM world WHERE id=?", (world_id,)).fetchone()
             if w is None:
                 return {"ok": False, "reason": f"no world {world_id}"}
+            q = "SELECT * FROM entity WHERE world_id=?" + (" AND updated_seq>?" if after is not None else "")
             ents = [{"id": r["id"], "type": r["type"], "parent": r["parent_id"], "name": r["name"],
                      "state": _loads(r["state"]), "pos": _loads(r["pos"]), "version": r["version"],
                      "updated_seq": r["updated_seq"]}
-                    for r in c.execute("SELECT * FROM entity WHERE world_id=? ORDER BY created_seq", (world_id,))]
-            edges = [{"id": r["id"], "source": r["source"], "target": r["target"], "relation": r["relation"],
-                      "data": _loads(r["data"])}
-                     for r in c.execute("SELECT * FROM edge WHERE world_id=?", (world_id,))]
-            hyper = [{"id": r["id"], "relation": r["relation"], "participants": _loads(r["participants"]),
-                      "data": _loads(r["data"])}
-                     for r in c.execute("SELECT * FROM hyperedge WHERE world_id=?", (world_id,))]
+                    for r in c.execute(q + " ORDER BY created_seq",
+                                       (world_id,) if after is None else (world_id, after))]
+            ids = [r[0] for r in c.execute("SELECT id FROM entity WHERE world_id=? ORDER BY created_seq", (world_id,))] \
+                if after is not None else None
+            edge_rows = c.execute("SELECT * FROM edge WHERE world_id=? ORDER BY id", (world_id,)).fetchall()
+            hyper_rows = c.execute("SELECT * FROM hyperedge WHERE world_id=? ORDER BY id", (world_id,)).fetchall()
+            schema_rows = c.execute("SELECT id, extends, space FROM schema WHERE world_id=? ORDER BY id", (world_id,)).fetchall()
+            h = hashlib.sha1()
+            for rows, cols in ((edge_rows, ("id", "source", "target", "relation", "data")),
+                               (hyper_rows, ("id", "relation", "participants", "data")),
+                               (schema_rows, ("id", "extends", "space"))):
+                for r in rows:
+                    h.update("\x1f".join(str(r[k]) for k in cols).encode())
+                h.update(b"\x1e")
+            new_sig = h.hexdigest()[:16]
+            same = after is not None and sig == new_sig
+            edges = None if same else [{"id": r["id"], "source": r["source"], "target": r["target"],
+                                        "relation": r["relation"], "data": _loads(r["data"])} for r in edge_rows]
+            hyper = None if same else [{"id": r["id"], "relation": r["relation"], "participants": _loads(r["participants"]),
+                                        "data": _loads(r["data"])} for r in hyper_rows]
             labels = {r["id"]: r["label"] for r in c.execute("SELECT id, label FROM grants WHERE world_id=?", (world_id,))}                 if _has_table(c, "grants") else {}
             prin = [{"id": r["id"], "kind": r["kind"], "name": r["name"], "entity": r["entity_id"],
                      "capabilities": _loads(r["capabilities"]), "cursor": r["cursor_seq"],
@@ -183,14 +203,18 @@ class Reader:
                     for r in c.execute("SELECT * FROM principal WHERE world_id=?", (world_id,))]
             sched = [{"id": r["id"], "t": r["t"], "kind": r["kind"], "entity": r["entity_id"],
                       "payload": _loads(r["payload"]), "every": r["every"]}
-                     for r in c.execute("SELECT * FROM scheduled WHERE world_id=? ORDER BY t", (world_id,))]
+                     for r in c.execute("SELECT * FROM scheduled WHERE world_id=? AND kind NOT IN ('tick', 'finish') "
+                                        "ORDER BY t", (world_id,))]
+            ticks = c.execute("SELECT COUNT(*) FROM scheduled WHERE world_id=? AND kind IN ('tick', 'finish')",
+                              (world_id,)).fetchone()[0]
             maxseq = c.execute("SELECT COALESCE(MAX(seq),0) FROM event WHERE world_id=?", (world_id,)).fetchone()[0]
             evs = [{"seq": r["seq"], "t": r["t"], "kind": r["kind"], "actor": r["actor_id"], "target": r["target_id"],
                     "reach": r["reach"], "payload": _loads(r["payload"]), "caused_by": r["caused_by"],
                     "path": _loads(r["path"])}
                    for r in c.execute("SELECT * FROM event WHERE world_id=? AND seq>? ORDER BY seq DESC LIMIT ?",
                                       (world_id, since, limit))]
-            schemas = {r["id"]: r["extends"] for r in c.execute("SELECT id, extends FROM schema WHERE world_id=?", (world_id,))}
+            schemas = None if same else {r["id"]: r["extends"] for r in schema_rows}
+            spaces = None if same else {r["id"]: _loads(r["space"]) for r in schema_rows if r["space"]}
         meta = _loads(w["meta"]) or {}
         return {"ok": True, "world": {"id": w["id"], "name": w["name"], "root": w["root_id"], "t": w["t"],
                                       "running": bool(w["clock_running"]), "rate": w["clock_rate"],
@@ -201,8 +225,10 @@ class Reader:
                                       "idle_after": float(meta.get("idle_after", 900.0)),
                                       "claim_lapse": float(meta.get("claim_lapse", 900.0)),
                                       "day_seconds": float(meta.get("day_seconds") or 86400), "now": time.time()},
-                "entities": ents, "edges": edges, "hyperedges": hyper, "principals": prin, "scheduled": sched,
-                "schemas": schemas, "max_seq": maxseq, "events": list(reversed(evs))}
+                "entities": ents, "principals": prin, "scheduled": sched, "ticks": ticks, "max_seq": maxseq,
+                "events": list(reversed(evs)), "sig": new_sig,
+                **({"ids": ids, "diff": True} if ids is not None else {}),
+                **({} if same else {"edges": edges, "hyperedges": hyper, "schemas": schemas, "spaces": spaces})}
 
     def answer(self, path: str, query: dict[str, list[str]], only: str | None = None) -> tuple[int, str, bytes]:
         """One request of the viewer's page, as (status, content type, body). path is relative to the viewer's root
@@ -221,7 +247,10 @@ class Reader:
                     world = only
                 since = int(query.get("since", ["0"])[0])
                 limit = max(1, min(int(query.get("limit", ["60"])[0]), 500))
-                return 200, "application/json", json.dumps(self.state(world, since, limit)).encode()
+                after = query.get("after", [None])[0]
+                sig = query.get("sig", [None])[0]
+                body = self.state(world, since, limit, after=int(after) if after not in (None, "") else None, sig=sig)
+                return 200, "application/json", json.dumps(body, separators=(",", ":")).encode()
             return 404, "application/json", json.dumps({"ok": False, "reason": f"nothing at {path} in the viewer",
                                                         "hint": "the viewer serves /, /worlds.json and /state.json"}).encode()
         except (sqlite3.OperationalError, ValueError) as e:

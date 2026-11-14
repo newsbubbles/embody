@@ -2,107 +2,308 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>embody watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root { --bg:#0f1115; --panel:#161a22; --line:#2a3140; --ink:#e6e9ef; --dim:#8a93a6; --place:#3b7dd8; --creature:#d8903b;
-  --thing:#5fb37a; --other:#9b7bd8; --hot:#ff5d73; --me:#ffd166; font-family: ui-sans-serif, system-ui, sans-serif; }
-html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); }
-body { display:grid; grid-template-columns: 1fr 340px; grid-template-rows: auto 1fr; height:100vh; }
-header { grid-column: 1 / span 2; display:flex; flex-wrap:wrap; align-items:center; gap:4px 18px; padding:8px 14px; border-bottom:1px solid var(--line); font-size:13px; }
-@media (max-width: 900px) {
-  body { grid-template-columns: 1fr; grid-template-rows: auto 52vh 1fr; }
-  header { grid-column: 1; }
-  aside { border-left:none; border-top:1px solid var(--line); }
+:root {
+  --ground:#0e1214; --panel:#13181b; --raise:#192024; --line:#232b2f; --line2:#2f393e; --ink:#e3eaec; --dim:#8d9a9e; --faint:#5d6a6e;
+  --accent:hsl(175 70% 72%); --accent-bg:hsla(175 70% 72% / .13);
+  --place:#3987e5; --creature:#d95926; --thing:#199e70; --other:#8d9a9e;
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --bad:#d03b3b;
+  --cool:#3987e5; --warm:#d03b3b; --mid:#383835;
+  --r:2px; --u:4px; --t:120ms ease-out;
+  --display:"Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
-header b { font-size:15px; } header .dim { color:var(--dim); }
-header .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); display:inline-block; margin-right:6px; }
-header .dot.run { background:var(--thing); box-shadow:0 0 8px var(--thing); }
-#graph { position:relative; overflow:hidden; cursor:grab; }
-#graph.dragging { cursor:grabbing; }
-svg { display:block; width:100%; height:100%; }
-#zoom { position:absolute; right:10px; top:10px; display:flex; gap:4px; }
-#zoom button { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:3px 9px; font-size:12px; cursor:pointer; }
-#zoom button:hover { border-color:var(--dim); }
-header select, header input, header button { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:3px 6px; font-size:13px; }
-header button { cursor:pointer; } header button:hover { border-color:var(--dim); }
-header .fork { color:var(--other); }
-aside { border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
-aside h3 { margin:0; padding:8px 12px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); border-bottom:1px solid var(--line); }
-#events { flex:1; overflow:auto; font-size:12px; font-family: ui-monospace, Consolas, monospace; }
-.ev { padding:5px 12px; border-bottom:1px solid #1d222d; display:grid; grid-template-columns: 44px 1fr; gap:8px; }
-.ev .t { color:var(--dim); } .ev .k { color:var(--place); } .ev .who { color:var(--ink); } .ev .pl { color:var(--dim); white-space:pre-wrap; word-break:break-word; }
-.ev.new { animation: flash 2.5s ease-out; }
-@keyframes flash { from { background:#3a2a10; } to { background:transparent; } }
-#detail { max-height:40%; overflow:auto; font-size:12px; font-family: ui-monospace, Consolas, monospace; padding:8px 12px; white-space:pre-wrap; word-break:break-word; color:var(--dim); border-top:1px solid var(--line); }
-#detail b { color:var(--ink); }
-.node rect { rx:8; fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
-.node.place rect { stroke:var(--place); } .node.creature rect { stroke:var(--creature); } .node.thing rect { stroke:var(--thing); } .node.other rect { stroke:var(--other); }
-.node.hidden rect { stroke-dasharray:4 3; opacity:.55; } .node.hidden text { opacity:.55; }
-.node.me rect { stroke:var(--me); stroke-width:3; filter: drop-shadow(0 0 6px var(--me)); }
-.node.changed rect { animation: pulse 2.5s ease-out; }
-@keyframes pulse { from { fill:#4a3a1a; } to { fill:var(--panel); } }
-.node text { fill:var(--ink); font-size:12px; pointer-events:none; }
-.node text.sub { fill:var(--dim); font-size:10px; }
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; background:var(--ground); color:var(--ink); font:12px/1.4 var(--mono); font-variant-numeric:tabular-nums; }
+button, input, select { font:inherit; color:inherit; }
+button { cursor:pointer; }
+body { display:grid; grid-template-columns:1fr 372px; grid-template-rows:auto 1fr; height:100dvh; overflow:hidden; }
+
+/* header: system status, search, view controls */
+header { grid-column:1 / span 2; display:flex; align-items:center; gap:6px 14px; flex-wrap:wrap; padding:6px 12px; border-bottom:1px solid var(--line); background:var(--panel); }
+.brand { display:flex; align-items:center; gap:8px; min-width:0; }
+.brand b { font:600 15px/1 var(--display); letter-spacing:.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:260px; }
+.led { width:7px; height:7px; border-radius:50%; background:var(--faint); flex:none; }
+.led.on { background:var(--accent); box-shadow:0 0 6px var(--accent); }
+#wsel { max-width:200px; }
+.clock { display:flex; align-items:center; gap:6px; color:var(--dim); white-space:nowrap; }
+.clock b { color:var(--ink); font-weight:500; }
+#dial { width:22px; height:22px; flex:none; }
+.search { display:flex; align-items:center; gap:0; flex:1 1 280px; min-width:220px; max-width:520px; }
+.search input { flex:1; min-width:0; height:30px; padding:0 8px; background:var(--ground); border:1px solid var(--line2); border-right:none; border-radius:var(--r) 0 0 var(--r); }
+.search input:focus, .search select:focus { outline:none; border-color:var(--accent); }
+.search select { height:30px; max-width:130px; background:var(--ground); border:1px solid var(--line2); border-radius:0 var(--r) var(--r) 0; padding:0 4px; }
+.seg { display:flex; border:1px solid var(--line2); border-radius:var(--r); overflow:hidden; }
+.seg button { height:28px; padding:0 10px; background:transparent; border:none; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; font-size:10.5px; }
+.seg button + button { border-left:1px solid var(--line2); }
+.seg button.on { background:var(--accent-bg); color:var(--accent); }
+.depth { display:flex; align-items:center; gap:2px; color:var(--dim); }
+.depth button { width:28px; height:28px; background:transparent; border:1px solid var(--line2); border-radius:var(--r); color:var(--ink); }
+.depth span { min-width:58px; text-align:center; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; }
+.depth b { color:var(--ink); font-weight:500; }
+#err { color:var(--serious); }
+#auth input { height:28px; padding:0 6px; background:var(--ground); border:1px solid var(--line2); border-radius:var(--r); width:220px; }
+#auth button, .btn { height:28px; padding:0 10px; background:var(--raise); border:1px solid var(--line2); border-radius:var(--r); }
+.btn:hover, #auth button:hover, .depth button:hover { border-color:var(--dim); }
+
+/* the stage: one svg, two views, html overlays for trays and the scale */
+main { position:relative; overflow:hidden; min-width:0; min-height:0; touch-action:none; cursor:grab; }
+main.drag { cursor:grabbing; }
+#crumbs { position:absolute; left:10px; top:8px; right:120px; display:flex; flex-wrap:wrap; gap:2px; z-index:3; pointer-events:none; }
+#crumbs button { pointer-events:auto; background:var(--panel); border:1px solid var(--line); border-radius:var(--r); color:var(--dim); padding:3px 7px; font-size:11px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#crumbs button:last-child { color:var(--ink); border-color:var(--line2); }
+#crumbs .sep { color:var(--faint); align-self:center; padding:0 1px; }
+#tools { position:absolute; right:10px; top:8px; display:flex; flex-direction:column; gap:4px; z-index:3; }
+#tools button { width:32px; height:32px; background:var(--panel); border:1px solid var(--line2); border-radius:var(--r); color:var(--ink); font-size:15px; line-height:1; }
+#tools button:hover { border-color:var(--dim); }
+svg#svg { display:block; width:100%; height:100%; }
+#overlay { position:absolute; inset:0; pointer-events:none; z-index:2; }
+#note { position:absolute; left:50%; top:46%; transform:translate(-50%,-50%); color:var(--dim); text-align:center; max-width:360px; z-index:2; pointer-events:none; }
+#scale { position:absolute; left:12px; bottom:12px; z-index:3; color:var(--dim); font-size:10.5px; pointer-events:none; display:flex; align-items:flex-end; gap:12px; }
+#scale .bar { height:6px; border:1px solid var(--dim); border-top:none; }
+#scale .north { width:18px; text-align:center; color:var(--ink); }
+#tally { position:absolute; right:10px; bottom:10px; z-index:3; color:var(--faint); font-size:10.5px; pointer-events:none; text-align:right; }
+
+/* tree boxes */
 .node { cursor:pointer; }
-.tree { stroke:var(--line); stroke-width:1.5; fill:none; }
-.conn { stroke:var(--place); stroke-width:2; fill:none; opacity:.8; }
-.rel { stroke:var(--other); stroke-width:1.5; fill:none; stroke-dasharray:5 4; }
-.lbl { fill:var(--dim); font-size:10px; }
-.tag { fill:var(--me); font-size:10px; font-weight:600; }
-.badge { fill:var(--hot); font-size:10px; }
-.node text.stat { fill:#c9b98f; font-size:10px; }
-.node text.stat.bad { fill:var(--hot); }
-.node.asleep rect { stroke-dasharray:2 3; }
-.node.down rect, .node.dead rect { stroke:var(--hot); }
-.tag.away { fill:var(--dim); }
-.ev .line { color:var(--ink); white-space:pre-wrap; word-break:break-word; }
-#timers { color:var(--dim); }
+.node rect.box { fill:var(--panel); stroke:var(--line2); stroke-width:1; }
+.node rect.bar { stroke:none; }
+.node text { fill:var(--ink); font:600 12.5px var(--display); pointer-events:none; }
+.node text.sub { fill:var(--dim); font:400 10.5px var(--mono); }
+.node text.stat { fill:var(--dim); font:400 10.5px var(--mono); }
+.node text.stat.bad { fill:var(--serious); }
+.node text.seat { fill:var(--accent); font:500 10px var(--mono); }
+.node text.seat.away { fill:var(--faint); }
+.node .more { fill:var(--raise); stroke:var(--line2); }
+.node text.morel { fill:var(--accent); font:500 10.5px var(--mono); }
+.node.hidden rect.box { stroke-dasharray:4 3; } .node.hidden text { opacity:.6; }
+.node.dead rect.box, .node.down rect.box { stroke:var(--bad); }
+.node.sel rect.box { stroke:var(--accent); stroke-width:2; }
+.node.hit rect.box { stroke:var(--accent); stroke-width:2; fill:#16211f; }
+.node.changed rect.box { fill:#1c2a28; transition:fill 900ms ease-out; }
+.dimmed { opacity:.28; }
+.tree { stroke:var(--line2); stroke-width:1.2; fill:none; }
+.conn { stroke:var(--place); stroke-width:1.6; fill:none; opacity:.75; }
+.rel { stroke:var(--dim); stroke-width:1.2; fill:none; stroke-dasharray:5 4; }
+.lbl { fill:var(--dim); font:400 10px var(--mono); }
+
+/* map */
+.area { stroke-width:1.4; vector-effect:non-scaling-stroke; cursor:pointer; }
+.area.k-place { stroke:var(--place); fill:rgba(57,135,229,.07); }
+.area.k-creature { stroke:var(--creature); fill:rgba(217,89,38,.10); }
+.area.k-thing { stroke:var(--thing); fill:rgba(25,158,112,.10); }
+.area.k-other { stroke:var(--other); fill:rgba(141,154,158,.06); stroke-dasharray:5 4; }
+.area.focus { fill:rgba(255,255,255,.015); stroke:var(--line2); stroke-dasharray:2 4; cursor:default; }
+.area.deep { fill-opacity:.4; stroke-opacity:.7; }
+.area.sel, .mark.sel { stroke:var(--accent) !important; stroke-width:2.6; }
+.area.hit { stroke:var(--accent) !important; stroke-width:2.4; fill:var(--accent-bg); }
+.mark { stroke:var(--ground); stroke-width:1.2; vector-effect:non-scaling-stroke; cursor:pointer; }
+.mark.k-place { fill:var(--place); } .mark.k-creature { fill:var(--creature); } .mark.k-thing { fill:var(--thing); } .mark.k-other { fill:var(--other); }
+.mark.hit { stroke:var(--accent); stroke-width:2.4; }
+.mark.inh { fill:none; stroke-dasharray:2 2; }
+.road { stroke:#c8d2d4; stroke-opacity:.45; stroke-width:1.6; fill:none; vector-effect:non-scaling-stroke; }
+.road.hidden { stroke-dasharray:4 4; }
+.mlbl { fill:var(--ink); font-family:var(--mono); paint-order:stroke; stroke:var(--ground); stroke-width:3px; stroke-linejoin:round; pointer-events:none; }
+.mlbl.l1 { font-family:var(--display); font-weight:600; }
+.mlbl.deep { fill:var(--dim); }
+.tray { position:absolute; pointer-events:auto; background:rgba(14,18,20,.92); border:1px dashed var(--line2); border-radius:var(--r); padding:4px; max-width:260px; display:flex; flex-wrap:wrap; gap:3px; }
+.tray .cap { width:100%; color:var(--faint); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; padding:0 2px 2px; display:flex; justify-content:space-between; gap:6px; align-items:center; }
+.tray .cap button { background:none; border:none; color:var(--dim); font-size:14px; line-height:1; padding:0 2px; min-width:22px; min-height:22px; }
+.tray.shut { padding:0; border:none; background:none; }
+.tray.shut .chip { background:rgba(14,18,20,.88); color:var(--dim); font-size:10.5px; }
+.chip { display:inline-flex; align-items:center; gap:5px; max-width:100%; padding:2px 6px; border:1px dashed var(--line2); border-radius:var(--r); background:transparent; color:var(--ink); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.chip.solid { border-style:solid; }
+.chip.hit { border-color:var(--accent); color:var(--accent); border-style:solid; }
+.chip.sel { background:var(--accent-bg); border-color:var(--accent); }
+.chip i { width:7px; height:7px; flex:none; display:inline-block; }
+.kd-place { background:var(--place); } .kd-creature { background:var(--creature); border-radius:50%; } .kd-thing { background:var(--thing); transform:rotate(45deg) scale(.85); } .kd-other { border:1px dashed var(--other); }
+
+/* the side panel: one tab at a time */
+aside { border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; background:var(--panel); }
+.tabs { display:flex; border-bottom:1px solid var(--line); flex:none; }
+.tabs button { flex:1; height:36px; background:transparent; border:none; border-bottom:2px solid transparent; color:var(--dim); text-transform:uppercase; letter-spacing:.09em; font-size:10.5px; }
+.tabs button.on { color:var(--ink); border-bottom-color:var(--accent); }
+.tabs button em { font-style:normal; color:var(--accent); margin-left:4px; }
+.tabs button em#an { color:var(--serious); }
+.pane { flex:1; overflow:auto; min-height:0; display:none; }
+.pane.on { display:block; }
+.grab { display:none; }
+.cap, h4 { margin:0; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); font-weight:500; }
+.sec { padding:10px 12px; border-bottom:1px solid var(--line); }
+.sec h4 { margin-bottom:6px; display:flex; justify-content:space-between; gap:8px; }
+.empty { padding:24px 14px; color:var(--dim); }
+.title { display:flex; align-items:flex-start; gap:10px; }
+.title .sw { width:4px; align-self:stretch; border-radius:1px; flex:none; }
+.title h2 { margin:0; font:700 17px/1.2 var(--display); word-break:break-word; }
+.title .meta { color:var(--dim); margin-top:3px; display:flex; flex-wrap:wrap; gap:4px 8px; }
+.title .meta button { background:none; border:none; padding:0; color:var(--dim); text-decoration:underline dotted; }
+.badges { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; }
+.badge { padding:1px 6px; border-radius:var(--r); border:1px solid var(--line2); font-size:10.5px; color:var(--dim); }
+.badge.critical { border-color:var(--bad); color:#f08a8a; } .badge.serious { border-color:var(--serious); color:var(--serious); }
+.badge.warning { border-color:var(--warn); color:var(--warn); } .badge.good { border-color:var(--good); color:#5fd35f; }
+.meter { display:grid; grid-template-columns:52px 1fr 64px; align-items:center; gap:8px; margin:4px 0; }
+.meter .track { height:6px; background:var(--ground); border:1px solid var(--line); border-radius:1px; overflow:hidden; }
+.meter .fill { height:100%; background:var(--dim); }
+.meter .fill.low { background:var(--serious); } .meter .fill.crit { background:var(--bad); }
+.meter span:last-child { text-align:right; }
+.chips { display:flex; flex-wrap:wrap; gap:4px; }
+.chips .chip { border-style:solid; cursor:pointer; }
+.chips .chip:hover { border-color:var(--dim); }
+.rels { display:grid; grid-template-columns:auto 1fr; gap:4px 10px; align-items:start; }
+.rels .rn { color:var(--dim); white-space:nowrap; padding-top:2px; }
+.kv { display:grid; grid-template-columns:minmax(80px,auto) 1fr; gap:3px 10px; }
+.kv > span:nth-child(odd) { color:var(--dim); word-break:break-all; }
+.kv > span:nth-child(even) { word-break:break-word; }
+.kv details summary { cursor:pointer; color:var(--dim); }
+.kv pre, pre.raw { margin:4px 0 0; white-space:pre-wrap; word-break:break-word; color:var(--dim); font-size:11px; }
+.acts { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.peer { display:grid; grid-template-columns:minmax(70px,auto) 1fr 46px; gap:4px 8px; align-items:center; }
+.peer .zbar { position:relative; height:10px; background:var(--ground); border:1px solid var(--line); }
+.peer .zbar i { position:absolute; top:0; bottom:0; }
+.peer .zbar b { position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:var(--faint); }
+
+/* results and stats */
+.rlist { list-style:none; margin:0; padding:0; }
+.rlist li { display:grid; grid-template-columns:10px 1fr auto; gap:8px; align-items:center; padding:6px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+.rlist li:hover { background:var(--raise); }
+.rlist li.sel { background:var(--accent-bg); }
+.rlist .nm { font:600 12.5px var(--display); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rlist .wh { color:var(--dim); font-size:10.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rlist .ty { color:var(--faint); font-size:10.5px; }
+.stat { display:grid; grid-template-columns:1fr auto; gap:2px 10px; padding:8px 12px; border-bottom:1px solid var(--line); }
+.stat .an { font-weight:500; }
+.stat .nums { color:var(--dim); text-align:right; font-size:11px; }
+.stat svg { grid-column:1 / span 2; width:100%; height:26px; }
+.stat svg .dot { fill:var(--dim); } .stat svg .dot.me { fill:var(--accent); }
+.stat svg .band { fill:rgba(141,154,158,.12); } .stat svg .mean { stroke:var(--ink); stroke-width:1.5; } .stat svg .axis { stroke:var(--line2); }
+table.z { border-collapse:collapse; width:100%; font-size:11px; }
+table.z th, table.z td { padding:4px 6px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+table.z th { color:var(--faint); font-weight:500; font-size:10px; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; position:sticky; top:0; background:var(--panel); }
+table.z th.on { color:var(--accent); }
+table.z td:first-child, table.z th:first-child { text-align:left; max-width:120px; overflow:hidden; text-overflow:ellipsis; }
+table.z tr:hover td { background:var(--raise); }
+table.z tr { cursor:pointer; }
+.legend { display:flex; gap:10px; align-items:center; color:var(--dim); font-size:10.5px; flex-wrap:wrap; }
+.legend i { display:inline-block; width:22px; height:8px; vertical-align:middle; margin-right:4px; }
+
+/* events and seats */
+.filters { display:flex; flex-wrap:wrap; gap:4px; padding:8px 12px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel); z-index:1; }
+.filters button { padding:3px 8px; background:transparent; border:1px solid var(--line2); border-radius:var(--r); color:var(--dim); font-size:11px; }
+.filters button.on { border-color:var(--accent); color:var(--accent); }
+.ev { padding:5px 12px; border-bottom:1px solid var(--line); display:grid; grid-template-columns:52px 1fr; gap:8px; }
+.ev .t { color:var(--faint); }
+.ev .k { color:var(--accent); font-size:10.5px; }
+.ev .ln { word-break:break-word; }
+.ev .pl { color:var(--dim); word-break:break-word; font-size:11px; }
+.ev.new .t { color:var(--accent); }
+.ev button { background:none; border:none; padding:0; color:var(--ink); text-decoration:underline dotted var(--faint); }
+.seat { display:grid; grid-template-columns:10px 1fr auto; gap:8px; align-items:center; padding:7px 12px; border-bottom:1px solid var(--line); }
+.seat .nm { font:600 12.5px var(--display); }
+.seat .wh { color:var(--dim); font-size:11px; }
+.seat button { background:none; border:none; padding:0; color:var(--dim); text-decoration:underline dotted; }
+
+@media (max-width: 760px) {
+  body { grid-template-columns:1fr; grid-template-rows:auto 1fr; }
+  header { grid-column:1; gap:6px 8px; padding:6px 10px; }
+  .brand b { max-width:140px; }
+  .search { order:5; flex:1 1 100%; max-width:none; }
+  #counts { display:none; }
+  aside { position:fixed; left:0; right:0; bottom:0; height:56dvh; border-left:none; border-top:1px solid var(--line2); z-index:20; transform:translateY(calc(100% - 40px)); transition:transform var(--t); }
+  aside.open { transform:none; }
+  .grab { display:block; height:14px; flex:none; position:relative; }
+  .grab::after { content:""; position:absolute; left:50%; top:5px; width:40px; height:4px; margin-left:-20px; border-radius:2px; background:var(--line2); }
+  .tabs button { height:40px; }
+  #scale { bottom:52px; } #tally { bottom:52px; max-width:58%; }
+  #crumbs { right:52px; }
+  #tools button { width:40px; height:40px; }
+  .rlist li, .seat { padding:9px 12px; }
+}
 </style>
 </head>
 <body>
 <header>
-  <b>embody watch</b>
-  <select id="wsel" title="which world to watch"></select>
-  <span id="fork" class="fork"></span>
-  <span class="dim" id="folder" title="the world's folder in the workspace"></span>
-  <span><span id="dot" class="dot"></span><span id="clock"></span></span>
-  <span class="dim" id="counts"></span>
-  <span id="timers" title="what the world clock has coming"></span>
-  <span class="dim" id="err"></span>
-  <span id="auth" hidden><input id="tok" type="password" placeholder="your invite token" size="30" autocomplete="off"> <button id="tokgo">watch</button></span>
-  <span class="dim" id="where" title="database · workspace"></span>
+  <div class="brand"><span class="led" id="led" title="clock"></span><b id="wname">embody watch</b><select id="wsel" title="which world to watch" hidden></select></div>
+  <div class="clock" title="world time"><svg id="dial" viewBox="-12 -12 24 24" aria-hidden="true"></svg><span id="clock"></span></div>
+  <label class="search"><input id="q" type="search" placeholder="search: name, or hp<3, faction:keth, is:dead" autocomplete="off" spellcheck="false" aria-label="search"><select id="qt" aria-label="type"></select></label>
+  <div class="seg" role="tablist"><button id="vtree" class="on">tree</button><button id="vmap">map</button></div>
+  <div class="depth"><button id="dless" aria-label="less depth">&minus;</button><span>depth <b id="dval">1</b></span><button id="dmore" aria-label="more depth">+</button></div>
+  <span id="counts" style="color:var(--faint)"></span>
+  <span id="err"></span>
+  <span id="auth" hidden><input id="tok" type="password" placeholder="your invite token" autocomplete="off"> <button id="tokgo">watch</button></span>
 </header>
-<div id="graph"><svg id="svg"><g id="view"></g></svg>
-  <div id="zoom"><button id="zin" title="zoom in">+</button><button id="zout" title="zoom out">−</button><button id="zfit" title="fit the whole world (or double-click the graph)">fit</button></div>
-</div>
-<aside>
-  <h3>events</h3>
-  <div id="events"></div>
-  <h3>entity</h3>
-  <div id="detail">click a box</div>
+<main id="stage">
+  <div id="crumbs"></div>
+  <div id="tools"><button id="zin" title="zoom in">+</button><button id="zout" title="zoom out">&minus;</button><button id="zfit" title="fit (double-click empty space)">&#x2922;</button><button id="up" title="up one level">&uarr;</button></div>
+  <svg id="svg"><g id="view"></g></svg>
+  <div id="overlay"></div>
+  <div id="note"></div>
+  <div id="scale"></div>
+  <div id="tally"></div>
+</main>
+<aside id="side">
+  <div class="grab" id="grab"></div>
+  <div class="tabs"><button data-tab="ent" class="on">entity</button><button data-tab="res">results<em id="rn"></em></button><button data-tab="evs">events<em id="an" title="refusals, script errors, deaths since you last looked"></em></button><button data-tab="seats">seats<em id="sn"></em></button></div>
+  <div class="pane on" id="p-ent"><div class="empty">Tap something to read it here. Double-tap a place to go inside it.</div></div>
+  <div class="pane" id="p-res"><div class="empty">Search to gather a set: by name, or by state (<b>hp&lt;3</b>, <b>water&lt;=2</b>, <b>faction:keth</b>, <b>is:dead</b>, <b>has:layout</b>), narrowed by type. The set gets its numbers here: mean, spread, and how far each one stands from the rest.</div></div>
+  <div class="pane" id="p-evs"></div>
+  <div class="pane" id="p-seats"></div>
 </aside>
 <script>
-const BOX_W = 170, BOX_H = 58, GAP_X = 14, GAP_Y = 84, PAD = 24, TOP = 70;
-let lastSeq = -1, lastVersions = "", pinned = null, data = null, seenSeq = 0;
-// Standalone (tools/watch.py) the page is the root of its own server and needs no token. Hosted, the MCP server
-// serves it at /watch and its data answers only to a grant's bearer token, kept in this tab once given.
+"use strict";
+// ---------------------------------------------------------------- feed: the page holds the world and asks for changes
+// Standalone (tools/watch.py) the page is the root of its own server and needs no token. Hosted, the MCP server serves
+// it at /watch and its data answers only to a grant's bearer token, kept in this tab once given.
 const BASE = /\/watch\/?$/.test(location.pathname) ? location.pathname.replace(/\/$/, "") : "";
+const $ = id => document.getElementById(id);
 let token = null;
 try { token = sessionStorage.getItem("embody-token"); } catch (e) {}
-if (location.hash.startsWith("#token=")) {      // an invite's viewer link: keep the token in the tab, drop it from the address
-  token = decodeURIComponent(location.hash.slice(7));
+const H0 = location.hash.slice(1);
+if (H0.startsWith("token=")) {       // an invite's viewer link: keep the token in the tab, drop it from the address
+  token = decodeURIComponent(H0.slice(6));
   try { sessionStorage.setItem("embody-token", token); } catch (e) {}
   history.replaceState(null, "", location.pathname + location.search);
 }
-let watching = location.hash ? location.hash.slice(1) : null, knownWorlds = "";
-const $ = id => document.getElementById(id);
+const W = {   // the world as the page holds it
+  id: null, info: null, ents: new Map(), kids: new Map(), edges: [], hyper: [], schemas: {}, spaces: {}, prin: [],
+  sched: [], ticks: 0, after: null, sig: null, maxSeq: 0, events: [], kindMemo: new Map(), byType: new Map()
+};
+const V = {   // what the page shows
+  view: "tree", focus: null, depth: { tree: 1, map: 2 }, sel: null, tab: "ent", expanded: new Set(), limits: new Map(),
+  q: "", qt: "", hits: null, hitList: [], prevFocus: null, evFilter: "story", evMine: false, sortKey: null, sortDir: -1,
+  seenSeq: 0, alertSeen: 0, changed: new Set(), tray: null
+};
+(function readHash() {
+  const h = location.hash.slice(1);
+  if (!h) return;
+  if (!h.includes("=")) { W.id = decodeURIComponent(h); return; }
+  const p = new URLSearchParams(h);
+  if (p.get("w")) W.id = p.get("w");
+  if (p.get("e")) V.sel = p.get("e");
+  if (p.get("f")) V.focus = p.get("f");
+  if (p.get("v") === "map") V.view = "map";
+})();
+function syncControls() {
+  $("vtree").classList.toggle("on", V.view === "tree"); $("vmap").classList.toggle("on", V.view === "map"); $("dval").textContent = V.depth[V.view];
+}
+function writeHash() {
+  const p = new URLSearchParams();
+  if (W.id) p.set("w", W.id);
+  if (V.view === "map") p.set("v", "map");
+  if (V.focus && W.info && V.focus !== W.info.root) p.set("f", V.focus);
+  if (V.sel) p.set("e", V.sel);
+  history.replaceState(null, "", location.pathname + location.search + "#" + p.toString());
+}
 async function get(path) {
   const r = await fetch(BASE + path, { cache: "no-store", headers: token ? { "Authorization": "Bearer " + token } : {} });
   if (r.status === 401 || r.status === 403) {
     const b = await r.json().catch(() => ({}));
     $("auth").hidden = false;
-    $("err").textContent = r.status === 401 ? (token ? "that token does not open this world; paste a live one" : "this viewer wants your invite token") : (b.reason || "this grant may not watch");
+    $("err").textContent = r.status === 401 ? (token ? "that token does not open this world: paste a live one" : "paste your invite token to watch") : (b.reason || "this grant may not watch");
     const e = new Error(b.reason || ("HTTP " + r.status)); e.auth = true; throw e;
   }
   if (!r.ok) throw new Error("HTTP " + r.status);
@@ -111,297 +312,856 @@ async function get(path) {
 function useToken() {
   token = $("tok").value.trim(); if (!token) return;
   try { sessionStorage.setItem("embody-token", token); } catch (e) {}
-  $("tok").value = ""; $("auth").hidden = true; $("err").textContent = ""; lastSeq = -1; knownWorlds = ""; poll();
+  $("tok").value = ""; $("auth").hidden = true; $("err").textContent = ""; resetWorld(W.id); poll();
 }
-
-// ---- zoom and pan: one transform on the <g id="view">, kept across redraws, reset by fit
-const cam = { k: 1, x: 0, y: 0, fitted: false, w: 0, h: 0 };
-function applyCam() { $("view").setAttribute("transform", `translate(${cam.x},${cam.y}) scale(${cam.k})`); }
-function fit() {
-  const g = $("graph"), cw = g.clientWidth, ch = g.clientHeight;
-  if (!cam.w || !cam.h) return;
-  cam.k = Math.min(1.6, (cw - 16) / cam.w, (ch - 16) / cam.h);
-  cam.x = (cw - cam.w * cam.k) / 2; cam.y = (ch - cam.h * cam.k) / 2 + 8;
-  cam.fitted = true; applyCam();
+function resetWorld(id) {
+  Object.assign(W, { id, info: null, ents: new Map(), kids: new Map(), edges: [], hyper: [], schemas: {}, spaces: {}, prin: [],
+    sched: [], ticks: 0, after: null, sig: null, maxSeq: 0, events: [], kindMemo: new Map(), byType: new Map() });
+  V.focus = null; V.sel = null; V.expanded.clear(); V.limits.clear(); V.hits = null; V.hitList = []; cams.tree.fitted = cams.map.fitted = false; cams.tree.k = cams.map.k = 0;
 }
-function zoomAt(f, px, py) {
-  const k = Math.min(6, Math.max(0.08, cam.k * f));
-  cam.x = px - (px - cam.x) * (k / cam.k); cam.y = py - (py - cam.y) * (k / cam.k); cam.k = k;
-  cam.fitted = false; applyCam();
-}
-(function wire() {
-  const g = $("graph");
-  g.addEventListener("wheel", ev => { ev.preventDefault(); const r = g.getBoundingClientRect(); zoomAt(ev.deltaY < 0 ? 1.15 : 1 / 1.15, ev.clientX - r.left, ev.clientY - r.top); }, { passive: false });
-  let drag = null;
-  g.addEventListener("mousedown", ev => { if (ev.button !== 0) return; drag = { x: ev.clientX, y: ev.clientY, cx: cam.x, cy: cam.y, moved: false }; g.classList.add("dragging"); });
-  window.addEventListener("mousemove", ev => { if (!drag) return; const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true; cam.x = drag.cx + dx; cam.y = drag.cy + dy; cam.fitted = false; applyCam(); });
-  window.addEventListener("mouseup", () => { if (drag && drag.moved) suppressClick = true; drag = null; g.classList.remove("dragging"); });
-  g.addEventListener("dblclick", fit);
-  $("zin").onclick = () => zoomAt(1.3, g.clientWidth / 2, g.clientHeight / 2);
-  $("zout").onclick = () => zoomAt(1 / 1.3, g.clientWidth / 2, g.clientHeight / 2);
-  $("zfit").onclick = fit;
-  window.addEventListener("resize", () => { if (cam.fitted) fit(); });
-  $("tokgo").onclick = useToken; $("tok").addEventListener("keydown", ev => { if (ev.key === "Enter") useToken(); });
-  get("/info.json").then(i => { $("where").textContent = [i.db, i.root].filter(Boolean).join(" · "); }).catch(() => {});
-  $("wsel").onchange = () => { watching = $("wsel").value; location.hash = watching; lastSeq = -1; cam.fitted = false; cam.w = 0; pinned = null; poll(); };
-  window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (h && h !== watching) { watching = h; lastSeq = -1; cam.w = 0; poll(); } });
-})();
-let suppressClick = false;
-
-function kindOf(e, schemas) {
-  let t = e.type, guard = 0;
-  while (t && guard++ < 20) { if (t === "place" || t === "creature" || t === "thing") return t; t = schemas[t]; }
-  return "other";
-}
-function short(v, n = 90) { const s = typeof v === "string" ? v : JSON.stringify(v); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
-function nameOf(id) { if (!data || !id) return id || ""; const e = data.entities.find(x => x.id === id); return e ? (e.name || e.type) + " (" + e.id + ")" : id; }
-function plain(id) { return nameOf(id).split(" (")[0]; }
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
-let kidsBy = {};
-function kidsOf(id) { return kidsBy[id] || []; }
-function num(v) { return v === undefined || v === null ? null : Number(v); }
-// a stack is that many of itself: Emberglass ×60
-function label(e) { const c = num((e.state || {}).count); return (e.name || e.type) + (c !== null ? " ×" + c : ""); }
-function labelOf(id) { const e = data && data.entities.find(x => x.id === id); return e ? label(e) : plain(id); }
-// what keeps it shut: its own `locked`, or an attached lock child that is locked
-function lockOf(e) { const st = e.state || {}; if (st.locked) return e; return kidsOf(e.id).find(k => k.state && k.state.attached && k.state.locked) || null; }
-function bulkOf(e) { const st = e.state || {}; const each = st.bulk !== undefined && st.bulk !== null ? Number(st.bulk) : (st.capacity !== undefined && st.capacity !== null ? 2 : 1); return each * (num(st.count) ?? 1); }
-function hm(sec) { sec = Math.max(0, sec); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? h + "h" + (m ? String(m).padStart(2, "0") : "") : m + "m"; }
-function ago(sec) { return sec < 90 ? Math.round(sec) + "s" : sec < 5400 ? Math.round(sec / 60) + "m" : (sec / 3600).toFixed(1) + "h"; }
-// the box's status line: a body's water and hp and what is wrong with it, a stack, a lock, a well's level,
-// a hidden place and who knows it, a works' stage and labour
-function status(e, k) {
-  const st = e.state || {}, out = [], bad = [];
-  if (st.water !== undefined && st.water !== null && k === "creature") {
-    out.push("w " + st.water + "/" + (st.max_water ?? 10), "hp " + (st.hp ?? "?") + "/" + (st.max_hp ?? "?"));
-  } else if (st.hp !== undefined) out.push("hp " + st.hp + (st.max_hp !== undefined ? "/" + st.max_hp : ""));
-  ["dead", "down", "asleep", "wounded", "thirsty"].forEach(f => { if (st[f]) bad.push(f); });
-  if (st.left !== undefined && st.left !== null && (st.capacity !== undefined || st.water_source || st.max_left !== undefined))
-    out.push("left " + st.left + ((st.capacity ?? st.max_left) !== undefined ? "/" + (st.capacity ?? st.max_left) : ""));
-  else if (st.water_source) out.push("water, endless");
-  const lk = lockOf(e);
-  if (lk) bad.push("🔒 locked");
-  else if (st.broken && (e.type === "lock" || st.attached)) bad.push("lock broken");
-  else if (kidsOf(e.id).some(c => c.state && c.state.attached && c.state.broken)) out.push("lock broken");
-  if (st.hidden) out.push("hidden" + (st.known_to ? " · " + st.known_to : "") + (st.find_dc ? " · dc " + st.find_dc : ""));
-  if (Array.isArray(st.stages)) {
-    const i = num(st.stage);
-    if (i === null) out.push("plan · " + st.stages.length + " stages");
-    else {
-      const sg = st.stages[i];
-      out.push(sg ? "stage " + (i + 1) + "/" + st.stages.length + " " + (sg.name || "") + " · " + (Math.round((num(st.labour) ?? 0) * 10) / 10) + "/" + (sg.labour ?? "?") + "h" : "built");
-    }
-  } else if (st.stage !== undefined && st.stage !== null) out.push("stage " + st.stage);
-  if (st.lit) out.push("lit"); if (st.fog) out.push("fog");
-  return { text: bad.concat(out).join(" · "), bad: bad.length > 0, flags: ["dead", "down", "asleep"].filter(f => st[f]) };
-}
-// a seat in a word: whose it is, the role, and whether it is in use
-function seatTag(p, w) {
-  const who = p.label || p.name || p.id;
-  const idle = p.acted_t === null || p.acted_t === undefined || w.t - p.acted_t > w.idle_after;
-  const seen = p.last_seen ? " · seen " + ago(w.now - p.last_seen) + " ago" : "";
-  return { text: who + (p.role ? " · " + p.role : "") + (idle ? " · away" : " · in play") + seen, away: idle };
-}
-
-function layout(d) {
-  const byParent = {};
-  d.entities.forEach(e => { (byParent[e.parent || "__none"] ||= []).push(e); });
-  const size = {}, rowsOf = {};
-  const COLS = 3;
-  const measure = e => {
-    const kids = byParent[e.id] || [];
-    if (!kids.length) { size[e.id] = { w: BOX_W, h: BOX_H }; return size[e.id]; }
-    kids.forEach(measure);
-    const rows = []; for (let i = 0; i < kids.length; i += COLS) rows.push(kids.slice(i, i + COLS));
-    rowsOf[e.id] = rows.map(r => ({ kids: r, w: r.reduce((a, k) => a + size[k.id].w, 0) + GAP_X * (r.length - 1), h: Math.max(...r.map(k => size[k.id].h)) }));
-    size[e.id] = { w: Math.max(BOX_W, ...rowsOf[e.id].map(r => r.w)), h: BOX_H + rowsOf[e.id].reduce((a, r) => a + GAP_Y + r.h, 0) };
-    return size[e.id];
-  };
-  const roots = d.entities.filter(e => !e.parent || !d.entities.some(x => x.id === e.parent));
-  roots.forEach(measure);
-  const pos = {};
-  const place = (e, x, y) => {
-    const s = size[e.id];
-    pos[e.id] = { x: x + s.w / 2 - BOX_W / 2, y };
-    let cy = y + BOX_H + GAP_Y;
-    (rowsOf[e.id] || []).forEach(r => { let rx = x + (s.w - r.w) / 2; r.kids.forEach(k => { place(k, rx, cy); rx += size[k.id].w + GAP_X; }); cy += r.h + GAP_Y; });
-  };
-  let x = PAD, maxH = 0; roots.forEach(r => { place(r, x, TOP); x += size[r.id].w + GAP_X * 3; maxH = Math.max(maxH, size[r.id].h); });
-  return { pos, totalW: x + PAD, totalH: TOP + maxH + PAD };
-}
-
-function render(d, changed) {
-  const { pos, totalW, totalH } = layout(d);
-  const svg = $("view");
-  const firstDraw = !cam.w;
-  cam.w = totalW; cam.h = totalH;
-  const me = {}; d.principals.forEach(p => { if (p.entity) me[p.entity] = p; });
-  kidsBy = {}; d.entities.forEach(e => { if (e.parent) (kidsBy[e.parent] ||= []).push(e); });
-  let out = "";
-  d.entities.forEach(e => {
-    if (e.parent && pos[e.parent]) {
-      const a = pos[e.parent], b = pos[e.id];
-      const ax = a.x + BOX_W / 2, ay = a.y + BOX_H, bx = b.x + BOX_W / 2, by = b.y;
-      out += `<path class="tree" d="M${ax},${ay} C${ax},${ay + GAP_Y / 2} ${bx},${by - GAP_Y / 2} ${bx},${by}"/>`;
-    }
-  });
-  const seen = new Set();
-  d.edges.forEach(ed => {
-    const a = pos[ed.source], b = pos[ed.target]; if (!a || !b) return;
-    const conn = ed.relation === "connects_to";
-    const key = [ed.source, ed.target].sort().join("|") + ed.relation;
-    if (conn && seen.has(key)) return; seen.add(key);
-    const ax = a.x + BOX_W / 2, bx = b.x + BOX_W / 2, mx = (ax + bx) / 2;
-    if (conn) {
-      const lift = 40 + Math.abs(ax - bx) * 0.12, my = Math.min(a.y, b.y) - lift;
-      out += `<path class="conn" d="M${ax},${a.y} Q${mx},${my} ${bx},${b.y}"/>`;
-      const via = ed.data && ed.data.via ? "via " + plain(ed.data.via) : "";
-      if (via) out += `<text class="lbl" x="${mx}" y="${(a.y + my) / 2}" text-anchor="middle">${esc(via)}</text>`;
-    } else {
-      const drop = 30 + Math.abs(ax - bx) * 0.1, my = Math.max(a.y, b.y) + BOX_H + drop;
-      out += `<path class="rel" d="M${ax},${a.y + BOX_H} Q${mx},${my} ${bx},${b.y + BOX_H}"/>`;
-      out += `<text class="lbl" x="${mx}" y="${my - drop / 2 + 12}" text-anchor="middle">${esc(ed.relation)}</text>`;
-    }
-  });
-  d.entities.forEach(e => {
-    const p = pos[e.id]; if (!p) return;
-    const k = kindOf(e, d.schemas), st = e.state || {};
-    const s = status(e, k);
-    const cls = ["node", k, st.hidden ? "hidden" : "", me[e.id] ? "me" : "", changed.has(e.id) ? "changed" : ""].concat(s.flags).join(" ");
-    out += `<g class="${cls}" data-id="${e.id}" transform="translate(${p.x},${p.y})"><title>${esc(label(e) + (s.text ? "\n" + s.text : ""))}</title><rect width="${BOX_W}" height="${BOX_H}"/>`;
-    out += `<text x="10" y="18">${esc(short(label(e), 23))}</text><text class="sub" x="10" y="33">${esc(short(e.type + " · " + e.id, 30))}</text>`;
-    if (s.text) out += `<text class="stat${s.bad ? " bad" : ""}" x="10" y="48">${esc(short(s.text, 30))}</text>`;
-    if (me[e.id]) { const t = seatTag(me[e.id], d.world); out += `<text class="tag${t.away ? " away" : ""}" x="${BOX_W - 6}" y="-5" text-anchor="end">${esc(short(t.text, 40))} ◀</text>`; }
-    if (st.rules && st.rules.length) out += `<text class="badge" x="${BOX_W - 6}" y="33" text-anchor="end">⚖ ${st.rules.length}</text>`;
-    out += `</g>`;
-  });
-  d.hyperedges.forEach((h, i) => {
-    out += `<text class="lbl" x="${PAD}" y="${18 + i * 14}">${esc(h.relation)}: ${esc(h.participants.map(plain).join(", "))}</text>`;
-  });
-  svg.innerHTML = out;
-  svg.querySelectorAll(".node").forEach(n => n.addEventListener("click", () => { if (suppressClick) { suppressClick = false; return; } pinned = n.dataset.id; showDetail(); }));
-  if (firstDraw || cam.fitted) fit(); else applyCam();
-}
-
+let knownWorlds = "";
 async function refreshWorlds() {
   const ws = await get("/worlds.json");
   const key = ws.map(w => w.id + ":" + w.name + ":" + w.built).join("|");
-  if (key === knownWorlds) return ws;
+  if (key === knownWorlds) return;
   knownWorlds = key;
-  $("wsel").innerHTML = ws.map(w => `<option value="${esc(w.id)}"${w.built === false ? " disabled" : ""}>${esc(w.name)} (${esc(w.id)})${w.forked_from ? " ⑂" : ""}${w.built === false ? " · not built: load_world(id)" : ""}</option>`).join("");
-  return ws;
+  const sel = $("wsel");
+  sel.innerHTML = ws.map(w => `<option value="${esc(w.id)}"${w.built === false ? " disabled" : ""}>${esc(w.name)}${w.forked_from ? " (fork)" : ""}${w.built === false ? " (not built)" : ""}</option>`).join("");
+  sel.hidden = ws.length < 2;
+}
+let polling = false;
+async function poll() {
+  if (polling) return; polling = true;
+  try {
+    await refreshWorlds();
+    const want = W.id;
+    let q = "/state.json?limit=" + (W.maxSeq ? 200 : 150) + "&since=" + W.maxSeq;
+    if (want) q += "&world=" + encodeURIComponent(want);
+    if (W.after !== null) q += "&after=" + W.after + "&sig=" + encodeURIComponent(W.sig || "");
+    const d = await get(q);
+    if (!d.ok) { $("err").textContent = d.reason; return; }
+    if (W.id !== want) return;                       // switched worlds while this was in flight
+    $("err").textContent = "";
+    merge(d);
+  } catch (e) { if (!e.auth) $("err").textContent = "no server: " + e.message; }
+  finally { polling = false; }
+}
+function merge(d) {
+  const first = W.info === null;
+  W.info = d.world; W.id = d.world.id;
+  if ($("wsel").value !== W.id) $("wsel").value = W.id;
+  let struct = false;
+  V.changed = new Set();
+  if (!d.diff) { W.ents = new Map(); struct = true; }
+  for (const e of d.entities) {
+    const old = W.ents.get(e.id);
+    if (!old || old.parent !== e.parent || old.type !== e.type) struct = true;
+    if (old && !first) V.changed.add(e.id);
+    W.ents.set(e.id, e);
+    if (W.after === null || e.updated_seq > W.after) W.after = Math.max(W.after ?? -1, e.updated_seq ?? 0);
+  }
+  if (W.after === null) W.after = 0;
+  if (d.ids) {
+    if (d.ids.length !== W.ents.size || d.ids.some(id => !W.ents.has(id))) {
+      const keep = new Set(d.ids);
+      for (const id of [...W.ents.keys()]) if (!keep.has(id)) { W.ents.delete(id); struct = true; }
+    }
+  }
+  if (d.edges) { W.edges = d.edges; W.hyper = d.hyperedges || []; W.schemas = d.schemas || {}; W.spaces = d.spaces || {}; W.kindMemo.clear(); struct = true; }
+  if (d.sig) W.sig = d.sig;
+  W.prin = d.principals || []; W.sched = d.scheduled || []; W.ticks = d.ticks ?? 0;
+  if (struct) index();
+  const fresh = (d.events || []).filter(ev => ev.seq > W.maxSeq);
+  if (fresh.length) { W.events = W.events.concat(fresh).slice(-500); }
+  W.maxSeq = Math.max(W.maxSeq, d.max_seq || 0);
+  const alerts = W.events.filter(ev => ev.seq > V.alertSeen && EVF.alerts(ev.kind)).length;
+  $("an").textContent = alerts ? String(alerts) : "";
+  if (first) {
+    if (!V.focus || !W.ents.has(V.focus)) V.focus = W.info.root;
+    buildTypeSelect();
+  } else if (struct) buildTypeSelect();
+  if (!W.ents.has(V.focus)) V.focus = W.info.root;
+  header();
+  const touched = struct || V.changed.size > 0;
+  if (V.q || V.qt) { if (touched) runSearch(false); }
+  if (first || touched) schedule(first);
+  if (first || touched || V.tab !== "ent") panel(first || fresh.length > 0 || touched);
+}
+function index() {
+  W.kids = new Map(); W.byType = new Map();
+  for (const e of W.ents.values()) {
+    if (e.parent && W.ents.has(e.parent)) { let a = W.kids.get(e.parent); if (!a) W.kids.set(e.parent, a = []); a.push(e.id); }
+    let t = W.byType.get(e.type); if (!t) W.byType.set(e.type, t = []); t.push(e.id);
+  }
+  W.edgesBy = new Map();
+  for (const ed of W.edges) for (const id of [ed.source, ed.target]) { let a = W.edgesBy.get(id); if (!a) W.edgesBy.set(id, a = []); a.push(ed); }
+  W.counts = new Map();   // descendants under each entity, for the "+N" on a closed box
+  const count = id => { let n = 0; for (const k of W.kids.get(id) || []) n += 1 + count(k); W.counts.set(id, n); return n; };
+  if (W.info && W.ents.has(W.info.root)) count(W.info.root);
+  for (const e of W.ents.values()) if (!e.parent || !W.ents.has(e.parent)) if (e.id !== (W.info && W.info.root)) count(e.id);
 }
 
-function showDetail() {
-  if (!data || !pinned) return;
-  const e = data.entities.find(x => x.id === pinned);
-  if (!e) { $("detail").textContent = pinned + " no longer exists"; return; }
-  const kidRows = data.entities.filter(x => x.parent === e.id), st = e.state || {};
-  const kids = kidRows.map(label);
-  const rel = data.edges.filter(x => x.source === e.id || x.target === e.id).map(x => plain(x.source) + " -" + x.relation + "-> " + plain(x.target));
-  let txt = `<b>${esc(label(e))}</b> ${esc(e.id)} : ${esc(e.type)}  v${e.version}\n`;
-  const s = status(e, kindOf(e, data.schemas));
-  if (s.text) txt += esc(s.text) + "\n";
-  txt += `in: ${esc(e.parent ? nameOf(e.parent) : "(root)")}\nholds: ${esc(kids.join(", ") || "nothing")}\n`;
-  if (st.carry !== undefined && st.carry !== null) txt += `carries: ${Math.round(kidRows.reduce((a, c) => a + bulkOf(c), 0) * 100) / 100} of ${st.carry}\n`;
-  const lk = e.type === "lock" ? e : (lockOf(e) || kidRows.find(c => c.type === "lock"));
-  if (lk) { const ls = lk.state || {}; txt += `lock: ${esc(lk.name)}${ls.locked ? " · locked" : " · open"}${ls.broken ? " · broken" : ""}${ls.key ? " · key " + esc(labelOf(ls.key)) : ""}${ls.code ? " · code set" : ""}${ls.pick_dc ? " · pick dc " + ls.pick_dc : ""}${ls.break_dc ? " · break dc " + ls.break_dc : ""}${ls.picking ? " · being picked by " + esc(plain(ls.picking.who)) : ""}\n`; }
-  const seat = data.principals.filter(p => p.entity === e.id);
-  seat.forEach(p => { txt += "seat: " + esc(seatTag(p, data.world).text) + "\n"; });
-  if (rel.length) txt += "edges: " + esc(rel.join("\n       ")) + "\n";
-  txt += "state: " + esc(JSON.stringify(e.state, null, 1));
-  $("detail").innerHTML = txt;
+// ---------------------------------------------------------------- small readers
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function ent(id) { return W.ents.get(id); }
+function kidsOf(id) { return W.kids.get(id) || []; }
+function kindOf(type) {
+  if (W.kindMemo.has(type)) return W.kindMemo.get(type);
+  let t = type, g = 0, k = "other";
+  while (t && g++ < 30) { if (t === "place" || t === "creature" || t === "thing") { k = t; break; } t = W.schemas[t]; }
+  W.kindMemo.set(type, k); return k;
+}
+function num(v) { return v === undefined || v === null || v === "" || typeof v === "boolean" ? null : (Number.isFinite(Number(v)) ? Number(v) : null); }
+function label(e) { if (!e) return ""; const c = num((e.state || {}).count); return (e.name || e.type) + (c !== null ? " ×" + c : ""); }
+function nameOf(id) { const e = ent(id); return e ? label(e) : (id || ""); }
+function short(s, n) { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+function ancestors(id) { const out = []; let e = ent(id), g = 0; while (e && e.parent && g++ < 200) { out.unshift(e.parent); e = ent(e.parent); } return out; }
+function depthUnder(id, top) { const a = ancestors(id); const i = a.indexOf(top); return i < 0 ? -1 : a.length - i; }
+function lca(ids) {
+  if (!ids.length) return W.info.root;
+  let path = ancestors(ids[0]).concat([ids[0]]);
+  for (const id of ids.slice(1)) { const p = ancestors(id).concat([id]); let i = 0; while (i < path.length && i < p.length && path[i] === p[i]) i++; path = path.slice(0, i); if (!path.length) break; }
+  return path.length ? path[path.length - 1] : W.info.root;
+}
+function hm(sec) { sec = Math.max(0, sec); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? h + "h" + String(m).padStart(2, "0") : m + "m"; }
+function ago(sec) { return sec < 90 ? Math.round(sec) + "s" : sec < 5400 ? Math.round(sec / 60) + "m" : (sec / 3600).toFixed(1) + "h"; }
+function fmt(v) { if (v === null || v === undefined) return "-"; if (Number.isInteger(v)) return String(v); const a = Math.abs(v); return a >= 1000 ? v.toFixed(0) : a >= 10 ? v.toFixed(1) : v.toFixed(2).replace(/\.?0+$/, "") || "0"; }
+function lockOf(e) { const st = e.state || {}; if (st.locked) return e; return kidsOf(e.id).map(ent).find(k => k && k.state && k.state.attached && k.state.locked) || null; }
+// one readable condition, the engine's own words where it has them
+function condition(e) {
+  const st = e.state || {}, out = [];
+  if (st.dead) out.push(["dead", "critical"]);
+  else if (st.down) out.push([st.downed_by === "thirst" ? "down, thirst" : "down", "critical"]);
+  else if (st.wounded) out.push(["hurt", "serious"]);
+  if (st.fading) out.push(["fading " + st.fading, "critical"]);
+  if (st.asleep) out.push(["asleep", ""]);
+  if (st.thirsty) out.push(["thirsty", "warning"]);
+  if (st.hidden) out.push(["hidden", ""]);
+  if (lockOf(e)) out.push(["locked", "warning"]);
+  return out;
+}
+function statusLine(e) {
+  const st = e.state || {}, bits = [];
+  if (num(st.hp) !== null) bits.push("hp " + st.hp + (num(st.max_hp) !== null ? "/" + st.max_hp : ""));
+  if (num(st.water) !== null && kindOf(e.type) === "creature") bits.push("w " + st.water + "/" + (st.max_water ?? 10));
+  if (num(st.left) !== null) bits.push("left " + st.left);
+  const c = condition(e).map(x => x[0]);
+  return { text: c.concat(bits).join(" · "), bad: condition(e).some(x => x[1] === "critical" || x[1] === "serious") };
+}
+function seatOf(id) { return W.prin.find(p => p.entity === id); }
+function seatIdle(p) { const w = W.info; return p.acted_t === null || p.acted_t === undefined || w.t - p.acted_t > w.idle_after; }
+
+// ---------------------------------------------------------------- header: clock, dial, counts
+function header() {
+  const w = W.info, day = w.day_seconds || 86400, root = ent(w.root), amb = (root && root.state && root.state.ambient) || {};
+  $("wname").textContent = w.name || w.id;
+  document.title = (w.name || w.id) + " · embody watch";
+  const tod = ((w.t % day) + day) % day, hh = Math.floor(tod / 3600 * 24 / (day / 3600)), frac = tod / day;
+  const clock24 = Math.floor(frac * 24), min = Math.floor((frac * 24 - clock24) * 60);
+  $("clock").innerHTML = `day <b>${Math.floor(w.t / day) + 1}</b> <b>${String(clock24).padStart(2, "0")}:${String(min).padStart(2, "0")}</b>` +
+    (amb.time_of_day ? " " + esc(amb.time_of_day) : "") + (w.running ? " · ×" + w.rate : " · paused");
+  // the dial: the day as a ring, noon at the top, the sun where the hour is
+  const a = frac * 2 * Math.PI - Math.PI, sx = Math.sin(a) * 8.5, sy = -Math.cos(a) * 8.5, up = sy < 0;
+  $("dial").innerHTML = `<circle r="8.5" fill="none" stroke="var(--line2)" stroke-width="1.5"/><line x1="-11" x2="11" y1="0" y2="0" stroke="var(--faint)" stroke-width="1"/>` +
+    `<circle cx="${sx.toFixed(2)}" cy="${sy.toFixed(2)}" r="3" fill="${up ? "var(--warn)" : "var(--dim)"}"/>`;
+  $("led").className = "led" + (w.running ? " on" : "");
+  $("led").title = w.running ? "clock running ×" + w.rate : "clock paused";
+  const inPlay = W.prin.filter(p => p.entity && !seatIdle(p)).length;
+  $("sn").textContent = inPlay ? String(inPlay) : "";
+  const tl = W.sched.filter(s => s.kind !== "tick" && s.kind !== "finish").slice(0, 3)
+    .map(s => ((s.payload && (s.payload.name || s.payload.event || s.payload.script)) || s.kind) + " " + hm(s.t - w.t));
+  $("counts").textContent = W.ents.size + " entities" + (tl.length ? " · next: " + tl.join(", ") : "");
+  $("counts").title = W.sched.map(s => s.kind + " " + ((s.payload && (s.payload.name || s.payload.script)) || "") + " in " + hm(s.t - w.t)).join("\n") + (W.ticks ? "\n" + W.ticks + " body ticks" : "");
 }
 
-// one readable line for the events people care about; the raw payload stays in the tooltip
-function line(ev) {
-  const p = ev.payload || {}, a = ev.actor ? plain(ev.actor) : "", t = ev.target ? plain(ev.target) : "";
-  const n = p.count !== undefined && p.count !== null ? p.count + " " : "";
-  const by = p.by ? plain(p.by) : a;
-  const bare = id => labelOf(id).replace(/ ×\d+(\.\d+)?$/, "");
-  switch (ev.kind) {
-    case "taken": return `${by} took ${n}${bare(p.item || ev.target)}` + (p.source && p.source !== p.by ? " from " + plain(p.source) : "");
-    case "dropped": return `${by} dropped ${n}${bare(p.item || ev.target)}`;
-    case "given": return `${by} gave ${n}${bare(p.item)} to ${t}`;
-    case "put": return `${by} put ${n}${bare(p.item)} in ${t}`;
-    case "burned": return `${by} burned ${p.count > 1 ? p.count + " " : ""}${p.name || "something"}`;
-    case "renamed": return `${p.old} is now ${p.new}`;
-    case "slept": return `${t} fell asleep`;
-    case "woke": return `${t} woke` + (p.why ? " (" + p.why + (p.by && p.by !== ev.target ? ", " + plain(p.by) : "") + ")" : "");
-    case "unlocked": case "locked": return `${by} ${ev.kind} ${p.lock ? plain(p.lock) : t}`;
-    case "lock_picked": return `${by} picked ${plain(p.lock)} (${p.total} vs ${p.dc})`;
-    case "pick_failed": return `${by} failed to pick ${plain(p.lock)} (${p.total} vs ${p.dc}), heard`;
-    case "lock_broken": return `${by} broke ${plain(p.lock)} open`;
-    case "break_failed": return `${by} hammered at ${plain(p.lock)}, it held`;
-    case "searched": return `${by} searched ${t}: ${(p.found || []).length} taken` + ((p.left || []).length ? `, ${p.left.length} left` : "");
-    case "lifted": return `${by} lifted ${(p.found || []).length} things off ${plain(p.sleeper)}, unseen`;
-    case "caught": return `${by} was caught reaching for ${t}'s things`;
-    case "merged": return `${t} gathers ${p.count} more (${p.total})`;
-    case "hit": return `${by} hit ${t} for ${p.dmg}${p.weapon ? " with " + p.weapon : ""} (${p.attack} vs ${p.defence})${p.asleep ? ", asleep" : ""}`;
-    case "downed": return `${t} went down` + (p.by ? " (" + plain(p.by) + ")" : "");
-    case "wounded": return `${t} is wounded` + (p.by ? " (" + plain(p.by) + ")" : "");
-    case "rose": return `${t} is back on their feet`;
-    case "missed": return `${by} missed ${t} (${p.attack} vs ${p.defence})`;
-    case "say": return `${a}${p.to ? " to " + plain(p.to) : ""}: "${short(p.text || "", 160)}"`;
-    case "arrived": return `${plain(p.who || ev.actor)} arrived at ${plain(p.place || ev.target)}${p.quiet ? " (quiet)" : ""}`;
+// ---------------------------------------------------------------- camera: one per view, pan and pinch and wheel
+const cams = { tree: { k: 0, x: 0, y: 0, fitted: false }, map: { k: 0, x: 0, y: 0, fitted: false } };
+let box = null;   // the drawn content's bounds in view coordinates
+function cam() { return cams[V.view]; }
+function applyCam() {
+  const c = cam();
+  $("view").setAttribute("transform", `translate(${c.x},${c.y}) scale(${c.k})`);
+  $("svg").style.setProperty("--k", c.k);
+  if (V.view === "map") placeOverlays();
+}
+function fitTo(b, maxK) {
+  const st = $("stage"), cw = st.clientWidth, ch = st.clientHeight, c = cam();
+  if (!b || !(b.w > 0) || !(b.h > 0)) { if (b) { c.k = c.k || 1; c.x = cw / 2 - (b.x + (b.w || 0) / 2) * c.k; c.y = ch / 2 - (b.y + (b.h || 0) / 2) * c.k; applyCam(); } return; }
+  const pad = 48;
+  c.k = Math.min(maxK || 2.5, (cw - pad * 2) / b.w, (ch - pad * 2 - 30) / b.h);
+  c.x = (cw - b.w * c.k) / 2 - b.x * c.k; c.y = (ch - b.h * c.k) / 2 - b.y * c.k + 14;
+  applyCam();
+}
+function fit() { cam().fitted = true; fitTo(box, V.view === "map" ? 1e6 : 1.6); rezoom(); }
+function zoomAt(f, px, py) {
+  const c = cam(), k = Math.min(V.view === "map" ? 1e5 : 6, Math.max(V.view === "map" ? 1e-5 : 0.05, c.k * f));
+  c.x = px - (px - c.x) * (k / c.k); c.y = py - (py - c.y) * (k / c.k); c.k = k; c.fitted = false; applyCam(); rezoom();
+}
+let rezoomT = null;
+function rezoom() { if (V.view !== "map") return; clearTimeout(rezoomT); rezoomT = setTimeout(() => draw(), 140); }
+(function wire() {
+  const st = $("stage"), pts = new Map();
+  let drag = null, pinch = null, lastTap = { t: 0, id: null };
+  st.addEventListener("wheel", ev => { ev.preventDefault(); const r = st.getBoundingClientRect(); zoomAt(Math.exp(-ev.deltaY * 0.0015), ev.clientX - r.left, ev.clientY - r.top); }, { passive: false });
+  st.addEventListener("pointerdown", ev => {
+    if (ev.target.closest("#tools, #crumbs, .tray")) return;
+    st.setPointerCapture(ev.pointerId);
+    pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (pts.size === 1) drag = { x: ev.clientX, y: ev.clientY, cx: cam().x, cy: cam().y, moved: false, t: Date.now(), target: ev.target };
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), k: cam().k }; if (drag) drag.moved = true; }
+  });
+  st.addEventListener("pointermove", ev => {
+    if (!pts.has(ev.pointerId)) return;
+    pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    const r = st.getBoundingClientRect();
+    if (pinch && pts.size >= 2) {
+      const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+      zoomAt((pinch.k * d / pinch.d) / cam().k, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+      return;
+    }
+    if (!drag) return;
+    const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 6) { drag.moved = true; st.classList.add("drag"); }
+    if (drag.moved) { const c = cam(); c.x = drag.cx + dx; c.y = drag.cy + dy; c.fitted = false; applyCam(); }
+  });
+  const end = ev => {
+    if (!pts.has(ev.pointerId)) return;
+    pts.delete(ev.pointerId);
+    if (pts.size < 2) pinch = null;
+    if (pts.size > 0) { const p = [...pts.values()][0]; drag = { x: p.x, y: p.y, cx: cam().x, cy: cam().y, moved: true }; return; }
+    st.classList.remove("drag");
+    if (drag && !drag.moved && ev.type === "pointerup") {
+      const hit = drag.target && drag.target.closest && drag.target.closest("[data-id]");
+      const id = hit ? hit.dataset.id : null, now = Date.now();
+      if (hit && hit.dataset.more) { V.limits.set(id, (V.limits.get(id) || 40) + 80); draw(); }
+      else if (hit && hit.dataset.open) { V.expanded.add(id); draw(); }
+      else if (id && lastTap.id === id && now - lastTap.t < 380) { focusOn(id); lastTap = { t: 0, id: null }; }
+      else if (id) { select(id); lastTap = { t: now, id }; }
+      else if (now - lastTap.t < 380 && !lastTap.id) { fit(); }
+      else { lastTap = { t: now, id: null }; openSheet(false); }
+    } else if (drag && drag.moved) rezoom();
+    drag = null;
+  };
+  st.addEventListener("pointerup", end); st.addEventListener("pointercancel", end);
+  $("zin").onclick = () => zoomAt(1.35, st.clientWidth / 2, st.clientHeight / 2);
+  $("zout").onclick = () => zoomAt(1 / 1.35, st.clientWidth / 2, st.clientHeight / 2);
+  $("zfit").onclick = fit;
+  $("up").onclick = () => { const e = ent(V.focus); if (e && e.parent && W.ents.has(e.parent)) focusOn(e.parent); };
+  window.addEventListener("resize", () => { if (cam().fitted) fit(); else if (V.view === "map") placeOverlays(); });
+  $("tokgo").onclick = useToken; $("tok").addEventListener("keydown", ev => { if (ev.key === "Enter") useToken(); });
+  $("wsel").onchange = () => { resetWorld($("wsel").value); writeHash(); poll(); };
+  $("vtree").onclick = () => setView("tree"); $("vmap").onclick = () => setView("map");
+  $("dless").onclick = () => setDepth(-1); $("dmore").onclick = () => setDepth(1);
+  document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => { setTab(b.dataset.tab); openSheet(true); });
+  $("grab").onclick = () => openSheet(!$("side").classList.contains("open"));
+  let qt = null;
+  $("q").addEventListener("input", () => { clearTimeout(qt); qt = setTimeout(() => { V.q = $("q").value.trim(); runSearch(true); }, 220); });
+  $("q").addEventListener("keydown", ev => {
+    if (ev.key === "Enter") { clearTimeout(qt); V.q = $("q").value.trim(); runSearch(true); }
+    if (ev.key === "Escape") { $("q").value = ""; V.q = ""; runSearch(true); $("q").blur(); }
+  });
+  $("qt").onchange = () => { V.qt = $("qt").value; runSearch(true); };
+  document.addEventListener("keydown", ev => {
+    if (ev.target.closest("input, select")) return;
+    if (ev.key === "/") { ev.preventDefault(); $("q").focus(); }
+    if (ev.key === "Escape" && V.sel) { V.sel = null; draw(); panel(true); writeHash(); }
+    if (ev.key === "Backspace") $("up").click();
+  });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+})();
+function setView(v) {
+  if (V.view === v) return;
+  V.view = v; syncControls();
+  cam().fitted = false; cam().k = 0;
+  schedule(true); writeHash();
+}
+function setDepth(n) { V.depth[V.view] = Math.max(1, Math.min(8, V.depth[V.view] + n)); $("dval").textContent = V.depth[V.view]; cam().fitted = true; schedule(true); }
+function focusOn(id) {
+  if (!W.ents.has(id)) return;
+  V.focus = id; V.expanded.clear(); cam().fitted = true; cam().k = 0;
+  if (V.hits) { V.prevFocus = null; }
+  schedule(true); writeHash();
+}
+function select(id) {
+  V.sel = id; setTab("ent"); openSheet(true); panel(true); markSel(); writeHash();
+}
+let drawQueued = false, refit = false;
+function schedule(fitAfter) { refit = refit || !!fitAfter; if (drawQueued) return; drawQueued = true; requestAnimationFrame(() => { drawQueued = false; const f = refit; refit = false; draw(); if (f || !cam().k) { if (V.hits && V.hitList.length) fitHits(); else fit(); } }); }
+
+// ---------------------------------------------------------------- what is in view: focus to depth, or the search's set
+function visible() {
+  // ids in view with their level under the focus; `allow` limits the walk to a search's paths
+  const out = [], closed = new Map(), more = new Map(), D = V.depth[V.view];
+  let allow = null, top = V.focus;
+  if (V.hits && V.hitList.length) {
+    allow = new Set();
+    for (const id of V.hitList) { allow.add(id); for (const a of ancestors(id)) allow.add(a); }
+    if (!allow.has(top)) top = lca(V.hitList);
+  }
+  const walk = (id, lvl) => {
+    out.push([id, lvl]);
+    let ks = kidsOf(id);
+    if (!ks.length) return;
+    if (allow) {
+      const inPath = ks.filter(k => allow.has(k));
+      if (V.hits.has(id) && !V.expanded.has(id)) { closed.set(id, ks.length); return; }
+      if (inPath.length < ks.length) closed.set(id, ks.length - inPath.length);   // a search shows only the ways to what it found
+      ks = inPath;
+    } else if (lvl >= D && !V.expanded.has(id)) { closed.set(id, W.counts.get(id) || ks.length); return; }
+    const lim = V.limits.get(id) || 40;
+    if (ks.length > lim) { more.set(id, ks.length - lim); ks = ks.slice(0, lim); }
+    for (const k of ks) walk(k, lvl + 1);
+  };
+  if (W.ents.has(top)) walk(top, 0);
+  return { list: out, closed, more, top };
+}
+
+// ---------------------------------------------------------------- tree view
+const BW = 176, BH = 54, GX = 16, GY = 64;
+function drawTree() {
+  const { list, closed, more, top } = visible();
+  const inView = new Set(list.map(x => x[0]));
+  const kidsIn = id => kidsOf(id).filter(k => inView.has(k));
+  const size = new Map(), rows = new Map();
+  const measure = id => {
+    const ks = kidsIn(id);
+    const extra = more.has(id) ? 1 : 0;
+    if (!ks.length && !extra) { size.set(id, { w: BW, h: BH }); return size.get(id); }
+    ks.forEach(measure);
+    const items = ks.map(k => ({ id: k, s: size.get(k) }));
+    if (extra) items.push({ id, more: more.get(id), s: { w: BW, h: 36 } });
+    const cols = Math.max(2, Math.min(7, Math.ceil(Math.sqrt(items.length * 1.8))));
+    const rs = []; for (let i = 0; i < items.length; i += cols) rs.push(items.slice(i, i + cols));
+    const rr = rs.map(r => ({ items: r, w: r.reduce((a, it) => a + it.s.w, 0) + GX * (r.length - 1), h: Math.max(...r.map(it => it.s.h)) }));
+    rows.set(id, rr);
+    size.set(id, { w: Math.max(BW, ...rr.map(r => r.w)), h: BH + rr.reduce((a, r) => a + GY + r.h, 0) });
+    return size.get(id);
+  };
+  if (!W.ents.has(top)) return "";
+  measure(top);
+  const pos = new Map(), morePos = [];
+  const place = (id, x, y) => {
+    const s = size.get(id); pos.set(id, { x: x + s.w / 2 - BW / 2, y });
+    let cy = y + BH + GY;
+    for (const r of rows.get(id) || []) {
+      let rx = x + (s.w - r.w) / 2;
+      for (const it of r.items) { if (it.more) morePos.push({ id, n: it.more, x: rx + (it.s.w - BW) / 2, y: cy }); else place(it.id, rx, cy); rx += it.s.w + GX; }
+      cy += r.h + GY;
+    }
+  };
+  place(top, 0, 0);
+  const sz = size.get(top); box = { x: -20, y: -30, w: sz.w + 40, h: sz.h + 60 };
+  let out = "";
+  const searching = !!V.hits;
+  for (const [id] of list) {
+    const e = ent(id); if (!e || !e.parent || !pos.has(e.parent)) continue;
+    const a = pos.get(e.parent), b = pos.get(id), ax = a.x + BW / 2, ay = a.y + BH, bx = b.x + BW / 2, by = b.y;
+    out += `<path class="tree" d="M${ax},${ay} C${ax},${ay + GY / 2} ${bx},${by - GY / 2} ${bx},${by}"/>`;
+  }
+  for (const m of morePos) { const a = pos.get(m.id), ax = a.x + BW / 2, ay = a.y + BH, bx = m.x + BW / 2; out += `<path class="tree" d="M${ax},${ay} C${ax},${ay + GY / 2} ${bx},${m.y - GY / 2} ${bx},${m.y}"/>`; }
+  // ways between places in view, and the selected one's other relations
+  const seen = new Set();
+  for (const ed of W.edges) {
+    const isConn = ed.relation === "connects_to";
+    if (isConn ? searching : ed.source !== V.sel && ed.target !== V.sel) continue;
+    const a = pos.get(ed.source), b = pos.get(ed.target); if (!a || !b) continue;
+    const key = [ed.source, ed.target].sort().join("|") + ed.relation; if (seen.has(key)) continue; seen.add(key);
+    const ax = a.x + BW / 2, bx = b.x + BW / 2, mx = (ax + bx) / 2;
+    if (isConn) { const my = Math.min(a.y, b.y) - 26 - Math.abs(ax - bx) * 0.08; out += `<path class="conn" d="M${ax},${a.y} Q${mx},${my} ${bx},${b.y}"/>`; }
+    else { const my = Math.max(a.y, b.y) + BH + 24 + Math.abs(ax - bx) * 0.06; out += `<path class="rel" d="M${ax},${a.y + BH} Q${mx},${my} ${bx},${b.y + BH}"/><text class="lbl" x="${mx}" y="${my - 6}" text-anchor="middle">${esc(ed.relation)}</text>`; }
+  }
+  for (const [id] of list) {
+    const e = ent(id), p = pos.get(id); if (!e || !p) continue;
+    const k = kindOf(e.type), st = e.state || {}, s = statusLine(e), seat = seatOf(id);
+    const cls = ["node", "k-" + k, st.hidden ? "hidden" : "", st.dead ? "dead" : "", st.down ? "down" : "", V.sel === id ? "sel" : "",
+      searching && V.hits.has(id) ? "hit" : "", searching && !V.hits.has(id) ? "dimmed" : "", V.changed.has(id) ? "changed" : ""].filter(Boolean).join(" ");
+    out += `<g class="${cls}" data-id="${esc(id)}" transform="translate(${p.x},${p.y})"><title>${esc(label(e) + "\n" + e.type + " · " + id + (s.text ? "\n" + s.text : ""))}</title>`;
+    out += `<rect class="box" width="${BW}" height="${BH}" rx="2"/><rect class="bar" width="3" height="${BH}" fill="var(--${k})"${k === "other" ? ' opacity=".5"' : ""}/>`;
+    out += `<text x="11" y="18">${esc(short(label(e), 22))}</text><text class="sub" x="11" y="32">${esc(short(e.type, 24))}</text>`;
+    if (s.text) out += `<text class="stat${s.bad ? " bad" : ""}" x="11" y="46">${esc(short(s.text, 28))}</text>`;
+    if (closed.has(id)) out += `<g data-id="${esc(id)}" data-open="1"><rect class="more" x="${BW - 44}" y="${BH - 20}" width="40" height="16" rx="2"/><text class="morel" x="${BW - 24}" y="${BH - 8}" text-anchor="middle">+${closed.get(id)}</text></g>`;
+    if (seat) { const away = seatIdle(seat); out += `<text class="seat${away ? " away" : ""}" x="${BW}" y="-5" text-anchor="end">${esc(short((seat.label || seat.name || seat.id) + (away ? " · away" : " · in play"), 30))}</text>`; }
+    out += `</g>`;
+  }
+  for (const m of morePos) out += `<g class="node" data-id="${esc(m.id)}" data-more="1" transform="translate(${m.x},${m.y})"><rect class="box more" width="${BW}" height="36" rx="2"/><text class="morel" x="${BW / 2}" y="22" text-anchor="middle">${m.n} more: show</text></g>`;
+  $("tally").textContent = list.length + " of " + W.ents.size + " in view";
+  return out;
+}
+
+// ---------------------------------------------------------------- map view: the world frame, north up, to a depth
+function spaceOf(e) { if (!e) return null; const st = e.state || {}; if (st.space) return st.space; let t = e.type, g = 0; while (t && g++ < 30) { if (W.spaces[t]) return W.spaces[t]; t = W.schemas[t]; } return null; }
+const atMemo = new Map();
+function worldAt(id, g = 0) {   // [x, y, own]: its own place in the frame, a grid cell in its container's space, or its container's
+  if (atMemo.has(id)) return atMemo.get(id);
+  const e = ent(id); let r = null;
+  if (e && g < 64) {
+    const lay = (e.state || {}).layout || {};
+    if (lay.at) r = [lay.at[0], lay.at[1], true];
+    else if (e.pos && e.parent) {
+      const sp = spaceOf(ent(e.parent));
+      if (sp && sp.frame_origin) {
+        const o = sp.frame_origin, cell = Number(sp.cell || 1), h = (Number(sp.heading || 0)) * Math.PI / 180, px = e.pos[0] * cell, py = (e.pos[1] || 0) * cell;
+        r = [o[0] + px * Math.cos(h) + py * Math.sin(h), o[1] - px * Math.sin(h) + py * Math.cos(h), true];
+      }
+    }
+    if (!r && e.parent) { const p = worldAt(e.parent, g + 1); if (p) r = [p[0], p[1], false]; }
+  }
+  atMemo.set(id, r); return r;
+}
+function outline(e) {
+  const lay = (e.state || {}).layout || {}, at = lay.at || [0, 0];
+  if (lay.footprint) return lay.footprint.map(p => [p[0], p[1]]);
+  if (lay.radius) { const r = lay.radius, o = []; for (let i = 0; i < 32; i++) o.push([at[0] + r * Math.sin(2 * Math.PI * i / 32), at[1] + r * Math.cos(2 * Math.PI * i / 32)]); return o; }
+  if (lay.size) {
+    const w = lay.size[0] / 2, d = lay.size[1] / 2, h = (lay.heading || 0) * Math.PI / 180;
+    return [[-w, -d], [w, -d], [w, d], [-w, d]].map(([dx, dy]) => [at[0] + dx * Math.cos(h) + dy * Math.sin(h), at[1] - dx * Math.sin(h) + dy * Math.cos(h)]);
   }
   return null;
 }
-
-function renderEvents(d) {
-  let html = "";
-  d.events.slice().reverse().forEach(ev => {
-    const who = [ev.actor ? plain(ev.actor) : "", ev.target ? "→ " + plain(ev.target) : ""].join(" ").trim();
-    const raw = ev.payload && Object.keys(ev.payload).length ? JSON.stringify(ev.payload) : "";
-    let ln = null; try { ln = line(ev); } catch (e) { ln = null; }
-    const pl = raw ? short(ev.payload, 140) : "";
-    html += `<div class="ev ${ev.seq > seenSeq ? "new" : ""}" title="${esc(raw)}"><span class="t">${ev.t.toFixed(1)}</span><span><span class="k">${esc(ev.kind)}</span> <span class="who">${esc(ln ? "" : who)}</span> <span class="dim">#${ev.seq} r${ev.reach}</span>`;
-    if (ln) html += `<div class="line">${esc(ln)}</div>`;
-    else if (pl) html += `<div class="pl">${esc(pl)}</div>`;
-    html += `</span></div>`;
-  });
-  $("events").innerHTML = html;
-}
-
-async function poll() {
-  try {
-    await refreshWorlds();
-    const want = watching;
-    const d = await get("/state.json?limit=80" + (want ? "&world=" + encodeURIComponent(want) : ""));
-    if (!d.ok) { $("err").textContent = d.reason; return; }
-    if (BASE) $("where").textContent = "";       // hosted: one world behind a token; the first fetch may have shown it
-    if (watching !== want) return;              // the user switched worlds while this poll was in flight
-    $("err").textContent = "";
-    const versions = d.entities.map(e => e.id + ":" + e.version + ":" + e.parent).join(",");
-    const w = d.world;
-    if (!want) { watching = w.id; }             // no pick yet: the server chose the newest world
-    if ($("wsel").value !== w.id) $("wsel").value = w.id;
-    $("fork").textContent = w.forked_from ? "forked from " + w.forked_from.world + " at t=" + Number(w.forked_from.t).toFixed(1) + " (seq " + w.forked_from.seq + ")" : "";
-    $("folder").textContent = w.folder || "";
-    const day = w.day_seconds || 86400, root = d.entities.find(e => e.id === w.root), amb = (root && root.state && root.state.ambient) || {};
-    const tod = w.t % day, clockTxt = "day " + (Math.floor(w.t / day) + 1) + " · " + String(Math.floor(tod / 3600)).padStart(2, "0") + ":" + String(Math.floor(tod % 3600 / 60)).padStart(2, "0") + (amb.time_of_day ? " · " + amb.time_of_day : "");
-    $("clock").textContent = clockTxt + " · t=" + w.t.toFixed(0) + (w.running ? " · x" + w.rate : (" · paused" + (w.turn ? " · turn " + w.turn + "s" : "")));
-    $("dot").className = "dot" + (w.running ? " run" : "");
-    $("counts").textContent = d.entities.length + " entities · " + d.edges.length + " edges · " + d.max_seq + " events · " + d.principals.length + (d.principals.length === 1 ? " principal" : " principals");
-    // timers by kind, soonest first: the story's (dusk, the moon, a muster), not the bodies' ticks
-    const next = {}; let ticks = 0;
-    d.scheduled.forEach(s => {
-      if (s.kind === "tick" || s.kind === "finish") { ticks++; return; }
-      const nm = (s.payload && (s.payload.name || s.payload.event || s.payload.script)) || "";
-      const key = s.kind + (nm && nm !== s.kind ? " " + nm : "");
-      if (!next[key] || s.t < next[key].t) next[key] = { t: s.t, every: s.every, n: (next[key] ? next[key].n : 0) + 1 }; else next[key].n++;
-    });
-    const tl = Object.entries(next).sort((a, b) => a[1].t - b[1].t);
-    $("timers").textContent = (tl.length ? "coming: " + tl.slice(0, 6).map(([k, v]) => k + " in " + hm(v.t - w.t) + (v.n > 1 ? " (" + v.n + ")" : "")).join(" · ") + (tl.length > 6 ? " · +" + (tl.length - 6) : "") : "") + (ticks ? " · " + ticks + " ticks" : "");
-    $("timers").title = tl.map(([k, v]) => k + " at t=" + v.t.toFixed(0) + (v.every ? " every " + hm(v.every) : "")).join("\n");
-    if (d.max_seq !== lastSeq || versions !== lastVersions) {
-      const changed = new Set(d.entities.filter(e => data && e.updated_seq > lastSeq).map(e => e.id));
-      data = d; render(d, changed); renderEvents(d); showDetail();
-      seenSeq = d.max_seq; lastSeq = d.max_seq; lastVersions = versions;
+function bboxOf(pts) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } return { x0, y0, x1, y1 }; }
+let mapTrays = [];
+function drawMap() {
+  atMemo.clear();
+  const { list, closed, top } = visible();
+  const c = cam(), k = c.k || 1, searching = !!V.hits;
+  const items = [], unplaced = new Map(), pts = [];
+  const topE = ent(top), topLine = topE && outline(topE);
+  for (const [id, lvl] of list) {
+    if (lvl === 0) continue;
+    const e = ent(id), at = worldAt(id);
+    if (at && at[2]) {
+      const ol = outline(e);
+      items.push({ id, e, lvl, at, ol });
+      if (ol) pts.push(...ol); else pts.push([at[0], at[1]]);
+    } else {
+      // no place of its own in the frame: it goes on the tray of the nearest thing in view that has one
+      let host = e.parent, g = 0;
+      while (host && host !== top && g++ < 64) { const h = worldAt(host); if (h && h[2] && list.some(x => x[0] === host)) break; host = ent(host) ? ent(host).parent : null; }
+      if (!host || !W.ents.has(host)) host = top;
+      let a = unplaced.get(host); if (!a) unplaced.set(host, a = []); a.push(id);
     }
-  } catch (e) { if (!e.auth) $("err").textContent = "no server: " + e.message; }
+  }
+  if (topLine) pts.push(...topLine);
+  mapTrays = [];
+  if (!pts.length) {
+    box = null;
+    $("note").textContent = "Nothing under " + nameOf(top) + " has a place in the world frame yet. What is here is listed on the tray.";
+    for (const [host, ids] of unplaced) mapTrays.push({ host, ids, anchor: null });
+    $("tally").textContent = list.length - 1 + " in view · none placed";
+    return "";
+  }
+  $("note").textContent = "";
+  const bb = bboxOf(pts), span = Math.max(bb.x1 - bb.x0, bb.y1 - bb.y0, 1);
+  box = { x: bb.x0 - span * 0.06, y: -bb.y1 - span * 0.06, w: (bb.x1 - bb.x0) + span * 0.12 || span * 0.2, h: (bb.y1 - bb.y0) + span * 0.12 || span * 0.2 };
+  const P = ([x, y]) => x.toFixed(2) + "," + (-y).toFixed(2);
+  let out = "";
+  if (topLine) out += `<polygon class="area focus" points="${topLine.map(P).join(" ")}"/>`;
+  // ways between what is in view, on their drawn route or straight
+  const ids = new Set(items.map(i => i.id)), seen = new Set();
+  for (const ed of W.edges) {
+    if (ed.relation !== "connects_to" || !ids.has(ed.source) || !ids.has(ed.target)) continue;
+    const key = [ed.source, ed.target].sort().join("|"); if (seen.has(key)) continue; seen.add(key);
+    const route = (ed.data && ed.data.route) || [worldAt(ed.source), worldAt(ed.target)];
+    out += `<polyline class="road${ed.data && ed.data.hidden ? " hidden" : ""}" points="${route.map(p => P(p)).join(" ")}"/>`;
+  }
+  items.sort((a, b) => a.lvl - b.lvl || (b.ol ? 1 : 0) - (a.ol ? 1 : 0));
+  const px = 1 / k, labels = [];
+  for (const it of items) {
+    const kd = kindOf(it.e.type), cls = [`k-${kd}`, it.lvl > 1 ? "deep" : "", V.sel === it.id ? "sel" : "", searching && V.hits.has(it.id) ? "hit" : "",
+      searching && !V.hits.has(it.id) ? "dimmed" : ""].filter(Boolean).join(" ");
+    const tip = `<title>${esc(label(it.e) + " · " + it.e.type + "\n" + it.at[0].toFixed(1) + ", " + it.at[1].toFixed(1))}</title>`;
+    if (it.ol) {
+      out += `<polygon class="area ${cls}" data-id="${esc(it.id)}" points="${it.ol.map(P).join(" ")}">${tip}</polygon>`;
+      const b = bboxOf(it.ol), w = (b.x1 - b.x0) * k;
+      labels.push({ id: it.id, x: (b.x0 + b.x1) / 2, y: -(b.y0 + b.y1) / 2, room: w, lvl: it.lvl, area: true });
+    } else {
+      const r = (it.lvl > 1 ? 4 : 5.5) * px, x = it.at[0], y = -it.at[1];
+      const shape = kd === "creature" ? `<circle cx="${x}" cy="${y}" r="${r}"` : kd === "thing" ? `<polygon points="${x},${y - r * 1.25} ${x + r * 1.25},${y} ${x},${y + r * 1.25} ${x - r * 1.25},${y}"`
+        : `<rect x="${x - r}" y="${y - r}" width="${2 * r}" height="${2 * r}"`;
+      out += `${shape} class="mark ${cls}" data-id="${esc(it.id)}">${tip}</${kd === "creature" ? "circle" : kd === "thing" ? "polygon" : "rect"}>`;
+      labels.push({ id: it.id, x: x + r * 1.6, y: y + r * 0.6, room: 0, lvl: it.lvl, area: false });
+    }
+  }
+  // labels in screen pixels: the big and near always, the small when you zoom in, never on top of each other
+  const taken = [];
+  for (const L of labels.sort((a, b) => (V.hits && V.hits.has(b.id)) - (V.hits && V.hits.has(a.id)) || a.lvl - b.lvl || b.room - a.room)) {
+    const e = ent(L.id), txt = short(label(e), 26), fs = L.lvl <= 1 ? 12 : 10.5, wpx = txt.length * fs * 0.62, hpx = fs + 3;
+    const sx = L.x * k, sy = L.y * k, x0 = L.area ? sx - wpx / 2 : sx, y0 = sy - hpx;
+    const must = V.sel === L.id || (V.hits && V.hits.has(L.id));
+    if (!must && L.area && L.room < 36 && L.lvl > 1) continue;
+    if (!must && taken.some(t => x0 < t.x1 && x0 + wpx > t.x0 && y0 < t.y1 && y0 + hpx > t.y0)) continue;
+    taken.push({ x0, y0, x1: x0 + wpx, y1: y0 + hpx });
+    out += `<text class="mlbl l${Math.min(L.lvl, 2)}${L.lvl > 1 ? " deep" : ""}" x="${L.x}" y="${L.y}" font-size="${(fs * px).toFixed(4)}" stroke-width="${(3 * px).toFixed(4)}"${L.area ? ' text-anchor="middle"' : ""}>${esc(txt)}</text>`;
+  }
+  for (const [host, ids2] of unplaced) {
+    const he = ent(host), hol = he && outline(he), hat = worldAt(host);
+    let anchor = null, span = 0;
+    if (hol) { const b = bboxOf(hol); anchor = [b.x0, b.y0]; span = b.x1 - b.x0; }
+    else if (hat && hat[2]) anchor = [hat[0], hat[1]];
+    const hl = list.find(x => x[0] === host);
+    mapTrays.push({ host, ids: ids2, anchor, span, lvl: hl ? hl[1] : 0 });
+  }
+  const placed = items.length, off = list.length - 1 - placed;
+  $("tally").textContent = placed + " placed · " + off + " without a place of their own" + (closed.size ? " · deeper: raise depth" : "");
+  return out;
 }
-poll(); setInterval(poll, 1000);
+function placeOverlays() {
+  const ov = $("overlay"), c = cam(), st = $("stage");
+  if (V.view !== "map") { ov.innerHTML = ""; $("scale").innerHTML = ""; return; }
+  // what has no place of its own sits behind a dashed count at its nearest placed container; one opens at a time
+  let html = "", stack = 0;
+  for (const t of mapTrays) {
+    let x, y;
+    if (t.anchor) { x = t.anchor[0] * c.k + c.x - (t.span ? 0 : 34); y = -t.anchor[1] * c.k + c.y + (t.span ? 4 : -9); }
+    else { x = 10; y = 40 + stack * 30; stack++; }
+    x = Math.max(4, Math.min(st.clientWidth - 150, x)); y = Math.max(36, Math.min(st.clientHeight - 70, y));
+    const found = V.hits ? t.ids.filter(id => V.hits.has(id)) : [], open = V.tray === t.host || (V.sel && t.ids.includes(V.sel) && V.tray !== "-" + t.host);
+    const where = !t.anchor ? "in " + nameOf(t.host) : nameOf(t.host);
+    if (!open && !found.length && t.anchor && t.lvl > 1 && t.span * c.k < 90) continue;   // too small on screen to carry a tray yet
+    if (!open) {
+      html += `<div class="tray shut" style="left:${x}px;top:${y}px"><button class="chip${found.length ? " hit" : ""}" data-tray="${esc(t.host)}" title="${esc(t.ids.length + " in " + nameOf(t.host) + " with no place of their own in the frame")}">` +
+        (t.anchor ? `${found.length ? found.length + " found / " : "+"}${t.ids.length}` : `${found.length ? found.length + " found · " : ""}${t.ids.length} with no place ${esc(short(where, 22))}`) + `</button></div>`;
+      continue;
+    }
+    const order = found.concat(t.ids.filter(id => !found.includes(id))), shown = order.slice(0, 12);
+    html += `<div class="tray" style="left:${x}px;top:${y}px;z-index:4"><div class="cap"><span>${esc(short(where, 30))}: no place of their own</span><button data-tray="-${esc(t.host)}" aria-label="close">&times;</button></div>` +
+      shown.map(id => { const e = ent(id), kd = kindOf(e.type); return `<button class="chip${V.hits && V.hits.has(id) ? " hit" : ""}${V.sel === id ? " sel" : ""}" data-pick="${esc(id)}" title="${esc(label(e) + " · " + e.type)}"><i class="kd-${kd}"></i>${esc(short(label(e), 18))}</button>`; }).join("") +
+      (t.ids.length > shown.length ? `<button class="chip" data-focus="${esc(t.host)}">+${t.ids.length - shown.length} more</button>` : "") + `</div>`;
+  }
+  ov.innerHTML = html;
+  ov.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => select(b.dataset.pick));
+  ov.querySelectorAll("[data-focus]").forEach(b => b.onclick = () => focusOn(b.dataset.focus));
+  ov.querySelectorAll("[data-tray]").forEach(b => b.onclick = () => { V.tray = b.dataset.tray; placeOverlays(); });
+  // a scale bar and north
+  const units = ((ent(W.info.root) || {}).state || {}).frame?.units || "m";
+  const target = 110 / c.k, p10 = Math.pow(10, Math.floor(Math.log10(target))), step = [1, 2, 5, 10].map(m => m * p10).find(v => v >= target * 0.6) || p10;
+  $("scale").innerHTML = box ? `<span class="north">N<br>&uarr;</span><span><div class="bar" style="width:${(step * c.k).toFixed(0)}px"></div>${fmt(step)} ${esc(units)}</span>` : "";
+}
+
+// ---------------------------------------------------------------- drawing: one entry, the view decides
+function draw() {
+  const out = V.view === "map" ? drawMap() : drawTree();
+  $("view").innerHTML = out;
+  if (V.view !== "map") { $("overlay").innerHTML = ""; $("scale").innerHTML = ""; $("note").textContent = ""; }
+  applyCam();
+  crumbs();
+}
+function markSel() {
+  document.querySelectorAll("#view .sel").forEach(n => n.classList.remove("sel"));
+  if (V.sel) document.querySelectorAll(`#view [data-id="${CSS.escape(V.sel)}"]`).forEach(n => { if (!n.dataset.open && !n.dataset.more) n.classList.add("sel"); });
+  if (V.view === "map") placeOverlays();
+}
+function crumbs() {
+  const top = V.hits && V.hitList.length ? visible().top : V.focus;
+  const path = ancestors(top).concat([top]).filter(id => W.ents.has(id));
+  const parts = path.slice(-5).map(id => `<button data-f="${esc(id)}" title="${esc(nameOf(id))}">${esc(short(nameOf(id), 26))}</button>`);
+  $("crumbs").innerHTML = (path.length > 5 ? `<button data-f="${esc(path[0])}">…</button><span class="sep">/</span>` : "") + parts.join('<span class="sep">/</span>') +
+    (V.hits ? `<span class="sep">·</span><button data-clear="1">${V.hitList.length} found · clear</button>` : "");
+  $("crumbs").querySelectorAll("[data-f]").forEach(b => b.onclick = () => { if (V.hits) clearSearch(); focusOn(b.dataset.f); });
+  $("crumbs").querySelectorAll("[data-clear]").forEach(b => b.onclick = () => clearSearch());
+}
+
+// ---------------------------------------------------------------- search: name or state, narrowed by type
+function buildTypeSelect() {
+  const cur = $("qt").value, types = [...W.byType.entries()].sort((a, b) => b[1].length - a[1].length);
+  const kinds = ["place", "creature", "thing"].filter(k => [...W.byType.keys()].some(t => kindOf(t) === k));
+  $("qt").innerHTML = `<option value="">all types</option><optgroup label="kinds">` + kinds.map(k => `<option value="kind:${k}">every ${k}</option>`).join("") +
+    `</optgroup><optgroup label="types">` + types.map(([t, ids]) => `<option value="${esc(t)}">${esc(t)} (${ids.length})</option>`).join("") + `</optgroup>`;
+  $("qt").value = cur;
+}
+function pathGet(o, path) { let v = o; for (const p of path.split(".")) { if (v === null || v === undefined || typeof v !== "object") return undefined; v = v[p]; } return v; }
+function fieldOf(e, f) { if (f === "name" || f === "type" || f === "id" || f === "parent") return e[f]; if (f === "kind") return kindOf(e.type); return pathGet(e.state || {}, f); }
+function compile(q) {
+  const toks = (q.match(/"[^"]+"|\S+/g) || []).map(t => t.replace(/^"|"$/g, ""));
+  return toks.map(t => {
+    let m = t.match(/^(is|has|not):([\w.]+)$/i);
+    if (m) { const how = m[1].toLowerCase(), f = m[2]; return e => { const v = fieldOf(e, f); return how === "is" ? !!v : how === "not" ? !v : v !== undefined && v !== null; }; }
+    m = t.match(/^([\w.]+)(<=|>=|!=|=|:|<|>)(.*)$/);
+    if (m) {
+      const [, f, op, raw] = m, n = Number(raw), isNum = raw !== "" && Number.isFinite(n), low = raw.toLowerCase();
+      return e => {
+        const v = fieldOf(e, f); if (v === undefined) return op === "!=";
+        if (isNum && num(v) !== null) { const x = num(v); return op === "<" ? x < n : op === ">" ? x > n : op === "<=" ? x <= n : op === ">=" ? x >= n : op === "!=" ? x !== n : x === n; }
+        const s = typeof v === "object" ? JSON.stringify(v).toLowerCase() : String(v).toLowerCase();
+        return op === "!=" ? s !== low : op === ":" ? s.includes(low) : s === low;
+      };
+    }
+    const w = t.toLowerCase();
+    return e => (e.name || "").toLowerCase().includes(w) || e.id.toLowerCase() === w || e.type.toLowerCase().includes(w) || String((e.state || {}).description || "").toLowerCase().includes(w);
+  });
+}
+function runSearch(move) {
+  if (!V.q && !V.qt) { if (V.hits) clearSearch(); return; }
+  const tests = compile(V.q), qt = V.qt;
+  const hits = [];
+  for (const e of W.ents.values()) {
+    if (W.info && e.id === W.info.root && !V.q) continue;
+    if (qt) { if (qt.startsWith("kind:") ? kindOf(e.type) !== qt.slice(5) : e.type !== qt) continue; }
+    if (tests.every(t => { try { return t(e); } catch (x) { return false; } })) hits.push(e.id);
+  }
+  if (!V.hits) V.prevFocus = V.focus;
+  V.hits = new Set(hits); V.hitList = hits; V.expanded.clear();
+  $("rn").textContent = String(hits.length);
+  if (move) {
+    if (V.view === "map") { const top = lca(hits); V.depth.map = Math.max(V.depth.map, Math.min(8, Math.max(1, ...hits.map(h => depthUnder(h, top))))); $("dval").textContent = V.depth.map; }
+    setTab("res"); openSheet(true);
+    cam().fitted = true; draw(); fitHits();
+  } else draw();
+  if (V.tab === "res") panel(true);
+}
+function fitHits() {
+  // fit what the search found, not the whole tree that leads to it
+  if (!V.hitList.length) { fit(); return; }
+  if (V.view === "tree") {
+    const nodes = V.hitList.map(id => document.querySelector(`#view .node[data-id="${CSS.escape(id)}"]`)).filter(Boolean);
+    if (!nodes.length) { fit(); return; }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const n of nodes) { const m = n.getAttribute("transform").match(/translate\(([-\d.e]+),([-\d.e]+)\)/); if (!m) continue; const x = +m[1], y = +m[2]; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + BW); y1 = Math.max(y1, y + BH); }
+    fitTo({ x: x0 - 20, y: y0 - 20, w: x1 - x0 + 40, h: y1 - y0 + 40 }, 1.4);
+  } else {
+    atMemo.clear();
+    const pts = [];
+    for (const id of V.hitList) {
+      // a found thing with no place of its own is where its nearest placed container is
+      let p = id, g = 0; while (p && g++ < 64) { const a = worldAt(p); if (a && a[2]) break; p = ent(p) ? ent(p).parent : null; }
+      if (!p || p === W.info.root) continue;
+      const e = ent(p), at = worldAt(p), ol = outline(e); if (ol) pts.push(...ol); else pts.push([at[0], at[1]]);
+    }
+    if (!pts.length) { fit(); return; }
+    const b = bboxOf(pts), span = Math.max(b.x1 - b.x0, b.y1 - b.y0, 20);
+    fitTo({ x: b.x0 - span * 0.15, y: -b.y1 - span * 0.15, w: (b.x1 - b.x0) + span * 0.3, h: (b.y1 - b.y0) + span * 0.3 }, 1e6);
+    rezoom();
+  }
+  cam().fitted = false;
+}
+function clearSearch() {
+  V.hits = null; V.hitList = []; V.q = ""; V.qt = ""; $("q").value = ""; $("qt").value = ""; $("rn").textContent = "";
+  if (V.prevFocus && W.ents.has(V.prevFocus)) V.focus = V.prevFocus;
+  V.prevFocus = null; schedule(true); if (V.tab === "res") panel(true);
+}
+
+// ---------------------------------------------------------------- numbers: what a set of entities carries, and how one stands in it
+const SKIP = new Set(["layout", "space", "frame", "ambient", "templates", "rules", "stages", "thirst_death_days", "condition_notes", "sweat", "aid"]);
+function numerics(e) {
+  const out = {}, st = e.state || {};
+  for (const [k, v] of Object.entries(st)) {
+    if (SKIP.has(k)) continue;
+    if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
+    else if (v && typeof v === "object" && !Array.isArray(v)) for (const [k2, v2] of Object.entries(v)) if (typeof v2 === "number" && Number.isFinite(v2)) out[k + "." + k2] = v2;
+  }
+  return out;
+}
+function statsOf(ids) {
+  const cols = new Map(), flags = new Map();
+  for (const id of ids) {
+    const e = ent(id); if (!e) continue;
+    for (const [k, v] of Object.entries(numerics(e))) { let a = cols.get(k); if (!a) cols.set(k, a = []); a.push([id, v]); }
+    for (const [k, v] of Object.entries(e.state || {})) if (typeof v === "boolean") { let f = flags.get(k); if (!f) flags.set(k, f = { t: 0, n: 0 }); f.n++; if (v) f.t++; }
+  }
+  const out = [];
+  for (const [k, a] of cols) {
+    if (a.length < 2) continue;
+    const vs = a.map(x => x[1]), n = vs.length, mean = vs.reduce((s, v) => s + v, 0) / n;
+    const sd = Math.sqrt(vs.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1));
+    const sorted = vs.slice().sort((x, y) => x - y), med = n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+    out.push({ k, n, mean, sd, min: sorted[0], max: sorted[n - 1], med, vals: a });
+  }
+  out.sort((x, y) => y.n - x.n || (y.sd > 0) - (x.sd > 0) || x.k.localeCompare(y.k));
+  return { cols: out, flags: [...flags.entries()].filter(([, f]) => f.t > 0).sort((a, b) => b[1].t - a[1].t) };
+}
+function zOf(st, v) { return st.sd > 0 ? (v - st.mean) / st.sd : 0; }
+function zTint(z) { const a = Math.min(1, Math.abs(z) / 2.5) * 0.55; return z === 0 ? "transparent" : (z < 0 ? `rgba(57,135,229,${a.toFixed(2)})` : `rgba(208,59,59,${a.toFixed(2)})`); }
+function strip(st, me) {
+  const W2 = 300, H2 = 26, lo = st.min, hi = st.max === st.min ? st.min + 1 : st.max, X = v => 6 + (v - lo) / (hi - lo) * (W2 - 12);
+  let s = `<svg viewBox="0 0 ${W2} ${H2}" preserveAspectRatio="none" role="img" aria-label="${esc(st.k)} spread">`;
+  s += `<line class="axis" x1="6" x2="${W2 - 6}" y1="${H2 - 4}" y2="${H2 - 4}"/>`;
+  if (st.sd > 0) s += `<rect class="band" x="${X(Math.max(lo, st.mean - st.sd))}" y="3" width="${Math.max(1, X(Math.min(hi, st.mean + st.sd)) - X(Math.max(lo, st.mean - st.sd)))}" height="${H2 - 8}"/>`;
+  s += `<line class="mean" x1="${X(st.mean)}" x2="${X(st.mean)}" y1="2" y2="${H2 - 3}"/>`;
+  const bins = new Map();
+  for (const [id, v] of st.vals) { const x = Math.round(X(v)); const n = bins.get(x) || 0; bins.set(x, n + 1); const y = H2 - 9 - Math.min(n, 3) * 4; s += `<circle class="dot${id === me ? " me" : ""}" cx="${x}" cy="${y}" r="${id === me ? 4 : 3}"><title>${esc(nameOf(id))}: ${fmt(v)} (z ${zOf(st, v).toFixed(2)})</title></circle>`; }
+  return s + `</svg>`;
+}
+
+// ---------------------------------------------------------------- the side panel
+function setTab(t) { V.tab = t; document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t)); document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "p-" + t)); panel(true); }
+function openSheet(on) { $("side").classList.toggle("open", on); }
+function panel(force) {
+  if (!W.info) return;
+  if (V.tab === "ent") { if (force) paneEntity(); }
+  else if (V.tab === "res") { if (force) paneResults(); }
+  else if (V.tab === "evs") paneEvents();
+  else if (V.tab === "seats") paneSeats();
+}
+function chip(id, extra) { const e = ent(id); if (!e) return ""; const kd = kindOf(e.type); return `<button class="chip${extra || ""}" data-go="${esc(id)}" title="${esc(e.type + " · " + id)}"><i class="kd-${kd}"></i>${esc(short(label(e), 30))}</button>`; }
+function wire(el) {
+  el.querySelectorAll("[data-go]").forEach(b => b.onclick = () => select(b.dataset.go));
+  el.querySelectorAll("[data-focus]").forEach(b => b.onclick = () => { focusOn(b.dataset.focus); });
+  el.querySelectorAll("[data-map]").forEach(b => b.onclick = () => { setView("map"); const e = ent(b.dataset.map); focusOn(e && e.parent && worldAt(b.dataset.map) ? e.parent : b.dataset.map); });
+  el.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { try { navigator.clipboard.writeText(b.dataset.copy); b.textContent = "copied"; } catch (x) {} });
+}
+function meter(name, v, max) {
+  const f = Math.max(0, Math.min(1, v / (max || 1))), cls = f <= 0.2 ? "crit" : f <= 0.5 ? "low" : "";
+  return `<div class="meter"><span>${esc(name)}</span><div class="track"><div class="fill ${cls}" style="width:${(f * 100).toFixed(0)}%"></div></div><span>${fmt(v)} / ${fmt(max)}</span></div>`;
+}
+function valueHtml(v) {
+  if (v === null || v === undefined) return `<span style="color:var(--faint)">none</span>`;
+  if (typeof v !== "object") { const s = String(v); return W.ents.has(s) ? chip(s) : esc(short(s, 400)); }
+  const j = JSON.stringify(v), brief = Array.isArray(v) ? v.length + " items" : Object.keys(v).length + " keys";
+  if (j.length < 60) return esc(j);
+  return `<details><summary>${brief}</summary><pre>${esc(JSON.stringify(v, null, 1))}</pre></details>`;
+}
+const SHOWN = new Set(["hp", "max_hp", "water", "max_water", "layout", "dead", "down", "wounded", "asleep", "thirsty", "hidden", "fading", "downed_by", "description"]);
+function paneEntity() {
+  const el = $("p-ent"), id = V.sel, e = id && ent(id);
+  if (!e) { el.innerHTML = `<div class="empty">${id ? esc(id) + " is gone from the world." : "Tap something to read it here. Double-tap a place to go inside it."}</div>`; return; }
+  const st = e.state || {}, kd = kindOf(e.type), cond = condition(e), seat = seatOf(id);
+  let h = `<div class="sec"><div class="title"><span class="sw" style="background:var(--${kd})${kd === "other" ? ";opacity:.5" : ""}"></span><div><h2>${esc(label(e))}</h2>` +
+    `<div class="meta"><span>${esc(e.type)}</span><span>${esc(kd)}</span><button data-copy="${esc(id)}" title="copy the id">${esc(id)}</button><span>v${e.version}</span></div></div></div>`;
+  if (cond.length) h += `<div class="badges">${cond.map(([t, s]) => `<span class="badge ${s}">${esc(t)}</span>`).join("")}</div>`;
+  if (st.description) h += `<div style="margin-top:8px;color:var(--dim)">${esc(short(st.description, 600))}</div>`;
+  h += `<div class="acts"><button class="btn" data-focus="${esc(id)}">go inside</button><button class="btn" data-map="${esc(id)}">on the map</button><button class="btn" id="evmine">its events</button></div></div>`;
+  const meters = [];
+  if (num(st.hp) !== null) meters.push(meter("hp", num(st.hp), num(st.max_hp) ?? Math.max(num(st.hp), 1)));
+  if (num(st.water) !== null && kd === "creature") meters.push(meter("water", num(st.water), num(st.max_water) ?? 10));
+  if (num(st.carry) !== null) { const load = kidsOf(id).map(ent).reduce((a, c) => { const s = (c && c.state) || {}; return a + (num(s.bulk) ?? (s.capacity !== undefined ? 2 : 1)) * (num(s.count) ?? 1); }, 0); meters.push(meter("load", load, num(st.carry))); }
+  if (meters.length) h += `<div class="sec"><h4>body</h4>${meters.join("")}</div>`;
+  if (seat) h += `<div class="sec"><h4>seat</h4><div>${esc(seat.label || seat.name || seat.id)} · ${esc(seat.role || "")} · ${seatIdle(seat) ? "away" : "in play"}${seat.last_seen ? " · seen " + ago(W.info.now - seat.last_seen) + " ago" : ""}</div></div>`;
+  const path = ancestors(id);
+  h += `<div class="sec"><h4>where</h4><div class="chips">${path.length ? path.map(p => chip(p)).join("") : '<span style="color:var(--dim)">the root</span>'}</div></div>`;
+  const ks = kidsOf(id);
+  if (ks.length) h += `<div class="sec"><h4><span>holds</span><span>${ks.length}</span></h4><div class="chips">${ks.slice(0, 60).map(k => chip(k)).join("")}${ks.length > 60 ? `<button class="chip" data-focus="${esc(id)}">+${ks.length - 60}</button>` : ""}</div></div>`;
+  const eds = (W.edgesBy && W.edgesBy.get(id)) || [];
+  if (eds.length) {
+    const groups = new Map();
+    for (const ed of eds) { const out = ed.source === id, key = (ed.relation === "connects_to" ? "way to" : ed.relation) + (out || ed.relation === "connects_to" ? "" : " (from)"); let g = groups.get(key); if (!g) groups.set(key, g = new Set()); g.add(out ? ed.target : ed.source); }
+    h += `<div class="sec"><h4>relations</h4><div class="rels">${[...groups.entries()].map(([r, set]) => `<span class="rn">${esc(r)}</span><div class="chips">${[...set].map(o => chip(o)).join("")}</div>`).join("")}</div></div>`;
+  }
+  const hyper = W.hyper.filter(x => (x.participants || []).includes(id));
+  if (hyper.length) h += `<div class="sec"><h4>together in</h4>${hyper.map(x => `<div class="rels"><span class="rn">${esc(x.relation)}</span><div class="chips">${x.participants.filter(p => p !== id).map(p => chip(p)).join("")}</div></div>`).join("")}</div>`;
+  const lay = st.layout, at = worldAt(id);
+  if (lay || at) {
+    const ext = lay && (lay.radius ? "circle r " + fmt(lay.radius) : lay.size ? "box " + lay.size.map(fmt).join(" × ") : lay.footprint ? "polygon, " + lay.footprint.length + " points" : "a point");
+    h += `<div class="sec"><h4>place in the frame</h4><div class="kv">` +
+      (at ? `<span>at</span><span>${fmt(at[0])}, ${fmt(at[1])}${at[2] ? "" : " (its container's)"}</span>` : "") +
+      (ext ? `<span>extent</span><span>${esc(ext)}${lay.heading ? ", heading " + fmt(lay.heading) : ""}</span>` : "") +
+      (lay && (lay.floor !== undefined || lay.ceiling !== undefined) ? `<span>height</span><span>${fmt(lay.floor ?? 0)} to ${lay.ceiling !== undefined ? fmt(lay.ceiling) : "open"}</span>` : "") +
+      (lay && lay.note ? `<span>note</span><span>${esc(lay.note)}</span>` : "") + `</div>${at && !at[2] ? '<div style="margin-top:6px;color:var(--dim)">No place of its own: it stands wherever its container is.</div>' : ""}</div>`;
+  }
+  // how it stands among its peers: the search's set when it is in one, else everything of its type
+  const peers = V.hits && V.hits.has(id) ? V.hitList : (W.byType.get(e.type) || []);
+  if (peers.length >= 3) {
+    const sts = statsOf(peers).cols, mine = numerics(e), rows = sts.filter(s => mine[s.k] !== undefined && s.sd > 0).slice(0, 10);
+    if (rows.length) {
+      h += `<div class="sec"><h4><span>among ${peers.length} ${V.hits && V.hits.has(id) ? "found" : esc(e.type)}</span><span>z</span></h4><div class="peer">` +
+        rows.map(s => { const z = zOf(s, mine[s.k]), w = Math.min(50, Math.abs(z) / 3 * 50); return `<span>${esc(s.k)} <span style="color:var(--dim)">${fmt(mine[s.k])}</span></span><div class="zbar" title="mean ${fmt(s.mean)}, sd ${fmt(s.sd)}"><b></b><i style="${z < 0 ? "right:50%" : "left:50%"};width:${w}%;background:${z < 0 ? "var(--cool)" : "var(--warm)"}"></i></div><span style="text-align:right">${(z >= 0 ? "+" : "") + z.toFixed(1)}</span>`; }).join("") +
+        `</div></div>`;
+    }
+  }
+  const rest = Object.entries(st).filter(([k]) => !SHOWN.has(k)).sort((a, b) => (typeof a[1] === "object") - (typeof b[1] === "object") || a[0].localeCompare(b[0]));
+  if (rest.length) h += `<div class="sec"><h4>state</h4><div class="kv">${rest.map(([k, v]) => `<span>${esc(k)}</span><span>${valueHtml(v)}</span>`).join("")}</div></div>`;
+  h += `<div class="sec"><details><summary class="cap" style="cursor:pointer">raw json</summary><pre class="raw">${esc(JSON.stringify(e, null, 1))}</pre></details></div>`;
+  el.innerHTML = h; wire(el);
+  const b = $("evmine"); if (b) b.onclick = () => { V.evMine = true; setTab("evs"); };
+}
+function paneResults() {
+  const el = $("p-res");
+  if (!V.hits) { el.innerHTML = `<div class="empty">Search to gather a set: by name, or by state (<b>hp&lt;3</b>, <b>water&lt;=2</b>, <b>faction:keth</b>, <b>is:dead</b>, <b>has:layout</b>), narrowed by type. The set gets its numbers here: mean, spread, and how far each one stands from the rest.</div>`; return; }
+  const ids = V.hitList;
+  let h = `<div class="sec"><h4><span>${ids.length} found</span><span>${esc([V.q, V.qt].filter(Boolean).join(" · "))}</span></h4><div class="acts" style="margin-top:0"><button class="btn" id="rfit">fit them</button><button class="btn" id="rclear">clear</button></div></div>`;
+  if (!ids.length) { el.innerHTML = h + `<div class="empty">Nothing matches. Words match names, types and descriptions; <b>key&lt;n</b>, <b>key:text</b>, <b>is:flag</b> read the state.</div>`; wireRes(el); return; }
+  const { cols, flags } = statsOf(ids);
+  if (cols.length) {
+    h += `<div class="sec"><h4>the numbers</h4><div class="legend"><span><i style="background:var(--dim);height:6px;width:6px;border-radius:50%"></i>one entity</span><span><i style="background:var(--ink);width:2px"></i>mean</span><span><i style="background:rgba(141,154,158,.25)"></i>within 1 sd</span></div></div>`;
+    h += cols.slice(0, 12).map(s => `<div class="stat"><span class="an">${esc(s.k)} <span style="color:var(--faint)">n ${s.n}</span></span><span class="nums">mean ${fmt(s.mean)} · sd ${fmt(s.sd)} · ${fmt(s.min)} to ${fmt(s.max)}</span>${strip(s, V.sel)}</div>`).join("");
+  }
+  if (flags.length) h += `<div class="sec"><h4>flags</h4><div class="chips">${flags.slice(0, 16).map(([k, f]) => `<span class="badge">${esc(k)} ${f.t} of ${f.n}</span>`).join("")}</div></div>`;
+  const shown = cols.filter(s => s.sd > 0).slice(0, 6);
+  if (shown.length) {
+    const z = new Map(shown.map(s => [s.k, new Map(s.vals)]));
+    let rows = ids.slice();
+    if (V.sortKey && z.has(V.sortKey)) { const m = z.get(V.sortKey); rows.sort((a, b) => ((m.get(a) ?? -Infinity) - (m.get(b) ?? -Infinity)) * V.sortDir); }
+    h += `<div class="sec" style="padding:8px 0 0"><h4 style="padding:0 12px"><span>who stands out</span><span class="legend"><span><i style="background:rgba(57,135,229,.55)"></i>below</span><span><i style="background:rgba(208,59,59,.55)"></i>above</span></span></h4>` +
+      `<div style="overflow-x:auto"><table class="z"><thead><tr><th>name</th>${shown.map(s => `<th data-sort="${esc(s.k)}" class="${V.sortKey === s.k ? "on" : ""}" title="sort by ${esc(s.k)}">${esc(short(s.k, 10))}</th>`).join("")}</tr></thead><tbody>` +
+      rows.slice(0, 200).map(id => `<tr data-go="${esc(id)}"><td>${esc(short(nameOf(id), 18))}</td>${shown.map(s => { const v = z.get(s.k).get(id); if (v === undefined) return `<td style="color:var(--faint)">-</td>`; const zz = zOf(s, v); return `<td style="background:${zTint(zz)}" title="z ${zz.toFixed(2)}">${fmt(v)}</td>`; }).join("")}</tr>`).join("") +
+      `</tbody></table></div>${rows.length > 200 ? `<div class="empty">the first 200 of ${rows.length}</div>` : ""}</div>`;
+  }
+  h += `<div class="sec" style="padding-bottom:0"><h4>the set</h4></div><ul class="rlist">` + ids.slice(0, 300).map(id => { const e = ent(id), kd = kindOf(e.type), where = ancestors(id).slice(-2).map(nameOf).join(" / "); return `<li data-go="${esc(id)}" class="${V.sel === id ? "sel" : ""}"><i class="kd-${kd}" style="width:8px;height:8px;display:inline-block"></i><div style="min-width:0"><div class="nm">${esc(label(e))}</div><div class="wh">${esc(where)}</div></div><span class="ty">${esc(e.type)}</span></li>`; }).join("") + `</ul>` +
+    (ids.length > 300 ? `<div class="empty">the first 300 of ${ids.length}: narrow the search</div>` : "");
+  el.innerHTML = h; wireRes(el);
+}
+function wireRes(el) {
+  wire(el);
+  el.querySelectorAll("tr[data-go], li[data-go]").forEach(r => r.onclick = () => { V.sel = r.dataset.go; markSel(); writeHash(); paneResults(); });
+  el.querySelectorAll("th[data-sort]").forEach(t => t.onclick = () => { if (V.sortKey === t.dataset.sort) V.sortDir *= -1; else { V.sortKey = t.dataset.sort; V.sortDir = -1; } paneResults(); });
+  const f = $("rfit"); if (f) f.onclick = () => fitHits();
+  const c = $("rclear"); if (c) c.onclick = () => clearSearch();
+}
+// events: the story by default, the bookkeeping on request
+const EVF = {
+  story: k => !/^(moved|left|act|before_act|finished|embodied|released|patched|scheduled|unscheduled|tick|finish|spawned|destroyed|linked|unlinked|related|unrelated|rule_set|rule_cleared|schema_defined|script_defined|layout|moved_by_author|chronicled)$/.test(k),
+  talk: k => /^(say|talked|parley|agreed|threatened|cowed)$/.test(k),
+  fights: k => /^(hit|missed|warded|downed|wounded|killed|died|rose|attacked|struck|challenged|yielded|dishonor|fading)$/.test(k),
+  moves: k => /^(arrived|left|taken|dropped|given|put|passing|pulled_in)$/.test(k),
+  alerts: k => /^(act_refused|rejected|denied|script_error|died|killed|downed|fading)$/.test(k),
+  all: () => true
+};
+function line(ev) {
+  const p = ev.payload || {}, a = ev.actor ? nameOf(ev.actor) : "", t = ev.target ? nameOf(ev.target) : "", by = p.by ? nameOf(p.by) : a, n = p.count ? p.count + " " : "";
+  switch (ev.kind) {
+    case "say": return `${a}${p.to ? " to " + nameOf(p.to) : ""}: “${short(p.text || "", 220)}”`;
+    case "talked": return `${by} asks ${t} about ${p.about || "nothing in particular"}`;
+    case "arrived": return `${nameOf(p.who || ev.actor)} arrived at ${nameOf(p.place || ev.target)}${p.quiet ? " (quiet)" : ""}`;
+    case "taken": return `${by} took ${n}${nameOf(p.item || ev.target)}`;
+    case "dropped": return `${by} dropped ${n}${nameOf(p.item || ev.target)}`;
+    case "given": return `${by} gave ${n}${nameOf(p.item)} to ${t}`;
+    case "put": return `${by} put ${n}${nameOf(p.item)} in ${t}`;
+    case "hit": return `${by} hit ${t} for ${p.dmg}${p.weapon ? " with " + p.weapon : ""} (${p.attack} vs ${p.defence})`;
+    case "missed": return `${by} missed ${t} (${p.attack} vs ${p.defence})`;
+    case "downed": return `${t} went down` + (p.by ? " (" + nameOf(p.by) + ")" : "");
+    case "died": return `${t} died` + (p.why ? " of " + p.why : "");
+    case "fading": return `${t} is fading, day ${p.day} of ${p.of}`;
+    case "rose": return `${t} is back on their feet`;
+    case "woke": return `${t} woke` + (p.why ? " (" + p.why + ")" : "");
+    case "slept": return `${t} fell asleep`;
+    case "checked": return `${nameOf(p.by || ev.actor)} ${p.skill || "check"}: ${p.total} vs ${p.dc}, ${p.success ? "pass" : "fail"}`;
+    case "act_refused": return `${a || t} tried ${p.verb}${p.asked ? " " + p.asked : ""}: ${p.reason || "refused"}`;
+    case "renamed": return `${p.old} is now ${p.new}`;
+  }
+  return null;
+}
+function paneEvents() {
+  const el = $("p-evs"), f = EVF[V.evFilter] || EVF.story, me = V.evMine && V.sel;
+  const rows = W.events.filter(ev => f(ev.kind) && (!me || ev.actor === me || ev.target === me || (ev.payload && (ev.payload.by === me || ev.payload.who === me || ev.payload.to === me)))).slice(-250).reverse();
+  let h = `<div class="filters">${Object.keys(EVF).map(k => `<button data-f="${k}" class="${V.evFilter === k ? "on" : ""}">${k}</button>`).join("")}` +
+    (V.sel ? `<button data-mine="1" class="${me ? "on" : ""}" title="only what touched the selected one">${esc(short(nameOf(V.sel), 14))}</button>` : "") + `</div>`;
+  if (!rows.length) h += `<div class="empty">Nothing ${V.evFilter === "all" ? "" : "of this kind "}in the last ${W.events.length} events.</div>`;
+  const day = W.info.day_seconds || 86400;
+  for (const ev of rows) {
+    const ln = (() => { try { return line(ev); } catch (x) { return null; } })(), tod = ((ev.t % day) + day) % day / day * 24;
+    const tt = String(Math.floor(tod)).padStart(2, "0") + ":" + String(Math.floor((tod % 1) * 60)).padStart(2, "0");
+    const who = [ev.actor, ev.target].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
+    h += `<div class="ev${ev.seq > V.seenSeq ? " new" : ""}" title="#${ev.seq} · reach ${ev.reach}"><span class="t">${tt}</span><div><span class="k">${esc(ev.kind)}</span> ` +
+      (ln ? `<div class="ln">${esc(ln)}</div>` : `${who.map(id => `<button data-go="${esc(id)}">${esc(short(nameOf(id), 24))}</button>`).join(" → ")}${ev.payload && Object.keys(ev.payload).length ? `<div class="pl">${esc(short(JSON.stringify(ev.payload), 160))}</div>` : ""}`) + `</div></div>`;
+  }
+  el.innerHTML = h; wire(el);
+  el.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { V.evFilter = b.dataset.f; paneEvents(); });
+  el.querySelectorAll("[data-mine]").forEach(b => b.onclick = () => { V.evMine = !V.evMine; paneEvents(); });
+  V.seenSeq = W.maxSeq;
+  if (V.evFilter === "alerts" || V.evFilter === "all") { V.alertSeen = W.maxSeq; $("an").textContent = ""; }
+}
+function paneSeats() {
+  const el = $("p-seats"), w = W.info;
+  const rows = W.prin.slice().sort((a, b) => (seatIdle(a) - seatIdle(b)) || String(a.label || a.name).localeCompare(String(b.label || b.name)));
+  if (!rows.length) { el.innerHTML = `<div class="empty">Nobody holds a seat in this world.</div>`; return; }
+  el.innerHTML = rows.map(p => { const idle = seatIdle(p); return `<div class="seat"><span class="led${idle ? "" : " on"}"></span><div style="min-width:0"><div class="nm">${esc(p.label || p.name || p.id)}</div>` +
+    `<div class="wh">${esc(p.role || p.kind || "")}${p.entity ? " · " : ""}${p.entity ? `<button data-go="${esc(p.entity)}">${esc(nameOf(p.entity))}</button>` : " · no body"}</div></div>` +
+    `<span class="wh">${idle ? "away" : "in play"}${p.last_seen ? "<br>" + ago(w.now - p.last_seen) + " ago" : ""}</span></div>`; }).join("");
+  wire(el);
+}
+
+syncControls();
+poll();
+(function loop() { setTimeout(() => { if (!document.hidden || Date.now() % 15000 < 2100) poll(); loop(); }, 2000); })();
 </script>
 </body>
 </html>
