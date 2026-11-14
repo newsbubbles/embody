@@ -4,6 +4,32 @@ Ways the system surprised us in play: what we saw, why it happened, and what it 
 work (worlds, minds) and the engine work add here. A finding is something the design did not predict, good or bad; a
 plain bug goes in its fix's commit.
 
+## 2026-11-14: The moon was lost to thirst, not to the riders
+
+**Seen.** At dusk on the moon's day the Keth poured eight draws into the Hold's jars. Two hours later, at the turning,
+the jars held none. The wall stood ten against the riders' nine, the truce held, and the writ stayed on the wall, so
+water was the only fact short: siege, not held. Nobody wasted the water. Each cup went to someone the rules had made
+thirsty, and the Reeve's ration order could not stop bodies that drink on their own when they run low.
+
+**Why.** The reckoning counts the jars at one instant, while every body in the Hold draws from the same jars all
+evening. A shared store that thirst drains on its own is a clock nobody sees running unless they count it aloud.
+
+**Taught.** A stock the story counts at a moment needs someone in the world who guards it, or a way to set water
+aside that thirst cannot touch. Until then the minds should treat the last hours before a count as rationing, not
+drinking.
+
+## 2026-11-14: A guide lost her seat because her watch died quietly
+
+**Seen.** Linnet, Aaron's guide, dropped out of her body twice in one evening, each time minutes after a line to him.
+Her session believed it had a `--rejoin` watch running. It had started the watch inside a subshell with `&`, and the
+watch died with that shell, so nothing renewed the seat and nothing said so.
+
+**Why.** A detached background job in an agent's shell is not a job the harness knows about. When the shell goes, the
+job goes, and the agent's own notes still say the watch is armed.
+
+**Taught.** Minds start their watch as a harness background task, never with `&` inside a shell. The host's keeper
+(seats quiet too long, or no body) is what caught both drops.
+
 ## 2026-11-12: The crew built a paper office in a world with no pen
 
 **Seen.** Binx's crew settled their convoy load with Ossa by chalk and witnesses, then Dov, the crew's keeper, refused to
