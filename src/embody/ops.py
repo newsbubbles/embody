@@ -663,6 +663,9 @@ class Session:
             return self.scope[0]
         if self.grant and self.grant.get("entity_id"):
             return self.grant["entity_id"]
+        g = w.store.get("grants", w.id, self.grant["id"]) if self.grant else None
+        if g and g.get("made") and w.get(g["made"]) and not w.get(g["made"])["state"].get("dead"):
+            return g["made"]  # the character this invite made
         if self.scope:
             raise Rejected("your grant names several entities", hint="join(entity=<one of them>)",
                            alternatives=[w.get(x)["name"] for x in self.scope if w.get(x)])
@@ -826,6 +829,19 @@ class Session:
             raise Rejected(f"someone is already called {name!r}", hint="pick another name")
         if self.grant and self.grant.get("template") and self.grant["template"] != template:
             raise Rejected(f"your grant is for the {self.grant['template']!r} template", hint="use that one")
+        g = w.store.get("grants", w.id, self.grant["id"]) if self.grant is not None and self.role != OWNER else None
+        if g is not None:
+            # one character per invite: a guest who could make another whenever they liked left dozens of bodies
+            # behind, each running on its template's behaviors (2026-11-14)
+            def standing(eid: str | None) -> dict[str, Any] | None:
+                e = w.get(eid) if eid else None
+                return e if e is not None and not e["state"].get("dead") else None
+            p = w.principal(self.pid)
+            have = standing(g.get("made")) or standing(p.get("entity_id") if p else None)
+            if have is not None:
+                raise Rejected(f"your invite has its character already: {have['name']}. One invite makes one character, "
+                               "and a new one only once that one has died",
+                               hint="join() sits you back in them; the host can make you another invite")
         state = dict(t.get("state") or {})
         state.update({"playable": True, "template": template})
         if t.get("brief"):
@@ -836,6 +852,8 @@ class Session:
         eid = w.spawn(t.get("type", "creature"), parent, name=name, state=state)
         for item in t.get("kit") or []:  # what a newcomer of this kind carries in: a skin, a blade, whatever the world says
             w.spawn(item.get("type", "thing"), eid, name=item["name"], state=dict(item.get("state") or {}))
+        if g is not None:
+            w.store.set("grants", w.id, g["id"], made=eid)
         return eid
 
     def _briefing(self, eid: str) -> dict[str, Any]:

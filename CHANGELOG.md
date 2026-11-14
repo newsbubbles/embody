@@ -6,6 +6,7 @@ The version in `pyproject.toml` is 0.1.0 until the first release; until then ent
 
 ## Unreleased
 
+- One invite makes one character: `join(template=...)` under a grant refuses a second body while the first stands (not dead), and a bare `join()` sits the guest back in the one it made. A guest made some 55 guard bodies one join at a time, and the ones left behind ran on the guard behaviors and killed two people.
 - Hot-fix: a seat stays held while any live grant of its principal remains. The release of seats on ended grants read only the grant a principal first joined on, so minds re-minted under their own principal id lost their seats when the old grant was revoked (thirteen at once, live).
 - Seats the world hands out: `ctx.offer_seat(entity, to=body, why=...)` offers whoever holds a body a seat for a `seatable` entity (a quest's reward, a tamed beast). The holder sees it in `seats()` and `claim_seat(offer)` mints a mind grant for that one entity, its paste for them alone, within their grant's `slots` (`invite(slots=n)`, else the root's `seat_slots`). Revoking a grant ends the seats claimed under it; `ctx.withdraw_seat` ends one; `seat_offers: false` on the root turns it off.
 - Out of reach, the refusal names the way in verbs that exist: `go <place> first (<thing> is there)` when the thing is in a place next door, else go where it is (perceive lists the exits). It had said "move closer", and a guest looked for a move verb. A thing too far for a ranged verb says "walk nearer to it first, then try again".

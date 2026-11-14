@@ -769,3 +769,25 @@ def test_a_seat_holds_while_any_grant_of_its_principal_is_live():
     assert eng.tick_all()["released"] == {} and w.principal(a.pid)["entity_id"] == i["Prisoner"]
     w.store.set("grants", w.id, "g-new", revoked=1)  # and with none left, the seat goes
     assert eng.tick_all()["released"] == {"two-rooms": [a.pid]}
+
+
+def test_one_invite_makes_one_character_while_it_stands():
+    # 2026-11-14: a guard-template guest made some 55 bodies, one join at a time; the ones it left ran on the guard
+    # behaviors and killed two people
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.patch(w.root_id, {"templates": {"newcomer": {"type": "person", "place": "Hall"}}})
+    p = eng.session_for_token(gm.invite("player", label="cosmic")["token"])
+    kit = p.join(template="newcomer", name="QC-1")["you"]["id"]
+    with pytest.raises(Rejected) as r:
+        p.join(template="newcomer", name="QC-2")
+    assert "QC-1" in r.value.reason and "join()" in r.value.hint
+    p.leave()  # stepping out does not free the invite to make another
+    with pytest.raises(Rejected):
+        p.join(template="newcomer", name="QC-2")
+    assert len(w.find(name="QC-2")) == 0
+    assert p.join()["you"]["id"] == kit  # back in the one it made
+    gm.patch(kit, {"dead": True})  # once that one has died, a new one
+    assert p.join(template="newcomer", name="QC-2")["you"]["name"] == "QC-2"
+    # the owner's own hand makes as many as it likes
+    gm.join(template="newcomer", name="Extra")
