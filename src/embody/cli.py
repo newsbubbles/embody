@@ -94,7 +94,7 @@ def remember(db: Path, st: dict[str, Any], s: Session) -> None:
 
 
 def render_perceive(b: dict[str, Any]) -> str:
-    out = []
+    out = [f"RULES CHANGED: {b['rules_notice']}"] if b.get("rules_notice") and not b.get("rules_said") else []
     you = b["you"]
     here = b["here"]
     if here:
@@ -176,7 +176,10 @@ def watch_local(s: Session, args: argparse.Namespace) -> dict[str, Any]:
 
 
 def render_watch(b: dict[str, Any]) -> str:
-    """What a watcher prints: FIRED or TIME UP, then the light bundle."""
+    """What a watcher prints: FIRED or TIME UP, then the light bundle; RULES CHANGED first while the seat is behind."""
+    if b.get("rules_notice") and not b.get("rules_said"):
+        b["rules_said"] = True  # render_perceive below would say it twice
+        return f"RULES CHANGED: {b['rules_notice']}\n" + render_watch(b)
     if b.get("timed_out"):
         return (f"TIME UP at t={b['t']:g}: {b.get('until') or 'any event'} never came true"
                 + (f"; here {b['here']}" if isinstance(b.get("here"), str) else "")
@@ -189,7 +192,7 @@ def render_watch(b: dict[str, Any]) -> str:
 
 def render_wait(b: dict[str, Any]) -> str:
     """The light bundle wait() returns: where, who, what happened."""
-    out = []
+    out = [f"RULES CHANGED: {b['rules_notice']}"] if b.get("rules_notice") and not b.get("rules_said") else []
     here = b.get("here")
     head = f"== {here['name']} ({here['id']})" if here else "== nowhere"
     head += f"  t={b['t']:g}"

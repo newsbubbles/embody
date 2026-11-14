@@ -423,12 +423,13 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
-    def guide(topic: str = "") -> dict[str, Any]:
+    def guide(topic: str = "", since: int | None = None, principal: str | None = None) -> dict[str, Any]:
         """How to play, author, narrate, be a mind or wait, in any harness: the rules the host's own agents follow.
         No topic: the index and the rules for every role. topic: narrator, author, player, mind, hosting or watch;
         scripting is the ctx API, schema fields and action/listener/behavior shapes, before define_script.
-        Read your part's guide once before you play."""
-        return S(None).guide(topic)
+        changes: this world's rules changelog since version `since` (perceive's rules_notice names it); reading it
+        marks your seat current. Read your part's guide once before you play."""
+        return S(principal).guide(topic, since=since)
 
     @tool()
     async def wait(timeout: float = 30.0, kinds: list[str] | None = None, full: bool = False,
@@ -611,6 +612,17 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     def unrelate(id: str) -> dict[str, Any]:
         """(author) Remove an n-ary relation by id."""
         return s.unrelate(id)
+
+    @tool()
+    @_wrap
+    def rules_changed(id: str, was: str, now: str, recheck: list[str] | None = None, guide: list[str] | None = None,
+                      retired: list[str] | None = None, date: str = "") -> dict[str, Any]:
+        """(author) Log a change to this world's rules, so seats that have played for hours stop acting on the old.
+        id: short and stable (the same id edits that entry). was / now: the rule before and after, a sentence each.
+        recheck: what to look over (memories, watch filters, notes, scripts). guide: the guide parts it touches.
+        retired: fields and event kinds the world no longer has (a wait on one is refused). The world's rules
+        version moves on, and every seat behind it hears it in perceive until it reads guide('changes')."""
+        return s.rules_changed(id, was, now, recheck=recheck, guide=guide, retired=retired, date=date)
 
     @tool()
     @_wrap

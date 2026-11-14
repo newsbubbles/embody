@@ -97,6 +97,15 @@ guard whose owner is struck fights back).
 
 PACK = {"name": "beasts", "description": "Animals that grow up, eat what the land gives, can be tamed and kept, and breed as far as the land carries."}
 
+# This pack's rules changelog, oldest first (see d20's RULES).
+RULES = [
+    {"id": "hp-bar", "date": "2026-11-14",
+     "was": "Beasts had vigor besides hp.",
+     "now": "Beasts have hp and max_hp like everyone, in every species stage.",
+     "retired": ["vigor", "max_vigor"], "recheck": ["notes on beasts' strength", "scripts that read a beast's vigor"],
+     "guide": ["player", "mind"]},
+]
+
 BEAST_STATE = {"beast": True, "species": None, "sex": None, "age": 0, "stage": None, "fed": 3, "hungry": False,
                "hungry_days": 0, "owner": None, "herd": None, "loyalty": None, "follows": None, "staying": False,
                "home": None, "pack": False, "leader": False, "carrying": None, "trust": {}, "gentled": {}, "fed_by": {},

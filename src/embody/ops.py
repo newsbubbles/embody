@@ -126,7 +126,7 @@ class Engine:
             meta["forked_from"] = {"world": source_id, "seq": st.next_seq(source_id) - 1, "t": src.t}
             row["meta"] = meta
             st.put("world", row)
-            for table in ("schema", "script", "entity", "edge", "hyperedge", "event", "scheduled"):
+            for table in ("schema", "script", "entity", "edge", "hyperedge", "event", "scheduled", "rules_change"):
                 for r in st.query(table, "world_id=?", (source_id,)):
                     r = dict(r)
                     r["world_id"] = id
@@ -875,6 +875,8 @@ class Session:
                f"guide('{self.role if self.role in GUIDE_TOPICS else 'player'}') is the whole guide for your part: read it "
                "before you play",
                "a refusal says why and what would work; do not retry the same call",
+               "the rules can change while you play: when perceive carries rules_notice, read guide('changes') before you "
+               "act and rebuild your watch and notes on the new terms",
                "tell the human what happens as a story, in prose, in the fiction: no bullets, no stat sheets, no tool names"]
         if self.role == PLAYER:
             how.insert(0, "this briefing is for you, not for them: say nothing of seats, grants, tokens or tools; open in the "
@@ -890,11 +892,14 @@ class Session:
             out["from_the_host"] = self.grant["brief"]  # this guest's own orders; nobody else's briefing carries them
         return out
 
-    def guide(self, topic: str = "") -> dict[str, Any]:
+    def guide(self, topic: str = "", since: int | None = None) -> dict[str, Any]:
         """The embody skill, served over the door, so an agent in any harness reads the rules the host's agents read.
         No topic: the index and the rules for every role. A topic (narrator, author, player, mind, hosting, watch):
         that part's whole guide; scripting: the ctx reference (docs/SCRIPTING.md). A pointer to another part reads as
-        guide('<part>')."""
+        guide('<part>'). changes: this world's rules changelog since version `since` (default: since your seat last
+        read it), and reading it marks your seat current."""
+        if (topic or "").strip().lower() == "changes":
+            return self._changes(since)
         root = _skill_root(self.engine)
         if root is None:
             raise Rejected("this server carries no guide", hint="the rules are in the briefing join returns")
@@ -911,6 +916,99 @@ class Session:
         text = re.sub(r"references/(\w+)\.md", r"guide('\1')", text)
         text = text.replace("is in `references/`, beside this file", "is in guide('<part>'), one call per part")
         return {"topic": t or "index", "text": text, "topics": list(GUIDE_TOPICS)}
+
+    # ---- the rules' changelog: what changed, so a seat that has played for hours stops acting on the old -------------
+
+    def rules_changed(self, id: str, was: str, now: str, recheck: list[str] | None = None,
+                      guide: list[str] | None = None, retired: list[str] | None = None,
+                      date: str = "") -> dict[str, Any]:
+        """(author) Log a change to this world's rules and move its rules version on. id: a short stable name (the
+        same id again edits that entry, keeping its version). was / now: the rule before and after, a sentence each.
+        recheck: what a seat should look over (memories, watch filters, notes, scripts). guide: the guide parts it
+        touches. retired: the fields and event kinds the world no longer has; a watch that waits on one is refused.
+        Every seat behind the new version hears it in perceive until it reads guide('changes'). A pack or a world
+        folder logs its own with RULES = [...] in pack.py or build.py."""
+        self._need(AUTHOR)
+        self._record("rules_changed", id=id, was=was, now=now, recheck=recheck, guide=guide, retired=retired,
+                     date=date or None)
+        return log_rules(self.world, {"id": id, "was": was, "now": now, "recheck": recheck, "guide": guide,
+                                      "retired": retired, "date": date}, source="world")
+
+    def _rules_seen(self, me: str | None) -> tuple[int, int]:
+        """(this world's rules version, the version the seat on `me` last read). A body with no record that has looked
+        before is behind from the start of the log; one that never looked (new) starts current."""
+        w = self.world
+        v = rules_version(w)
+        if not v or not me:
+            return v, v
+        seen = (w.meta().get("rules_seen") or {}).get(me)
+        if seen is None:
+            seen = 0 if w.entity_cursor(me) is not None else v
+            self._mark_rules(me, seen)
+        return v, int(seen)
+
+    def _mark_rules(self, me: str, version: int) -> None:
+        w = self.world
+        seen = dict(w.meta().get("rules_seen") or {})
+        seen[me] = int(version)
+        w.set_meta({"rules_seen": seen})
+
+    def _rules_notice(self, b: dict[str, Any], me: str | None) -> dict[str, Any]:
+        """perceive and wait carry the rules version, and one line pointing forward while the seat is behind."""
+        v, seen = self._rules_seen(me)
+        if v:
+            b["rules_version"] = v
+        if seen < v:
+            b["rules_notice"] = (f"the rules changed since you last read them (v{seen} to v{v}): "
+                                 f"guide('changes', since={seen})")
+        return b
+
+    def _changes(self, since: int | None) -> dict[str, Any]:
+        if not self.world_id:
+            raise Rejected("the rules changelog is a world's own", hint="use(world_id) first, then guide('changes')")
+        w = self.world
+        p = w.principal(self.pid)
+        me = p["entity_id"] if p and p.get("entity_id") and w.get(p["entity_id"]) else None
+        v, seen = self._rules_seen(me)
+        if since is None:
+            since = seen if seen < v else max(0, v - 5)
+        rows = w.store.query("rules_change", "world_id=? AND version>?", (w.id, int(since)), order="version", limit=40)
+        head = (f"Rules changes in {w.name} since v{int(since)} (the world is at v{v}). Mechanics come from perceive "
+                "and this log, never from memory: check your watch command, notes and scripts for the old terms and "
+                "rebuild them. What your character remembers is story and stays.")
+        lines = [head] + [_rules_line(r) for r in rows]
+        if not rows:
+            lines.append("nothing changed since then" if v else "this world has logged no rules changes")
+        elif rows[-1]["version"] < v:
+            lines.append(f"more: guide('changes', since={rows[-1]['version']})")
+        if me and rows and rows[-1]["version"] > seen:
+            self._mark_rules(me, rows[-1]["version"])
+        return {"topic": "changes", "version": v, "since": int(since), "text": "\n".join(lines),
+                "topics": list(GUIDE_TOPICS)}
+
+    def _refuse_stale(self, until: str | None, kinds: list[str] | None) -> None:
+        """A wait on a field or event kind the rules retired would never fire: refuse it, naming the change."""
+        w = self.world
+        retired: dict[str, dict[str, Any]] = {}
+        for r in w.store.query("rules_change", "world_id=? AND retired!='[]'", (w.id,), order="version"):
+            for term in r["retired"]:
+                retired.setdefault(str(term).lower(), r)
+        if not retired:
+            return
+        named = {str(k).lower() for k in kinds or []}
+        if until is not None and str(until).strip():
+            named |= {str(n).lower() for n in _named_in(_until_script(until))}
+        hits = [t for t in retired if t in named]
+        p = w.principal(self.pid)
+        ent = w.get(p["entity_id"]) if p and p.get("entity_id") else None
+        if ent:  # a term this body still carries is not gone for it
+            hits = [t for t in hits if t not in {str(k).lower() for k in ent["state"]}]
+        if hits:
+            r = retired[hits[0]]
+            raise Rejected(f"your filter waits on {', '.join(hits)}, which this world no longer has "
+                           f"(rules v{r['version']}: {r['now'][:200]})",
+                           hint=f"rebuild it from guide('changes', since={r['version'] - 1}); mechanics come from "
+                                "perceive and that log, not from memory")
 
     def leave(self) -> dict[str, Any]:
         if self.world_id and self.world.principal(self.pid):
@@ -1143,6 +1241,7 @@ class Session:
         }
         if layout:
             bundle["layout"] = self._layout_view(me, bundle)
+        self._rules_notice(bundle, me if p is not None else None)
         if p is not None:
             w.set_cursor(self.pid, bundle["cursor"])
         else:
@@ -2371,7 +2470,21 @@ class Session:
         `until`: a condition, one expression in the script subset, checked by the engine against what this
         principal may know (see UNTIL_DOC). The wait returns only when it is true, so a quiet hour of chatter that
         does not match costs nothing. On a timeout the cursor stays put and the reply is a few fields; call again
-        (with the `since` it gave, for a watcher that is not embodied) and the events so far still count."""
+        (with the `since` it gave, for a watcher that is not embodied) and the events so far still count.
+
+        A filter (until or kinds) that names a field or event kind the rules retired is refused at once, naming the
+        change; every reply carries `rules_notice` while the seat has not read the rules changes."""
+        with self.engine.lock:
+            self._refuse_stale(until, kinds)
+        b = self._wait(timeout, kinds, poll, full, until, since, clock, sleep)
+        if "rules_notice" not in b:
+            with self.engine.lock:
+                p = self.world.principal(self.pid)
+                self._rules_notice(b, p["entity_id"] if p and p.get("entity_id") else None)
+        return b
+
+    def _wait(self, timeout: float, kinds: list[str] | None, poll: float, full: bool, until: str | None,
+              since: int | None, clock: Callable[[], float], sleep: Callable[[float], None]) -> dict[str, Any]:
         if until is not None and str(until).strip():
             return self._watch(str(until), timeout, kinds, full, since, clock, sleep)
         with self.engine.lock:  # read the body with the store to itself, as every poll does
@@ -3088,7 +3201,7 @@ OPS = [
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
     "measure", "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
-    "chmod", "chown", "program", "unprogram", "programs", "review", "guide",
+    "chmod", "chown", "program", "unprogram", "programs", "review", "guide", "rules_changed",
 ]
 
 
@@ -3102,7 +3215,56 @@ _NEWS_KINDS = frozenset({"found", "downed", "killed", "outlawed", "yielded", "tr
                          "lock_picked", "lifted", "caught", "renamed", "destroyed", "burned", "works_done", "stage_done",
                          "challenged", "agreed", "spoiled", "wounded", "rose", "searched", "stopped",
                          "broke_down", "struck"})
-GUIDE_TOPICS = ("narrator", "author", "player", "mind", "hosting", "watch", "scripting")
+GUIDE_TOPICS = ("narrator", "author", "player", "mind", "hosting", "watch", "scripting", "changes")
+
+
+def rules_version(w: World) -> int:
+    """A world's rules version: how many changes its rules changelog holds."""
+    r = w.store.execute("SELECT MAX(version) FROM rules_change WHERE world_id=?", (w.id,)).fetchone()
+    return int(r[0] or 0)
+
+
+_RULES_LIST_FIELDS = ("recheck", "guide", "retired")
+
+
+def log_rules(w: World, entry: dict[str, Any], source: str) -> dict[str, Any]:
+    """One entry in a world's rules changelog, keyed `<source>:<id>` (a pack's name, or `world`). New: the next
+    version. The same key again: the entry as given, at its own version, so a pack loaded twice logs nothing new."""
+    eid = str(entry.get("id") or "").strip()
+    was, now = str(entry.get("was") or "").strip(), str(entry.get("now") or "").strip()
+    if not eid or not now:
+        raise Rejected("a rules change needs an id and what the rule is now",
+                       hint="rules_changed(id='hp-bar', was='vigor and hp', now='one hp bar', retired=['vigor'])")
+    if len(was) > 600 or len(now) > 600:
+        raise Rejected("was and now are a sentence or two each (600 characters at most)",
+                       hint="put the detail in the guide part and name it in guide=[...]")
+    row: dict[str, Any] = {"world_id": w.id, "id": f"{source}:{eid}", "date": str(entry.get("date") or "").strip()
+                           or time.strftime("%Y-%m-%d", time.gmtime()), "source": source, "was": was, "now": now}
+    for k in _RULES_LIST_FIELDS:
+        v = entry.get(k) or []
+        v = [v] if isinstance(v, str) else list(v)
+        if len(v) > 12 or any(len(str(x)) > 120 for x in v):
+            raise Rejected(f"{k} is a short list (12 items, 120 characters each at most)")
+        row[k] = [str(x) for x in v]
+    old = w.store.get("rules_change", w.id, row["id"])
+    if old and all(old[k] == row[k] for k in ("date", "was", "now", *_RULES_LIST_FIELDS)):
+        return {"ok": True, "id": row["id"], "version": old["version"], "unchanged": True}
+    row["version"] = old["version"] if old else rules_version(w) + 1
+    row["t"] = old["t"] if old else w.t
+    w.store.put("rules_change", row)
+    return {"ok": True, "id": row["id"], "version": row["version"], "rules_version": rules_version(w)}
+
+
+def _rules_line(r: dict[str, Any]) -> str:
+    """One changelog entry as a line to read."""
+    out = f"v{r['version']} {r['date']} ({r['id']}): " + (f"was: {r['was']} Now: " if r["was"] else "") + r["now"]
+    if r["retired"]:
+        out += " Gone: " + ", ".join(r["retired"]) + "."
+    if r["recheck"]:
+        out += " Recheck: " + ", ".join(r["recheck"]) + "."
+    if r["guide"]:
+        out += " Guide: " + ", ".join(f"guide('{g}')" for g in r["guide"]) + "."
+    return out
 
 
 def _skill_root(engine: Any) -> Path | None:

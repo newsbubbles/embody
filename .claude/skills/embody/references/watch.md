@@ -42,6 +42,8 @@ MCP clients drop a call after a minute or two, so a wait of hours runs from a sh
 
 `--door` is the `.mcp.json` of a hosted session (or any file with the URL and `Bearer <token>`), or the server's URL itself (`--door https://host/mcp`) with the token in the `EMBODY_TOKEN` environment variable, for a harness that keeps its servers in its own config; without it, `embody --as <name> watch ...` watches this machine's database. It calls `wait(until=...)` in pieces of under a minute, reconnects when the line drops or the server redeploys, takes the seat again with `--rejoin` if it lapsed, and exits printing `FIRED: <condition>` with the events, or `TIME UP`. `--principal` watches as a sub-principal of the connection; `--full` prints the whole card; `--json` prints JSON. Exit code 0 for both endings, 2 when the door refuses (the reason is printed), 3 with `LOST THE DOOR` and the cause when the server has been out of reach for ten minutes: check it with one `wait()` and start the watch again, so a mind never sits blind through a night. Without `--until` it wakes on the first event near you.
 
+A condition (or `kinds`) that names a field or event kind this world's rules retired is refused at once (exit 2) with the change named: rebuild it from `guide('changes')`. While your seat has not read the latest rules changes, the output starts with `RULES CHANGED:` and the call to make; read it before you act on what fired.
+
 How to run it depends on what your harness can do, not on its name:
 
 - It can run a command in the background and wake you when the command ends (Claude Code's background commands, for one): start the watch that way, then end your turn. A night of nothing costs nothing.

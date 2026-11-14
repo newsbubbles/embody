@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 USE_LINE = re.compile(r'^\s*use\(\s*["\']([\w./-]+)["\']\s*\)\s*(#.*)?$')
 RECORDED_OPS = ["define_schema", "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate",
-                "unrelate", "set_rule", "clear_rule", "schedule", "unschedule"]
+                "unrelate", "set_rule", "clear_rule", "schedule", "unschedule", "rules_changed"]
 
 BUILD_SKELETON = '''"""{name}: a world for embody. Edit this file and the scripts beside it; load it with
 `load_world("{id}")`, renew a live game with `load_world("{id}", upgrade=True)`."""
@@ -319,7 +319,18 @@ def install_pack(session: "Session", ws: Workspace, name: str, known: dict[str, 
     scripts = define_scripts(session, d, known, shadowed)
     if hasattr(mod, "define"):
         mod.define(session)
+    log_folder_rules(session, mod, name)
     return {"pack": name, "scripts": scripts}
+
+
+def log_folder_rules(session: "Session", mod: Any, source: str) -> int:
+    """A pack's or a world folder's RULES = [{id, date, was, now, recheck, guide, retired}, ...] into the world's
+    rules changelog, oldest first; what is logged already stays at its version. Returns how many were new."""
+    from .ops import log_rules
+    n = 0
+    for entry in getattr(mod, "RULES", None) or []:
+        n += not log_rules(session.world, entry, source=source).get("unchanged")
+    return n
 
 
 def load_world(session: "Session", ref: str | Path, upgrade: bool = False, workspace: Workspace | None = None,
@@ -354,6 +365,7 @@ def load_world(session: "Session", ref: str | Path, upgrade: bool = False, works
                 mod.define(session)
             if hasattr(mod, "upgrade"):
                 mod.upgrade(session)
+            log_folder_rules(session, mod, "world")
             if hosted and hasattr(mod, "host"):
                 mod.host(session)
             r = session.summary()
@@ -377,6 +389,7 @@ def load_world(session: "Session", ref: str | Path, upgrade: bool = False, works
             mod.define(session)
         if hasattr(mod, "populate"):
             mod.populate(session)
+        log_folder_rules(session, mod, "world")
         replayed, errors = replay_changes(session, ws, wid)
         if hosted and hasattr(mod, "host"):
             mod.host(session)
@@ -428,7 +441,7 @@ def _load_legacy(session: "Session", path: Path, upgrade: bool) -> dict[str, Any
 
 # ---- saves ---------------------------------------------------------------------------------------
 
-SAVE_TABLES = ("schema", "script", "entity", "edge", "hyperedge", "event", "scheduled", "principal")
+SAVE_TABLES = ("schema", "script", "entity", "edge", "hyperedge", "event", "scheduled", "principal", "rules_change")
 
 
 def save_world(engine: "Engine", world_id: str, path: Path) -> dict[str, Any]:

@@ -108,6 +108,47 @@ import json
 
 PACK = {"name": "d20", "description": "Table-top rules as verbs: d20 checks, opposed attacks, wards, duels, thirst, factions, the thresher."}
 
+# This pack's rules changelog, oldest first: what changed for a body in play. A world that requires the pack logs
+# these at its build or upgrade, and seats behind hear of them in perceive (guide('changes')).
+RULES = [
+    {"id": "rest-mends", "date": "2026-11-10",
+     "was": "A wound stayed until someone healed it.",
+     "now": "Rest mends: a body with water in it gets a point of hp back each beat, and one a wound put down gets up on "
+            "its own at 2. tend (survival vs 12) gets someone down up at 1; medicine heals at once. Mending costs "
+            "water: a point for every second point given back, and a bare-hands tend spends a draw.",
+     "recheck": ["notes on healing", "plans that wait for a wound to close"], "guide": ["player", "mind"]},
+    {"id": "sweat", "date": "2026-11-11",
+     "was": "Only time made a body thirsty.",
+     "now": "Heavy deeds cost a point of water each (sweated): a blow, harvest, dig, dress, break, and walking to or "
+            "from open ground under more than half your carry. Talk, look, wait, pick and drink are free. A sleeper "
+            "dries at half the pace.",
+     "recheck": ["water plans", "watch filters on water"], "guide": ["player", "mind"]},
+    {"id": "strike-cooldowns", "date": "2026-11-13",
+     "was": "A fighter could strike again as fast as the calls came.",
+     "now": "attack, shoot and kill are strikes: after one, you wait before striking that target again (half as long "
+            "for anyone else). A strike too soon is refused with the wait, and perceive's affordances show it. A heavy "
+            "weapon waits longer, a light one less.",
+     "recheck": ["fight plans and scripts that strike in a loop"], "guide": ["player", "mind"]},
+    {"id": "hp-bar", "date": "2026-11-14",
+     "was": "Two health numbers, vigor and hp.",
+     "now": "One: hp and max_hp. Every creature's card carries condition (fine, hurt, down (wounds), down (thirst), "
+            "dead) and way_out, what gets it out of that.",
+     "retired": ["vigor", "max_vigor"],
+     "recheck": ["memories and notes that count vigor", "watch filters on vigor", "scripts that read vigor"],
+     "guide": ["player", "mind"]},
+    {"id": "death-stays", "date": "2026-11-14",
+     "was": "A body could be put down, and someone could always get it up again.",
+     "now": "Dead is dead: a dead body hears 'you are dead' before any other refusal, for every verb and for say. It "
+            "keeps its seat and its perceive, and nothing brings it back. Down is not dead: tend or rest still gets a "
+            "downed body up.",
+     "recheck": ["plans that count on getting back up", "watch filters on condition"], "guide": ["player", "mind"]},
+    {"id": "thirst-kills", "date": "2026-11-14",
+     "was": "Thirst put a body down and never killed it.",
+     "now": "Thirst kills, slowly: a body thirst put down that stays dry gets fading each world day and dies (died, "
+            "why: thirst) after 1, 2 or 3 days by its body. Water or a tend clears the count.",
+     "recheck": ["water plans", "watch filters: wake on fading"], "guide": ["player", "mind"]},
+]
+
 COMBATANT_STATE = {"body": 1, "wits": 1, "will": 1, "skills": {}, "hp": 6, "max_hp": 6, "water": 10, "max_water": 10,
                    "wounded": False, "down": False, "dead": False, "braced": False, "yielded": None, "thirsty": False,
                    "cowed_by": None, "attacked_by": None, "faction": None, "asleep": False}

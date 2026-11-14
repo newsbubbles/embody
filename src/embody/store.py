@@ -126,6 +126,20 @@ CREATE TABLE IF NOT EXISTS grants (
     PRIMARY KEY (world_id, id)
 );
 CREATE INDEX IF NOT EXISTS grants_token ON grants (token_hash);
+CREATE TABLE IF NOT EXISTS rules_change (
+    world_id TEXT NOT NULL, id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    date TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
+    was TEXT NOT NULL DEFAULT '',
+    now TEXT NOT NULL DEFAULT '',
+    recheck TEXT NOT NULL DEFAULT '[]',
+    guide TEXT NOT NULL DEFAULT '[]',
+    retired TEXT NOT NULL DEFAULT '[]',
+    t REAL,
+    PRIMARY KEY (world_id, id)
+);
+CREATE INDEX IF NOT EXISTS rules_change_version ON rules_change (world_id, version);
 CREATE TABLE IF NOT EXISTS seat_offer (
     world_id TEXT NOT NULL, id TEXT NOT NULL,
     entity_id TEXT NOT NULL,
@@ -156,6 +170,7 @@ JSON_COLS = {
     "scheduled": {"payload"},
     "principal": {"capabilities"},
     "grants": {"scope", "limits"},
+    "rules_change": {"recheck", "guide", "retired"},
     "seat_offer": set(),
 }
 
