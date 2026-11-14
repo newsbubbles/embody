@@ -1414,7 +1414,7 @@ class Session:
             w.patch(w.root_id, {"frame": geo.check_frame(frame)}, actor=self._actor_or_none(), replace=True)
         if not self._frame() and (placements or paths):
             w.patch(w.root_id, {"frame": dict(geo.DEFAULT_FRAME)}, actor=self._actor_or_none(), replace=True)
-        checked = []
+        checked: dict[str, dict] = {}  # two placements for one entity merge in order, the second over the first
         for p in placements or []:
             if not isinstance(p, dict) or not p.get("entity"):
                 raise Rejected("each placement names its entity", hint='{"entity": "The Hold", "at": [0, 0, 0], "radius": 40}')
@@ -1422,8 +1422,9 @@ class Session:
             new = {k: v for k, v in p.items() if k != "entity"}
             if isinstance(new.get("at"), str):  # a landmark's name, or beside something in the same container
                 new["at"] = posn.resolve_at(w, w.need(eid)["parent_id"], new["at"], skip=eid)[0]
-            checked.append((eid, geo.merge(self._own_layout(eid), new, replace=replace)))
-        for eid, lay in checked:
+            checked[eid] = (geo.merge(checked[eid], new) if eid in checked
+                            else geo.merge(self._own_layout(eid), new, replace=replace))
+        for eid, lay in checked.items():
             w.patch(eid, {"layout": lay}, actor=self._actor_or_none(), replace=True)
             touched.append(eid)
         for pth in paths or []:

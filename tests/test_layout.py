@@ -100,3 +100,11 @@ def test_a_grid_inside_a_room_maps_into_the_frame():
     gm.patch("Hall", {"space": {"dims": 2, "bounds": [10, 10], "grid": True, "frame_origin": [-5, 15, 0], "cell": 1.5}})
     gm.move("Guard", "Hall", pos=[2, 4])
     assert gm.measure("Guard")["a"]["at"] == [-2.0, 21.0, 0.0]
+
+
+def test_two_placements_for_one_entity_in_one_call_merge_in_order():
+    eng, w, i, gm, r = laid_out()
+    r = gm.layout(placements=[{"entity": "Hall", "at": [0, 30, 0], "radius": 6},
+                              {"entity": "Hall", "landmarks": {"the bench": {"at": [2, 30, 0]}}}])
+    lay = w.get(i["Hall"])["state"]["layout"]
+    assert lay["at"] == [0, 30, 0] and lay["radius"] == 6 and "the bench" in lay["landmarks"] and r["laid_out"] == 1
