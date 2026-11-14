@@ -44,6 +44,45 @@ def _loads(v):
         return v
 
 
+# What the viewer undoes to show the past: each of these events carries what it changed from.
+_UNDO = ("moved", "patched", "spawned", "destroyed", "renamed")
+_UNDO_SQL = ", ".join(f"'{k}'" for k in _UNDO)
+
+
+def _rewind(ents: list[dict], rows) -> list[dict]:
+    """The entities as they were before `rows` (newest first): a move goes back where it came from, a patch puts back
+    what it had (`before`), a spawn is unmade, a rename takes the old name. A destroyed entity comes back with its
+    type, name and place but no state: the log does not keep it, and the page says so (`past: "destroyed"`)."""
+    by = {e["id"]: e for e in ents}
+    order = [e["id"] for e in ents]
+    for kind, target, payload in rows:
+        p = _loads(payload) or {}
+        e = by.get(target)
+        if kind == "spawned":
+            by.pop(target, None)
+        elif kind == "destroyed":
+            if e is None:
+                by[target] = {"id": target, "type": p.get("type") or "thing", "parent": p.get("parent"),
+                              "name": p.get("name") or "", "state": {}, "pos": None, "version": 0, "updated_seq": 0,
+                              "past": "destroyed"}
+                order.append(target)
+        elif e is None:
+            continue
+        elif kind == "moved":
+            e["parent"] = p.get("from", e["parent"])
+            if "from_pos" in p:
+                e["pos"] = p["from_pos"]
+        elif kind == "patched":
+            for k, b in (p.get("before") or {}).items():
+                if b is None:
+                    e["state"].pop(k, None)
+                else:
+                    e["state"][k] = b
+        elif kind == "renamed":
+            e["name"] = p.get("old", e["name"])
+    return [by[i] for i in dict.fromkeys(order) if i in by]
+
+
 def _has_table(c, name: str) -> bool:
     return c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 
@@ -157,11 +196,14 @@ class Reader:
         return out
 
     def state(self, world_id: str | None, since: int, limit: int, after: int | None = None,
-              sig: str | None = None) -> dict:
+              sig: str | None = None, at: int | None = None, at_t: float | None = None) -> dict:
         """The world for the viewer. after=<the highest updated_seq the page holds> makes it a diff: only the entities
         changed since, `ids` (every id there is, so the page drops the destroyed), and the edges, hyperedges and schemas
         only when their signature differs from `sig`. The scheduled ticks come summed up either way: a world of a few
-        hundred bodies has a tick each, and the page only counts them."""
+        hundred bodies has a tick each, and the page only counts them.
+
+        at=<seq> or at_t=<world time> is the world as it stood then: the entities now with every change since undone
+        (_rewind), and the events up to that moment. Edges, seats and timers stay as they are now."""
         with self.conn() as c:
             if not world_id:
                 row = c.execute("SELECT id FROM world ORDER BY rowid DESC LIMIT 1").fetchone()
@@ -171,6 +213,12 @@ class Reader:
             w = c.execute("SELECT * FROM world WHERE id=?", (world_id,)).fetchone()
             if w is None:
                 return {"ok": False, "reason": f"no world {world_id}"}
+            if at_t is not None:
+                r = c.execute("SELECT seq FROM event WHERE world_id=? AND t<=? ORDER BY seq DESC LIMIT 1",
+                              (world_id, at_t)).fetchone()
+                at = r[0] if r else 0
+            if at is not None:
+                after = None  # the past comes whole
             q = "SELECT * FROM entity WHERE world_id=?" + (" AND updated_seq>?" if after is not None else "")
             ents = [{"id": r["id"], "type": r["type"], "parent": r["parent_id"], "name": r["name"],
                      "state": _loads(r["state"]), "pos": _loads(r["pos"]), "version": r["version"],
@@ -179,6 +227,15 @@ class Reader:
                                        (world_id,) if after is None else (world_id, after))]
             ids = [r[0] for r in c.execute("SELECT id FROM entity WHERE world_id=? ORDER BY created_seq", (world_id,))] \
                 if after is not None else None
+            first = c.execute("SELECT seq, t FROM event WHERE world_id=? ORDER BY seq LIMIT 1", (world_id,)).fetchone()
+            past = None
+            if at is not None:
+                ents = _rewind(ents, c.execute(
+                    f"SELECT kind, target_id, payload FROM event WHERE world_id=? AND seq>? AND kind IN ({_UNDO_SQL}) "
+                    "ORDER BY seq DESC", (world_id, at)))
+                r = c.execute("SELECT seq, t FROM event WHERE world_id=? AND seq<=? ORDER BY seq DESC LIMIT 1",
+                              (world_id, at)).fetchone()
+                past = {"seq": r["seq"], "t": r["t"]} if r else {"seq": 0, "t": first["t"] if first else 0}
             edge_rows = c.execute("SELECT * FROM edge WHERE world_id=? ORDER BY id", (world_id,)).fetchall()
             hyper_rows = c.execute("SELECT * FROM hyperedge WHERE world_id=? ORDER BY id", (world_id,)).fetchall()
             schema_rows = c.execute("SELECT id, extends, space FROM schema WHERE world_id=? ORDER BY id", (world_id,)).fetchall()
@@ -211,8 +268,10 @@ class Reader:
             evs = [{"seq": r["seq"], "t": r["t"], "kind": r["kind"], "actor": r["actor_id"], "target": r["target_id"],
                     "reach": r["reach"], "payload": _loads(r["payload"]), "caused_by": r["caused_by"],
                     "path": _loads(r["path"])}
-                   for r in c.execute("SELECT * FROM event WHERE world_id=? AND seq>? ORDER BY seq DESC LIMIT ?",
-                                      (world_id, since, limit))]
+                   for r in (c.execute("SELECT * FROM event WHERE world_id=? AND seq>? ORDER BY seq DESC LIMIT ?",
+                                       (world_id, since, limit)) if past is None else
+                             c.execute("SELECT * FROM event WHERE world_id=? AND seq<=? ORDER BY seq DESC LIMIT ?",
+                                       (world_id, past["seq"], limit)))]
             schemas = None if same else {r["id"]: r["extends"] for r in schema_rows}
             spaces = None if same else {r["id"]: _loads(r["space"]) for r in schema_rows if r["space"]}
         meta = _loads(w["meta"]) or {}
@@ -227,6 +286,8 @@ class Reader:
                                       "day_seconds": float(meta.get("day_seconds") or 86400), "now": time.time()},
                 "entities": ents, "principals": prin, "scheduled": sched, "ticks": ticks, "max_seq": maxseq,
                 "events": list(reversed(evs)), "sig": new_sig,
+                "first": {"seq": first["seq"], "t": first["t"]} if first else None,
+                **({"at": past} if past is not None else {}),
                 **({"ids": ids, "diff": True} if ids is not None else {}),
                 **({} if same else {"edges": edges, "hyperedges": hyper, "schemas": schemas, "spaces": spaces})}
 
@@ -249,7 +310,11 @@ class Reader:
                 limit = max(1, min(int(query.get("limit", ["60"])[0]), 500))
                 after = query.get("after", [None])[0]
                 sig = query.get("sig", [None])[0]
-                body = self.state(world, since, limit, after=int(after) if after not in (None, "") else None, sig=sig)
+                at = query.get("at", [None])[0]
+                at_t = query.get("at_t", [None])[0]
+                body = self.state(world, since, limit, after=int(after) if after not in (None, "") else None, sig=sig,
+                                  at=int(at) if at not in (None, "") else None,
+                                  at_t=float(at_t) if at_t not in (None, "") else None)
                 return 200, "application/json", json.dumps(body, separators=(",", ":")).encode()
             return 404, "application/json", json.dumps({"ok": False, "reason": f"nothing at {path} in the viewer",
                                                         "hint": "the viewer serves /, /worlds.json and /state.json"}).encode()

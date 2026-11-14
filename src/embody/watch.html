@@ -30,7 +30,7 @@ header { grid-column:1 / span 2; display:flex; align-items:center; gap:6px 14px;
 .brand b { font:600 15px/1 var(--display); letter-spacing:.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:260px; }
 .led { width:7px; height:7px; border-radius:50%; background:var(--faint); flex:none; }
 .led.on { background:var(--accent); box-shadow:0 0 6px var(--accent); }
-#wsel { max-width:200px; }
+#wsel { max-width:200px; height:28px; background:var(--ground); border:1px solid var(--line2); border-radius:var(--r); }
 .clock { display:flex; align-items:center; gap:6px; color:var(--dim); white-space:nowrap; }
 .clock b { color:var(--ink); font-weight:500; }
 #dial { width:22px; height:22px; flex:none; }
@@ -68,6 +68,21 @@ svg#svg { display:block; width:100%; height:100%; }
 #scale .bar { height:6px; border:1px solid var(--dim); border-top:none; }
 #scale .north { width:18px; text-align:center; color:var(--ink); }
 #tally { position:absolute; right:10px; bottom:10px; z-index:3; color:var(--faint); font-size:10.5px; pointer-events:none; text-align:right; }
+
+/* the past: a bar to drag through the log; the stage wears a warning edge while it shows a moment gone */
+#pastbtn.on { border-color:var(--warn); color:var(--warn); }
+#scrub { position:absolute; left:50%; transform:translateX(-50%); bottom:34px; z-index:5; width:min(660px, calc(100% - 24px)); background:var(--panel); border:1px solid var(--warn); border-radius:var(--r); padding:6px 8px 8px; display:grid; grid-template-columns:auto 1fr auto; gap:6px 8px; align-items:center; touch-action:auto; cursor:default; }
+#scrub[hidden] { display:none; }
+#scrub .when { grid-column:1 / -1; display:flex; align-items:center; gap:8px; color:var(--dim); font-size:11px; min-width:0; }
+#scrub .when b { color:var(--warn); font-weight:500; white-space:nowrap; }
+#scrub .when span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+#scrub input[type=range] { width:100%; accent-color:hsl(40 95% 54%); height:28px; margin:0; }
+#scrub button { min-width:40px; height:30px; padding:0 8px; background:var(--raise); border:1px solid var(--line2); border-radius:var(--r); font-size:11px; }
+#scrub button:hover { border-color:var(--dim); }
+#scrub .ends { grid-column:1 / -1; display:flex; justify-content:space-between; color:var(--faint); font-size:10px; margin-top:-4px; }
+body.past main { outline:2px solid var(--warn); outline-offset:-2px; }
+.node.changed rect.box { stroke:var(--warn); }
+.area.changed, .mark.changed { stroke:var(--warn) !important; stroke-width:2.2; }
 
 /* tree boxes */
 .node { cursor:pointer; }
@@ -219,6 +234,7 @@ table.z tr { cursor:pointer; }
   .grab::after { content:""; position:absolute; left:50%; top:5px; width:40px; height:4px; margin-left:-20px; border-radius:2px; background:var(--line2); }
   .tabs button { height:40px; }
   #scale { bottom:52px; } #tally { bottom:52px; max-width:58%; }
+  #scrub { bottom:50px; }
   #crumbs { right:52px; }
   #tools button { width:40px; height:40px; }
   .rlist li, .seat { padding:9px 12px; }
@@ -232,6 +248,7 @@ table.z tr { cursor:pointer; }
   <label class="search"><input id="q" type="search" placeholder="search: name, or hp<3, faction:keth, is:dead" autocomplete="off" spellcheck="false" aria-label="search"><select id="qt" aria-label="type"></select></label>
   <div class="seg" role="tablist"><button id="vtree" class="on">tree</button><button id="vmap">map</button></div>
   <div class="depth"><button id="dless" aria-label="less depth">&minus;</button><span>depth <b id="dval">1</b></span><button id="dmore" aria-label="more depth">+</button></div>
+  <button id="pastbtn" class="btn" title="drag back through the world's history">history</button>
   <span id="counts" style="color:var(--faint)"></span>
   <span id="err"></span>
   <span id="auth" hidden><input id="tok" type="password" placeholder="your invite token" autocomplete="off"> <button id="tokgo">watch</button></span>
@@ -243,6 +260,11 @@ table.z tr { cursor:pointer; }
   <div id="overlay"></div>
   <div id="note"></div>
   <div id="scale"></div>
+  <div id="scrub" hidden>
+    <div class="when"><b id="pwhen"></b><span id="pago"></span><button id="pplay">play</button><button id="pnow">now</button></div>
+    <button id="pback" title="an hour back">&minus;1h</button><input id="prange" type="range" aria-label="when"><button id="pfwd" title="an hour on">+1h</button>
+    <div class="ends"><span id="pfirst"></span><span id="plast"></span></div>
+  </div>
   <div id="tally"></div>
 </main>
 <aside id="side">
@@ -268,6 +290,7 @@ if (H0.startsWith("token=")) {       // an invite's viewer link: keep the token 
   try { sessionStorage.setItem("embody-token", token); } catch (e) {}
   history.replaceState(null, "", location.pathname + location.search);
 }
+const PAST = { open: false, t: null, busy: false, again: false, playing: null };   // the scrub bar
 const W = {   // the world as the page holds it
   id: null, info: null, ents: new Map(), kids: new Map(), edges: [], hyper: [], schemas: {}, spaces: {}, prin: [],
   sched: [], ticks: 0, after: null, sig: null, maxSeq: 0, events: [], kindMemo: new Map(), byType: new Map()
@@ -275,7 +298,7 @@ const W = {   // the world as the page holds it
 const V = {   // what the page shows
   view: "tree", focus: null, depth: { tree: 1, map: 2 }, sel: null, tab: "ent", expanded: new Set(), limits: new Map(),
   q: "", qt: "", hits: null, hitList: [], prevFocus: null, evFilter: "story", evMine: false, sortKey: null, sortDir: -1,
-  seenSeq: 0, alertSeen: 0, changed: new Set(), tray: null
+  seenSeq: 0, alertSeen: 0, changed: new Set(), tray: null, past: null
 };
 (function readHash() {
   const h = location.hash.slice(1);
@@ -286,6 +309,7 @@ const V = {   // what the page shows
   if (p.get("e")) V.sel = p.get("e");
   if (p.get("f")) V.focus = p.get("f");
   if (p.get("v") === "map") V.view = "map";
+  if (p.get("p")) PAST.t = Number(p.get("p"));
 })();
 function syncControls() {
   $("vtree").classList.toggle("on", V.view === "tree"); $("vmap").classList.toggle("on", V.view === "map"); $("dval").textContent = V.depth[V.view];
@@ -296,6 +320,7 @@ function writeHash() {
   if (V.view === "map") p.set("v", "map");
   if (V.focus && W.info && V.focus !== W.info.root) p.set("f", V.focus);
   if (V.sel) p.set("e", V.sel);
+  if (V.past) p.set("p", Math.round(V.past.t));
   history.replaceState(null, "", location.pathname + location.search + "#" + p.toString());
 }
 async function get(path) {
@@ -331,7 +356,7 @@ async function refreshWorlds() {
 }
 let polling = false;
 async function poll() {
-  if (polling) return; polling = true;
+  if (polling || V.past) return; polling = true;
   try {
     await refreshWorlds();
     const want = W.id;
@@ -340,7 +365,7 @@ async function poll() {
     if (W.after !== null) q += "&after=" + W.after + "&sig=" + encodeURIComponent(W.sig || "");
     const d = await get(q);
     if (!d.ok) { $("err").textContent = d.reason; return; }
-    if (W.id !== want) return;                       // switched worlds while this was in flight
+    if (W.id !== want || V.past) return;             // switched worlds, or went to the past, while this was in flight
     $("err").textContent = "";
     merge(d);
   } catch (e) { if (!e.auth) $("err").textContent = "no server: " + e.message; }
@@ -348,7 +373,8 @@ async function poll() {
 }
 function merge(d) {
   const first = W.info === null;
-  W.info = d.world; W.id = d.world.id;
+  W.info = d.world; W.id = d.world.id; W.nowT = d.world.t;
+  if (d.first) W.first = d.first;
   if ($("wsel").value !== W.id) $("wsel").value = W.id;
   let struct = false;
   V.changed = new Set();
@@ -386,6 +412,8 @@ function merge(d) {
   if (V.q || V.qt) { if (touched) runSearch(false); }
   if (first || touched) schedule(first);
   if (first || touched || V.tab !== "ent") panel(first || fresh.length > 0 || touched);
+  if (first && PAST.t !== null) { openPast(true); goPast(PAST.t); }
+  if (PAST.open) pastUI();
 }
 function index() {
   W.kids = new Map(); W.byType = new Map();
@@ -459,12 +487,12 @@ function header() {
   const tod = ((w.t % day) + day) % day, hh = Math.floor(tod / 3600 * 24 / (day / 3600)), frac = tod / day;
   const clock24 = Math.floor(frac * 24), min = Math.floor((frac * 24 - clock24) * 60);
   $("clock").innerHTML = `day <b>${Math.floor(w.t / day) + 1}</b> <b>${String(clock24).padStart(2, "0")}:${String(min).padStart(2, "0")}</b>` +
-    (amb.time_of_day ? " " + esc(amb.time_of_day) : "") + (w.running ? " · ×" + w.rate : " · paused");
+    (amb.time_of_day && !V.past ? " " + esc(amb.time_of_day) : "") + (V.past ? " · history" : w.running ? " · ×" + w.rate : " · paused");
   // the dial: the day as a ring, noon at the top, the sun where the hour is
   const a = frac * 2 * Math.PI - Math.PI, sx = Math.sin(a) * 8.5, sy = -Math.cos(a) * 8.5, up = sy < 0;
   $("dial").innerHTML = `<circle r="8.5" fill="none" stroke="var(--line2)" stroke-width="1.5"/><line x1="-11" x2="11" y1="0" y2="0" stroke="var(--faint)" stroke-width="1"/>` +
     `<circle cx="${sx.toFixed(2)}" cy="${sy.toFixed(2)}" r="3" fill="${up ? "var(--warn)" : "var(--dim)"}"/>`;
-  $("led").className = "led" + (w.running ? " on" : "");
+  $("led").className = "led" + (w.running && !V.past ? " on" : "");
   $("led").title = w.running ? "clock running ×" + w.rate : "clock paused";
   const inPlay = W.prin.filter(p => p.entity && !seatIdle(p)).length;
   $("sn").textContent = inPlay ? String(inPlay) : "";
@@ -767,7 +795,7 @@ function drawMap() {
   items.sort((a, b) => a.lvl - b.lvl || (b.ol ? 1 : 0) - (a.ol ? 1 : 0));
   const px = 1 / k, labels = [];
   for (const it of items) {
-    const kd = kindOf(it.e.type), cls = [`k-${kd}`, it.lvl > 1 ? "deep" : "", V.sel === it.id ? "sel" : "", searching && V.hits.has(it.id) ? "hit" : "",
+    const kd = kindOf(it.e.type), cls = [`k-${kd}`, it.lvl > 1 ? "deep" : "", V.sel === it.id ? "sel" : "", searching && V.hits.has(it.id) ? "hit" : "", V.past && V.changed.has(it.id) ? "changed" : "",
       searching && !V.hits.has(it.id) ? "dimmed" : ""].filter(Boolean).join(" ");
     const tip = `<title>${esc(label(it.e) + " · " + it.e.type + "\n" + it.at[0].toFixed(1) + ", " + it.at[1].toFixed(1))}</title>`;
     if (it.ol) {
@@ -1017,6 +1045,7 @@ function paneEntity() {
   const st = e.state || {}, kd = kindOf(e.type), cond = condition(e), seat = seatOf(id);
   let h = `<div class="sec"><div class="title"><span class="sw" style="background:var(--${kd})${kd === "other" ? ";opacity:.5" : ""}"></span><div><h2>${esc(label(e))}</h2>` +
     `<div class="meta"><span>${esc(e.type)}</span><span>${esc(kd)}</span><button data-copy="${esc(id)}" title="copy the id">${esc(id)}</button><span>v${e.version}</span></div></div></div>`;
+  if (e.past === "destroyed") h += `<div class="badges"><span class="badge warning">destroyed later: the log keeps its place and name, not its state</span></div>`;
   if (cond.length) h += `<div class="badges">${cond.map(([t, s]) => `<span class="badge ${s}">${esc(t)}</span>`).join("")}</div>`;
   if (st.description) h += `<div style="margin-top:8px;color:var(--dim)">${esc(short(st.description, 600))}</div>`;
   h += `<div class="acts"><button class="btn" data-focus="${esc(id)}">go inside</button><button class="btn" data-map="${esc(id)}">on the map</button><button class="btn" id="evmine">its events</button></div></div>`;
@@ -1158,6 +1187,84 @@ function paneSeats() {
     `<span class="wh">${idle ? "away" : "in play"}${p.last_seen ? "<br>" + ago(w.now - p.last_seen) + " ago" : ""}</span></div>`; }).join("");
   wire(el);
 }
+
+// ---------------------------------------------------------------- history: the world as it stood, rebuilt by the server from the log
+function clockAt(t) {
+  const day = (W.info && W.info.day_seconds) || 86400, tod = ((t % day) + day) % day / day * 24;
+  return "day " + (Math.floor(t / day) + 1) + " " + String(Math.floor(tod)).padStart(2, "0") + ":" + String(Math.floor((tod % 1) * 60)).padStart(2, "0");
+}
+function openPast(on) {
+  PAST.open = on; $("scrub").hidden = !on; $("pastbtn").classList.toggle("on", on);
+  if (!on) backToNow();
+  else { if (PAST.t === null) PAST.t = W.nowT; pastUI(); }
+}
+function pastUI() {
+  const lo = W.first ? W.first.t : W.nowT, hi = W.nowT, r = $("prange");
+  r.min = Math.floor(lo); r.max = Math.ceil(hi); r.step = 60;
+  if (!r.matches(":active")) r.value = PAST.t ?? hi;
+  const t = Number(r.value), back = hi - t;
+  $("pwhen").textContent = V.past || back > 30 ? clockAt(t) : "now";
+  $("pago").textContent = back > 30 ? hm(back) + " of world time ago" + (V.past ? " \u00b7 event " + V.past.seq : "") : "drag back to see the world as it stood";
+  $("pfirst").textContent = clockAt(lo) + " (first event)"; $("plast").textContent = clockAt(hi);
+  $("pplay").textContent = PAST.playing ? "pause" : "play";
+}
+async function goPast(t) {
+  PAST.t = t;
+  if (t >= W.nowT - 30) { backToNow(); return; }
+  if (PAST.busy) { PAST.again = true; return; }
+  PAST.busy = true;
+  try {
+    const d = await get("/state.json?limit=200&world=" + encodeURIComponent(W.id) + "&at_t=" + t.toFixed(3));
+    if (d.ok && PAST.open) loadPast(d);
+  } catch (e) { if (!e.auth) $("err").textContent = "no server: " + e.message; }
+  finally { PAST.busy = false; }
+  if (PAST.again) { PAST.again = false; goPast(PAST.t); }
+}
+function loadPast(d) {
+  // what moved, changed hands or changed state since the last moment shown lights up
+  const before = W.ents;
+  V.changed = new Set();
+  W.ents = new Map();
+  for (const e of d.entities) {
+    const o = before.get(e.id);
+    if (!o || o.parent !== e.parent || o.name !== e.name || JSON.stringify(o.state) !== JSON.stringify(e.state)) if (before.size) V.changed.add(e.id);
+    W.ents.set(e.id, e);
+  }
+  V.past = d.at;
+  W.info = Object.assign({}, d.world, { t: d.at.t });
+  W.edges = d.edges || W.edges; W.hyper = d.hyperedges || W.hyper; W.schemas = d.schemas || W.schemas; W.spaces = d.spaces || W.spaces; W.kindMemo.clear();
+  W.events = d.events || []; W.after = null; W.sig = null; W.maxSeq = 0;
+  document.body.classList.add("past");
+  index();
+  if (!W.ents.has(V.focus)) V.focus = W.info.root;
+  header();
+  if (V.q || V.qt) runSearch(false);
+  schedule(false); panel(true); pastUI(); writeHash();
+}
+function backToNow() {
+  stopPlay();
+  const was = V.past; V.past = null; PAST.t = W.nowT ?? PAST.t;
+  document.body.classList.remove("past");
+  if (was) { W.after = null; W.sig = null; W.maxSeq = 0; W.events = []; V.changed = new Set(); writeHash(); poll(); }
+  if (PAST.open) pastUI();
+}
+function stopPlay() { if (PAST.playing) { clearInterval(PAST.playing); PAST.playing = null; } }
+(function wirePast() {
+  const r = $("prange");
+  $("pastbtn").onclick = () => openPast(!PAST.open);
+  r.addEventListener("input", () => { stopPlay(); PAST.t = Number(r.value); pastUI(); clearTimeout(r.dt); r.dt = setTimeout(() => goPast(PAST.t), 250); });
+  $("pback").onclick = () => { stopPlay(); goPast(Math.max(Number(r.min), (PAST.t ?? W.nowT) - 3600)); pastUI(); };
+  $("pfwd").onclick = () => { stopPlay(); goPast(Math.min(W.nowT, (PAST.t ?? W.nowT) + 3600)); pastUI(); };
+  $("pnow").onclick = () => backToNow();
+  // play: ten world minutes a step, the next step once the last one came back
+  $("pplay").onclick = () => {
+    if (PAST.playing) { stopPlay(); pastUI(); return; }
+    if ((PAST.t ?? W.nowT) >= W.nowT - 30) PAST.t = Math.max(Number(r.min), W.nowT - 6 * 3600);
+    PAST.playing = setInterval(() => { if (!PAST.busy) { const t = PAST.t + 600; if (t >= W.nowT) backToNow(); else { goPast(t); pastUI(); } } }, 700);
+    goPast(PAST.t); pastUI();
+  };
+  ["pointerdown", "wheel"].forEach(k => $("scrub").addEventListener(k, ev => ev.stopPropagation(), { passive: true }));
+})();
 
 syncControls();
 poll();
