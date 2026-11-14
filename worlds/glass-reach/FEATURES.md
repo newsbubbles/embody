@@ -7,6 +7,44 @@ through someone who explains it. No spoilers: a mystery stays out of this list u
 Format: one `## date: title` heading per entry (date is the real-world day it went live), then two or three
 sentences. `status: coming` under a heading means it is built or being built and not live yet.
 
+## 2026-11-14: One health bar, and death that stays
+
+Health is one number now, and how you are doing reads in plain words. Down is not dead, and
+someone can still bring you back up. Dead is dead: the body stays where it fell and nobody plays it again. Thirst no
+longer just weakens you. Go without water long enough and it kills you, slowly, in one to three days depending on how
+hardy your body is.
+
+## 2026-11-13: Beasts on the land
+
+The thornbacks of the brake are animals now, not scenery. They grow from pup to boar and sow, eat the roots under the
+glassthorn, breed at the moon and starve when the brake runs short. Grub a root by hand and you have something to offer
+one: with patience and a feel for survival, a thornback can be tamed and kept, and a tamed one guards. Idris at the
+steading remembers old Tessel raising pups.
+
+## 2026-11-13: The Keth goats
+
+The Keth keep a small herd of rust-red goats on Red Ridge, each with a knot of blue cord in one ear. They graze the
+ridge, bear kids, and the nannies give milk you can drink. Ask Taan or Iska about them before you try to take one.
+
+## 2026-11-13: The seep fills a mended cistern
+
+Mend the cistern at the Gate and the seep in the rock fills it again over time. Water you can hold is worth a wall.
+
+## 2026-11-13: Followers bring their own
+
+When you walk and someone follows you, whoever follows them comes too, all the way down the line. A party moves as one.
+
+## 2026-11-12: Locked stores and lights
+
+Each side keeps a locked store at its home, open to those who know the way in and to anyone who can break it. Lamps
+and fires can be lit, and dark places look different with a light in hand.
+
+## 2026-11-12: The Keeper's book
+
+The Hold's Keeper keeps a book that can set two written papers side by side and tell whether the same hand wrote them.
+A charge laid in it goes before the Hold. Some people who saw things will now tell what they saw, to those who ask
+the right way.
+
 ## 2026-11-12: A lime kiln for the wall
 
 Lime holds the wall back: the Guild's sacks cost a shard each, and there are only three. Jory Flint, the mason, has
