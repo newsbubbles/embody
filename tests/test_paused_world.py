@@ -56,6 +56,42 @@ def test_two_waits_on_one_principal_say_they_share_a_cursor():
     assert "since=" in sam.wait(timeout=0)["shared_cursor"]
 
 
+def test_the_wait_cap_follows_embody_wait_max(monkeypatch):
+    """A proxy that cuts a silent request at 100 s (Cloudflare) needs every wait to answer sooner: the host sets
+    EMBODY_WAIT_MAX, read at each call, and a wait asking for more answers at the cap."""
+    from embody.mcp_server import wait_max
+    monkeypatch.delenv("EMBODY_WAIT_MAX", raising=False)
+    assert wait_max() == 120.0
+    monkeypatch.setenv("EMBODY_WAIT_MAX", "90")
+    assert wait_max() == 90.0
+    monkeypatch.setenv("EMBODY_WAIT_MAX", "soon")
+    assert wait_max() == 120.0
+    uvicorn = pytest.importorskip("uvicorn")
+    from embody.mcp_server import build_server, http_app
+    eng, w, i = engine_with_two_rooms()
+    port = _free_port()
+    eng.public_url = f"http://127.0.0.1:{port}/mcp"
+    gm = owner(eng)
+    gm.patch("Prisoner", {"playable": True})
+    inv = gm.invite("player", entity="Prisoner", label="Sam")
+    srv = build_server(gm, None, eng, http_only=True)
+    server = uvicorn.Server(uvicorn.Config(http_app(srv), host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        assert _post(base + "/op/join", {"world": "two-rooms"}, token=inv["token"])[0] == 200
+        monkeypatch.setenv("EMBODY_WAIT_MAX", "1")
+        t0 = time.monotonic()
+        status, body = _post(base + "/op/wait", {"timeout": 60}, token=inv["token"])
+        assert status == 200 and time.monotonic() - t0 < 15
+    finally:
+        server.should_exit = True
+
+
 def test_the_http_door_answers_principals_for_its_own_grant_only():
     uvicorn = pytest.importorskip("uvicorn")
     from embody.mcp_server import build_server, http_app

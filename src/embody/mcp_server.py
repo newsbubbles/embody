@@ -568,7 +568,8 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     async def wait(timeout: float = 30.0, kinds: list[str] | None = None, full: bool = False,
                    until: str | None = None, since: int | None = None, positions: bool = False,
                    present: bool = False, principal: str | None = None) -> dict[str, Any]:
-        """Block until an event touches you or your place (or the timeout, max 120 s). Returns the light bundle
+        """Block until an event touches you or your place (or the timeout, max 120 s unless the host sets
+        EMBODY_WAIT_MAX lower). Returns the light bundle
         (t, ambient, here, who is present, the new events, cursor); `full=true` returns perceive() instead.
         until="<expression>" waits for a condition instead of any event: to_me() (said to you, or with your name as
         its address; named() for your name anywhere), arrived('Mara') (walks in), came('Mara')
@@ -587,7 +588,7 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
         sess = S(principal)
         try:
             return await anyio.to_thread.run_sync(
-                lambda: sess.wait(timeout=min(float(timeout), 120.0), kinds=kinds, full=full, until=until, since=since,
+                lambda: sess.wait(timeout=min(float(timeout), wait_max()), kinds=kinds, full=full, until=until, since=since,
                                   positions=positions, present=present))
         except Rejected as r:
             return r.to_dict()
@@ -885,10 +886,13 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def clock(run: bool | None = None, rate: float | None = None, step: float | None = None,
-              turn: float | None = None) -> dict[str, Any]:
+              turn: float | None = None, drivers: list[str] | None = None,
+              catch_up: bool | None = None) -> dict[str, Any]:
         """Read the clock; authors set it. run/rate: realtime. step: advance by n world seconds now and return what
-        happened. turn: seconds the world moves after each embodied act while paused (turn-based chat play; 0 = off)."""
-        return s.clock(run=run, rate=rate, step=step, turn=turn)
+        happened. turn: seconds the world moves after each embodied act while paused (turn-based chat play; 0 = off).
+        drivers: whose acts move it then ("players", or principal ids; [] = everyone), so minds act at the time it is.
+        catch_up: a long step while paused replays every beat it passes, in order, instead of once."""
+        return s.clock(run=run, rate=rate, step=step, turn=turn, drivers=drivers, catch_up=catch_up)
 
     @tool()
     @_wrap
@@ -933,6 +937,15 @@ def shown(sess: Session, tool: str) -> bool:
     narrower set), the tools that are not ops by the op they stand beside."""
     from .ops import OPS
     return sess.may(tool if tool in OPS else {"load_world": "create_world"}.get(tool, "worlds"))
+
+
+def wait_max() -> float:
+    """The longest one wait holds its request, in real seconds: EMBODY_WAIT_MAX, else 120. A proxy that cuts a silent
+    request sooner needs it lower (Cloudflare at about 100 s: docs/platforms/vps.md). Read at each call."""
+    try:
+        return max(1.0, float(os.environ.get("EMBODY_WAIT_MAX") or 120.0))
+    except ValueError:
+        return 120.0
 
 
 async def _reply(send: Any, status: int, body: Any, ctype: str = "application/json",
@@ -1035,7 +1048,7 @@ class Bearer:
     async def _op(self, scope: dict[str, Any], receive: Any, sess: Session, op: str, send: Any) -> None:
         """The door as plain HTTPS, for an agent whose harness has not loaded the MCP server yet (most load one only
         when they start): POST /op/<name> with a JSON object of the arguments, the same bearer, the same role check
-        and refusal shape as the tools. GET /op lists the ops this grant may call. wait is capped at 120 s."""
+        and refusal shape as the tools. GET /op lists the ops this grant may call. wait is capped at wait_max()."""
         from .ops import LAYERS, OPS, call
         if not op:
             mine = sorted([o for o in OPS if sess.may(o)] + ["principals"])
@@ -1072,7 +1085,7 @@ class Bearer:
             return
         eng = self.hub.engine
         if op == "wait":
-            kw["timeout"] = min(float(kw.get("timeout", 30.0)), 120.0)
+            kw["timeout"] = min(float(kw.get("timeout", 30.0)), wait_max())
             out = await asyncio.to_thread(lambda: call(sess, op, **kw))
         else:
             def run() -> Any:

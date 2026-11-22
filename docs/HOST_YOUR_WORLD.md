@@ -85,7 +85,7 @@ docker exec my-world embody --author --world my-world invite owner --label "<you
 
 It prints a link and one line (the paste). Paste it into your own agent. The token is shown once and is never in the image, the logs or the repository.
 
-TLS: with Caddy it is one line, `caddy reverse-proxy --from world.example.com --to 127.0.0.1:8900`, which also gets the certificate. Any reverse proxy works. To host a sample without staging, add `-e EMBODY_WORLD=examples/ferry-at-dusk`.
+TLS: with Caddy it is one line, `caddy reverse-proxy --from world.example.com --to 127.0.0.1:8900`, which also gets the certificate. Any reverse proxy works. docs/platforms/vps.md has this on a rented server or a machine at home, with two more fronts that open no ports: Tailscale and Cloudflare Tunnel. To host a sample without staging, add `-e EMBODY_WORLD=examples/ferry-at-dusk`.
 
 To change the world later: edit `worlds/my-world/`, stage again, build and run the new image on the same volume. The volume keeps the state, and the boot renews the code against it (`load --upgrade --hosted`).
 

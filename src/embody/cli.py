@@ -503,6 +503,9 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--pause", action="store_true")
     c.add_argument("--rate", type=float)
     c.add_argument("--step", type=float, help="advance world time by this many seconds")
+    c.add_argument("--turn", type=float, help="seconds each act moves a paused world (0: off)")
+    c.add_argument("--drivers", nargs="*", default=None, help="whose acts move it: players, or principal ids (none: all)")
+    c.add_argument("--catch-up", choices=["on", "off"], default=None, help="a long paused step replays every beat")
     c = sub.add_parser("mirror", help="write the markdown projection (author)")
     c.add_argument("--path")
     sub.add_parser("summary", help="world summary")
@@ -675,7 +678,8 @@ def main(argv: list[str] | None = None) -> int:
             emit(args, r, render_minds(r))
         elif args.cmd == "clock":
             run = True if args.run else (False if args.pause else None)
-            r = s.clock(run=run, rate=args.rate, step=args.step)
+            r = s.clock(run=run, rate=args.rate, step=args.step, turn=args.turn, drivers=args.drivers,
+                        catch_up=None if args.catch_up is None else args.catch_up == "on")
             emit(args, r, f"t={r['t']:g} running={r['running']} rate={r['rate']:g} pending={r['pending']}"
                  + (f"\n" + "\n".join("  " + render_event(e) for e in r["events"]) if r.get("events") else ""))
         elif args.cmd == "mirror":

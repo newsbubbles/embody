@@ -189,6 +189,9 @@ BODY_KEYS = frozenset({"sheet", "attributes", "skills", "xp", "body", "wits", "w
                        "aid", "dead", "down", "wounded", "secret", "memory", "brief", "intent", "playable", "programmed",
                        "tried", "asleep", "yielded", "standing", "rank"})
 
+# The most beats a long step replays in a world that catches up (meta `catch_up`): past it, the rest skip ahead
+CATCH_UP_MAX = 20000
+
 # What a pack's pack.py may declare for the engine to read back, so the core names no pack's mechanics: body keys only
 # the rules write (BODY_KEYS), the chronicle's routine and news kinds, and a condition's way out ({condition: text}).
 # install_pack keeps them in the world's meta under `pack_declares`; World.declared merges them.
@@ -2847,6 +2850,9 @@ class World:
             raise Rejected("dt must be >= 0")
         start_seq = self.store.next_seq(self.id) - 1
         end_t = self.t + float(dt)
+        # a paused world with meta `catch_up` replays every beat a long step passes, in order (an 8 h sleep: the night's
+        # thirst and timers), up to CATCH_UP_MAX deliveries; a running world, or one without it, skips ahead
+        replays = CATCH_UP_MAX if self.meta().get("catch_up") and not self._row["clock_running"] else 0
         while True:
             due = self.store.query("scheduled", "world_id=? AND t<=?", (self.id, end_t), order="t, id", limit=1)
             if not due:
@@ -2856,10 +2862,14 @@ class World:
             self._save_row()
             self.store.delete("scheduled", self.id, item["id"])
             if item["every"]:
-                # A periodic item that fell behind fires once and skips ahead; it never replays a long gap.
+                # A periodic item that fell behind fires once and skips ahead; it never replays a long gap, unless
+                # the world catches up (above).
                 nxt = float(item["t"]) + float(item["every"])
                 if nxt <= end_t:
-                    nxt = end_t + float(item["every"])
+                    if replays > 0:
+                        replays -= 1
+                    else:
+                        nxt = end_t + float(item["every"])
                 item["t"] = nxt
                 self.store.put("scheduled", item)
             self._deliver(item)

@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  " + line)
     if len(worlds) > 1 or a.domain:
         print(f"  hub: {', '.join(w for w, _ in worlds)}; domains {', '.join(a.domain) or '(none)'}")
-    print(f"build: docker build -t <name> \"{out}\"  (any Docker host: docs/HOST_YOUR_WORLD.md)")
+    print(f"build: docker build -t <name> \"{out}\"  (any Docker host: docs/HOST_YOUR_WORLD.md; a VPS or home box: docs/platforms/vps.md)")
     print(f"railway: railway up \"{out}\" --path-as-root --no-gitignore --ci  (docs/platforms/railway.md)")
     return 0
 

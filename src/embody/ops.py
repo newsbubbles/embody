@@ -540,7 +540,8 @@ class Session:
 
         if op in ("create_world", "fork_world", "save", "restore", "mirror"):
             raise Rejected(f"{op} reaches the whole world; your grant is limited", hint="ask the owner")
-        if op == "clock" and any(args.get(k) is not None for k in ("run", "rate", "step", "turn")):
+        if op == "clock" and any(args.get(k) is not None for k in ("run", "rate", "step", "turn", "drivers",
+                                                             "catch_up")):
             raise Rejected("the clock is the whole world's; your grant is limited", hint="clock() with no arguments reads it")
         if op == "introduce":
             need(args["parent"], *(args.get("known_by") or {}))
@@ -3496,10 +3497,16 @@ class Session:
     def _turn(self, r: dict[str, Any]) -> dict[str, Any]:
         """Turn-based play: with the clock paused and meta.turn_seconds set, each act of an embodied principal
         moves the world by one turn (or by the act's own duration when that is longer), so behaviors and
-        timers get their move between a player's actions."""
+        timers get their move between a player's actions. With meta.turn_drivers set, only those seats move it
+        (`players`: every player's seat; else principal ids): another seat's act lands at the time it is, and a verb
+        with a duration finishes when a driver's turn reaches it."""
         w = self.world
         turn = float(w.meta().get("turn_seconds") or 0)
         if turn <= 0 or w.clock()["running"]:
+            return r
+        if not self._drives_clock():
+            r["elapsed"] = 0.0
+            r["t"] = w.t
             return r
         dt = max(turn, float(r.get("duration") or 0))
         evs = w.step(dt)
@@ -3508,6 +3515,13 @@ class Session:
         r["elapsed"] = dt
         r["t"] = w.t
         return r
+
+    def _drives_clock(self) -> bool:
+        """Whether this seat's act moves a turn-based world (meta.turn_drivers; unset: every seat does)."""
+        drivers = self.world.meta().get("turn_drivers")
+        if not drivers:
+            return True
+        return self.pid in drivers or ("players" in drivers and self.role == PLAYER)
 
     def act_many(self, steps: list[dict[str, Any]]) -> dict[str, Any]:
         """Ordered. Stops at the first rejection and returns what happened up to it."""
@@ -4925,10 +4939,15 @@ class Session:
         return {"ok": True, "unscheduled": id, "kind": item["kind"]}
 
     def clock(self, run: bool | None = None, rate: float | None = None, step: float | None = None,
-              turn: float | None = None) -> dict[str, Any]:
+              turn: float | None = None, drivers: list[str] | None = None,
+              catch_up: bool | None = None) -> dict[str, Any]:
         """Read or set the clock. run/rate: realtime. step: advance by n seconds now. turn: seconds the world
-        moves after each embodied act while paused (turn-based chat play); 0 turns it off."""
-        if run is not None or rate is not None or step is not None or turn is not None:
+        moves after each embodied act while paused (turn-based chat play); 0 turns it off. drivers: the seats whose
+        acts move it then (`players` for every player's seat, or principal ids; [] for every seat): a mind's act lands
+        at the time it is. catch_up: a long step while paused replays every beat it passes, in order (an 8 h sleep
+        gets the night's thirst and timers), not once."""
+        if (run is not None or rate is not None or step is not None or turn is not None or drivers is not None
+                or catch_up is not None):
             self._need(AUTHOR)
         self._tick()
         w = self.world
@@ -4937,10 +4956,16 @@ class Session:
             w.set_clock(running=run, rate=rate)
         if turn is not None:
             w.set_meta({"turn_seconds": float(turn) if turn > 0 else None})
+        if drivers is not None:
+            w.set_meta({"turn_drivers": [str(d) for d in drivers] or None})
+        if catch_up is not None:
+            w.set_meta({"catch_up": True if catch_up else None})
         if step is not None:
             out["events"] = w.step(step)
         out.update(w.clock())
         out["turn"] = w.meta().get("turn_seconds")
+        out["drivers"] = w.meta().get("turn_drivers") or []
+        out["catch_up"] = bool(w.meta().get("catch_up"))
         out["timers"] = self._timers()
         return out
 
