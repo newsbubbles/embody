@@ -34,7 +34,7 @@ from .store import Store
 from . import access as acl
 from . import far as far_mod
 from . import looks as looks_mod
-from .world import ALWAYS_SECRET, LIMITS_HEAD, ORACLE_LIMITS, ORACLE_SCRIPT, ORACLE_TIMEOUT, ORACLE_TIMEOUT_MAX, Rejected, World, rules_only_keys, _HOST_KINDS, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event, own_verbs
+from .world import ALWAYS_SECRET, LIMITS_HEAD, ORACLE_LIMITS, ORACLE_SCRIPT, ORACLE_TIMEOUT, ORACLE_TIMEOUT_MAX, Rejected, World, kept_from_self, rules_only_keys, _HOST_KINDS, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event, own_verbs
 from .workspace import USE_LINE, Workspace, read_scripts, resolve_uses, restore_world, save_world
 
 AUTHOR = "author"
@@ -51,7 +51,7 @@ _SAY_BURST = 30
 _NOTE_MAX = 2000  # a guest's remember() note, in characters
 _DESCRIPTION_MAX = 800  # how a newcomer looks, set once at join(template=..., description=...)
 _WAIT_BATCH = 50  # events one wait returns at most; the cursor stops at the last of a full batch
-_PATCH_HIDDEN = frozenset({"rules", "secret", "space", "policy"})  # kept out of the patched events a body sees
+_PATCH_HIDDEN = frozenset({"rules", "secret", "space", "policy", "hidden_from_self"})  # kept out of the patched events a body sees
 _WAIT_IDLE = 1.0  # the longest a wait sleeps with no event put: the clock and the timeout are looked at this often
 _BOND_DATA_MAX = 300  # a seat's own bond (relate by a player or mind): a line or two of data
 _SAY_WINDOW = 60.0
@@ -2156,7 +2156,7 @@ class Session:
             "world": w.id, "t": w.t,
             "clock": {"running": ck["running"], "rate": ck["rate"], "turn": w.meta().get("turn_seconds")},
             "ambient": self._ambient(here),
-            "you": self._sheet_card(self._card(ent, full=True)),
+            "you": self._sheet_card(self._card(ent, full=True, me=True)),
             "goals": [g for g in ent["state"].get("goals") or [] if g.get("status", "active") == "active"],
             "holding": [self._card(c) for c in w.children(me)],
             "here": self._place_card(here) if here else None,
@@ -2705,11 +2705,20 @@ class Session:
                 # your own card never shows its rules, its secret list, its space or the host's policy: nor does
                 # the diff of a patch to them (a rule growing `secret` named every hidden field to the player)
                 p = pe["payload"] or {}
-                changes = {k: v for k, v in (p.get("changes") or {}).items() if k not in _PATCH_HIDDEN}
+                hid = _PATCH_HIDDEN | kept_from_self(w.get(e["target_id"]) if e["target_id"] else None)
+                changes = {k: v for k, v in (p.get("changes") or {}).items() if k not in hid}
                 if not changes:
                     continue
                 pe["payload"] = {**p, "changes": changes,
-                                 "before": {k: v for k, v in (p.get("before") or {}).items() if k not in _PATCH_HIDDEN}}
+                                 "before": {k: v for k, v in (p.get("before") or {}).items() if k not in hid}}
+            elif full and e["kind"] == "patched" and me and e["target_id"] == me and (kept := kept_from_self(w.get(me))):
+                # a staff seat in its own body: what the world keeps from that body stays off its own diffs too
+                p = pe["payload"] or {}
+                changes = {k: v for k, v in (p.get("changes") or {}).items() if k not in kept}
+                if not changes:
+                    continue
+                pe["payload"] = {**p, "changes": changes,
+                                 "before": {k: v for k, v in (p.get("before") or {}).items() if k not in kept}}
             if not full and (sb is not None or (e["kind"] in _WORD_KINDS and "wall" in (pe["payload"] or {}))):
                 # not who else it shows itself to, nor the real time a word was said (minds() reads that)
                 pe["payload"] = {k: v for k, v in pe["payload"].items() if k not in ("seen_by", "wall")}
@@ -2752,13 +2761,16 @@ class Session:
                                            for x in w.exchanges(me, e["target"], limit=5)]})
         return out[:30]
 
-    def _visible_state(self, e: dict[str, Any], full: bool = False) -> dict[str, Any]:
+    def _visible_state(self, e: dict[str, Any], full: bool = False, me: bool = False) -> dict[str, Any]:
+        """A card's state. full: as staff or the body itself reads it. me: the body's own view, without what the world
+        keeps from it (hidden_from_self), which no one else's plain view shows either."""
         if not full and acl.KEY in e["state"] and not self._readable(e):
             return {}
-        secret = set(e["state"].get("secret", [])) | _ALWAYS_SECRET
+        kept = kept_from_self(e)
+        secret = set(e["state"].get("secret", [])) | _ALWAYS_SECRET | kept
         out = {}
         for k, v in e["state"].items():
-            if k in ("rules", "secret", "space") or (k == "layout" and not full):
+            if k in ("rules", "secret", "space", "hidden_from_self") or (k == "layout" and not full) or (me and k in kept):
                 continue
             if k == "layout" and isinstance(v, dict):
                 v = _brief_layout(v)  # a terrain's heights come from map(terrain=true), not every card
@@ -2779,8 +2791,10 @@ class Session:
     def _watch_me(self, e: dict[str, Any]) -> dict[str, Any]:
         """A watcher's own state as its body's rules read it: the schema's defaults under what is stored, so
         me['water'] works on a body that has never dried (a rule reads a missing value as its default)."""
-        out = {k: v for k, v in self.world.schema_defaults(e["type"]).items() if k not in ("rules", "secret", "space")}
-        out.update(self._visible_state(e, full=True))
+        kept = kept_from_self(e)
+        out = {k: v for k, v in self.world.schema_defaults(e["type"]).items()
+               if k not in ("rules", "secret", "space") and k not in kept}
+        out.update(self._visible_state(e, full=True, me=True))
         return out
 
     def _sheet_card(self, card: dict[str, Any]) -> dict[str, Any]:
@@ -2814,9 +2828,9 @@ class Session:
         w = self.world
         return looks_mod.card_lines(w, e, band, w.t, float(w.meta().get("day_seconds") or 86400))
 
-    def _card(self, e: dict[str, Any], full: bool = False) -> dict[str, Any]:
+    def _card(self, e: dict[str, Any], full: bool = False, me: bool = False) -> dict[str, Any]:
         w = self.world
-        card = {"id": e["id"], "type": e["type"], "name": e["name"], "state": self._visible_state(e, full)}
+        card = {"id": e["id"], "type": e["type"], "name": e["name"], "state": self._visible_state(e, full, me)}
         if e["state"].get("count") is not None:
             card["count"] = int(e["state"]["count"])  # a stack: coins, 60 of them
         if e["pos"] is not None:
@@ -4178,7 +4192,7 @@ class Session:
         cards = {c["name"]: self._visible_state(c, full=False) for c in near}
         if ent:
             cards.update({c["name"]: self._visible_state(c, full=False) for c in w.children(me)})
-            cards[ent["name"]] = self._visible_state(ent, full=True)
+            cards[ent["name"]] = self._visible_state(ent, full=True, me=True)
         data = json.loads(json.dumps({
             "t": w.t, "ambient": self._ambient(here), "here": here["name"] if here else None,
             "present": [c["name"] for c in near], "me": self._watch_me(ent) if ent else {},

@@ -120,7 +120,7 @@ Behaviors tick on the schema's `every`, written for turn-based stories where a m
 
 ## What a player reads
 
-A player's `inspect` reaches what `perceive` shows, plus its ancestors: the world root is always on the card. The engine keeps the host's plan off it: `policy` on any entity, like `brief`, `goals` and `memory`, is never shown to a player or a mind, and of the root's `templates` a player reads only `type`, `place` and `doc` (the brief and the state of a template are the host's). An entity's own `secret` list hides more. Owners, authors, narrators and observers read everything. A world that keeps its plan under another key names that key in the root's `secret`.
+A player's `inspect` reaches what `perceive` shows, plus its ancestors: the world root is always on the card. The engine keeps the host's plan off it: `policy` on any entity, like `brief`, `goals` and `memory`, is never shown to a player or a mind, and of the root's `templates` a player reads only `type`, `place` and `doc` (the brief and the state of a template are the host's). An entity's own `secret` list hides more. Its `hidden_from_self` list keeps keys from the body itself: a record the world's rules keep about it (a law's tally) never shows on its own card, in the patched diffs it sees, or to its seat's wait filters and code, and to anyone else it reads as secret; rules and the host read it as ever. Owners, authors, narrators and observers read everything. A world that keeps its plan under another key names that key in the root's `secret`.
 
 ## What the invitee's agent may do
 

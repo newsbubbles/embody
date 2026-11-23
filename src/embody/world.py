@@ -148,12 +148,12 @@ def _sealed(world: "World", ent: dict[str, Any] | None) -> set[str]:
             # what the review guards (a codex, a cipher) stays sealed until the owner approves it
             return set(ent["state"].get("secret") or []) | ALWAYS_SECRET if ctx._trial else set()
         if ctx._caller_side(ent["id"]):
-            return set(ent["state"].get("secret") or []) | ALWAYS_SECRET
+            return set(ent["state"].get("secret") or []) | ALWAYS_SECRET | kept_from_self(ent)
         return set(ent["state"]) - FRAME_SEES
     if world.within(ent["id"], under) and not ((ctx._limits or {}).get("under") == "self" and ent["id"] != under
                                                and world.is_a(ent["type"], "creature")):
-        return set()
-    return set(ent["state"].get("secret") or []) | ALWAYS_SECRET
+        return kept_from_self(ent)  # a player's own code reads its body as the body does
+    return set(ent["state"].get("secret") or []) | ALWAYS_SECRET | kept_from_self(ent)
 
 
 # What a frame's code reads of anything outside its machine, its load and its caller: what lies in plain sight
@@ -3643,6 +3643,16 @@ _PRIVATE_KINDS = frozenset({"remembered", "intended", "act_refused"})
 _HOST_KINDS = frozenset({"act_refused", "regrouped"})
 # State keys no other body reads, whatever the entity's own `secret` list says.
 ALWAYS_SECRET = frozenset({"memory", "brief", "goals", "policy", "cooldowns", "idle_orders"})
+
+
+def kept_from_self(ent: dict[str, Any] | None) -> set[str]:
+    """The keys a world keeps from the body itself (its `hidden_from_self` list, and the list): a record about it the
+    world's rules keep (a law's tally on a body) that its own card, its own patched diffs and its seat's code never
+    show. Rules and the host read them as ever; to anyone else they are secret too."""
+    if ent is None:
+        return set()
+    hid = ent["state"].get("hidden_from_self")
+    return ({str(k) for k in hid} | {"hidden_from_self"}) if isinstance(hid, list) else set()
 # A strike's cooldown in real seconds, when the meta's `strike_cooldown` does not say: `held` when a player or a mind
 # holds either side (an agent's time to read the fight and decide), `free` between bodies nobody holds.
 STRIKE_COOLDOWN = {"held": 60.0, "free": 15.0}
