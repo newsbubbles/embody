@@ -2168,9 +2168,12 @@ class Session:
             "known_places": [{"id": pid, "name": w.get(pid)["name"]} for pid in w.known_places(me) if w.get(pid)],
             "affordances": [a for a in w.affordances(me)],
             "reclaim": w.reclaimable(me),
-            "events": self._events_for(me, w.events(since=cursor, touching=me, limit=events)),
+            # the newest `events` since the cursor: it moves to the head, so a long backlog shows its end, not its start
+            "events": self._events_for(me, w.events(since=cursor, touching=me, limit=events, newest=True)),
             "cursor": w.store.next_seq(w.id) - 1,
         }
+        if (owed := self._owed_to(me)):
+            bundle["owed"] = owed
         if layout:
             bundle["layout"] = self._layout_view(me, bundle)
         if far:
@@ -2190,6 +2193,21 @@ class Session:
         else:
             w.set_entity_cursor(me, bundle["cursor"])
         return bundle
+
+    def _owed_to(self, me: str) -> dict[str, Any] | None:
+        """A player's line said to this body that it has not answered since (by a line or a deed), as minds() counts
+        it: who, what, and how long they have waited in real minutes. None when nobody is owed."""
+        w = self.world
+        for ev in reversed(w.events(kinds=["say", "talked", "act"], touching=me, limit=300, newest=True)):
+            if ev["actor_id"] == me:
+                return None
+            p = w.embodied(ev["actor_id"]) if ev["actor_id"] else None
+            if ev["target_id"] == me and ev["kind"] in ("say", "talked") and p and p.get("role") == PLAYER:
+                by = w.get(ev["actor_id"])
+                pl = ev.get("payload") or {}
+                return {"by": by["name"] if by else ev["actor_id"], "text": str(pl.get("text") or pl.get("about") or "")[:300],
+                        "seq": ev["seq"], "min": _owed_min(ev, w.t, self.engine.wall(), w.clock()["rate"] or 1)}
+        return None
 
     def _in_sight(self, me: str, here_id: str | None) -> dict[str, Any]:
         """What this body sees far off from where it stands (far.py), cached per place and body per world hour (paused:
@@ -4101,18 +4119,22 @@ class Session:
                 w = self.world
                 if me and w.get(me) is None:
                     raise Rejected(f"the entity you embodied ({me}) no longer exists", hint="join another entity")
-                hi = w.store.next_seq(w.id) - 1
+                head = w.store.next_seq(w.id) - 1
+                # a backlog (a cursor left behind by waits that timed out) is read a window at a time, the condition
+                # checked after each, so a line past the first window is never skipped and the cursor stops where
+                # the condition fired
+                hi = min(head, scan + _WATCH_WINDOW)
                 if hi > scan:
-                    rows = w.events(since=scan, until=hi, touching=me, limit=2000)
+                    rows = w.events(since=scan, until=hi, touching=me, limit=_WATCH_WINDOW)
                     seen.extend(e for e in self._events_for(me, rows) if not kinds or e["kind"] in kinds)
-                    seen = seen[-200:]
                     scan = hi
                 view = self._watch_view(me, seen)
+                seen = seen[-200:]
                 try:
                     fired = bool(cond.call("until", env=view, fuel=20_000))
                 except ScriptError as e:
                     raise Rejected(f"until: {e.reason}", hint=UNTIL_DOC) from None
-                timed_out = clock() - start >= timeout
+                timed_out = clock() - start >= timeout and scan >= head
                 if fired:
                     # true on the room as it stands, with no event at all: armed again, it fires again at once
                     already = first and bool(cond.call("until", env=self._watch_view(me, []), fuel=20_000))
@@ -4128,7 +4150,8 @@ class Session:
                     return {"world": w.id, "t": w.t, "timed_out": True, "fired": False, "until": until,
                             "since": since, "cursor": since, "seen": len(seen), "ambient": view["ambient"],
                             "here": view["here"], "present": view["present"], "events": []}
-            sleep(poll)
+            if scan >= head:
+                sleep(poll)
 
     def _watch_view(self, me: str | None, seen: list[dict[str, Any]]) -> dict[str, Any]:
         """The names an until-expression sees. Plain data, copied, so a script can only read it."""
@@ -4229,7 +4252,7 @@ class Session:
              "present": [{"id": c["id"], "name": c["name"]} for c in w.children(here["id"])
                          if c["id"] != me and w.sees(me, c) and w.is_a(c["type"], "creature")]
                         if here else [],  # the same `present` the expression read: people and creatures, not things
-             "events": seen[-50:], "cursor": hi}
+             "events": _reply_events(seen), "cursor": hi}
         if me:
             w.set_cursor(self.pid, hi)
         return b
@@ -5073,6 +5096,18 @@ def _in_words(seconds: float) -> str:
         return f"in about {round(m)} minutes"
     h = m / 60.0
     return f"in about {round(h)} hours" if h < 36 else f"in about {round(h / 24)} days"
+
+
+# The raw events an until-wait reads at a time from a backlog, checking its condition after each window
+_WATCH_WINDOW = 500
+
+
+def _reply_events(seen: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A fired wait's events: the last 50, and before them the last 20 lines spoken that fell outside those 50, so the
+    line that fired it is never cut off by the noise after it."""
+    tail = seen[-50:]
+    said = [e for e in seen[:-50] if e["kind"] in ("say", "talked")][-20:]
+    return said + tail
 
 
 def _owed_min(ev: dict[str, Any], t: float, now: float, rate: float) -> float:
