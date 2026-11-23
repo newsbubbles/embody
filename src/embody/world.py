@@ -340,7 +340,7 @@ class Ctx(ScriptObject):
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
-        "emit", "say", "gesture", "witnesses", "schedule", "act", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "ways", "day_seconds", "offer_seat", "withdraw_seat", "move_seat", "strike_wait", "mark_strike", "embodied", "event_at", "quiet", "locked", "shut", "remember",
+        "emit", "say", "gesture", "witnesses", "schedule", "act", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "ways", "day_seconds", "offer_seat", "withdraw_seat", "move_seat", "strike_wait", "mark_strike", "embodied", "acted_at", "event_at", "quiet", "locked", "shut", "remember",
         "count", "split", "merge", "transfer", "bulk", "load", "may", "member", "chmod", "chown", "rename",
         "may_write_sheet", "named_entry", "mark", "unmark", "regrow", "step", "leak",
     )
@@ -565,6 +565,12 @@ class Ctx(ScriptObject):
     def embodied(self, id: Any) -> bool:
         """Someone (a mind, a player) holds this body: it acts for itself, so a rule should not drive it."""
         return self._w.embodied(_ev(self._w, id)) is not None
+
+    def acted_at(self, id: Any) -> float | None:
+        """World time of the last deed by whoever holds this body, or None when nobody does (or they have done
+        nothing yet). An idle behavior on a held seat asks it to tell its own errand from where the player went."""
+        p = self._w.embodied(_ev(self._w, id))
+        return float(p["acted_t"]) if p and p.get("acted_t") is not None else None
 
     def strike_wait(self, who: Any, target: Any) -> float:
         """World seconds until `who` may strike `target` again, 0 when it may now (World.strike_wait). A rule that
@@ -3023,6 +3029,20 @@ class World:
         if to and to != who:
             self._answer_away(to, who, ev["seq"], text)
         return ev
+
+    def gesture(self, who: str, text: str, to: str | None = None, low: bool = False,
+                caused_by: int | None = None, mark: dict[str, Any] | None = None) -> dict[str, Any]:
+        """A sign made, seen and not said: a `gestured` event {text, to} from the body, which its place sees, as
+        ctx.gesture makes for an NPC. A `low` one stays small: those in `near` (low_near) see it in full, the rest of
+        the place see that a small sign was made, and to whom. It changes nothing in the world."""
+        self.need(who)
+        payload: dict[str, Any] = {"text": str(text), **(mark or {})}
+        if to:
+            self.need(to)
+            payload["to"] = to
+        if low:
+            payload.update(low=True, near=self.low_near(who, to))
+        return self.emit("gestured", actor=who, target=who, reach=1, payload=payload, caused_by=caused_by)
 
     def low_radius(self) -> float:
         """Metres within which a low line is heard in full (world meta `low_radius`)."""

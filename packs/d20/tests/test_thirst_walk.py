@@ -29,7 +29,30 @@ def test_a_held_seat_gone_idle_drinks_what_is_in_reach_then_walks_for_water_and_
         gm.clock(step=60)
         trail.append(where(gm, "Walker"))
     assert trail[0] == "The Road" and "The Flats" in trail[1:], trail  # then to water, and back to its post
-    assert not state(gm, "Walker").get("post")
+    assert not state(gm, "Walker").get("post") and not state(gm, "Walker").get("water_from")
+
+
+def test_a_held_seat_gone_idle_is_never_walked_back_to_a_post_its_player_left():
+    # a player on a watcher was walked back to his template post, then the post was dropped (a report, 2026-11-23)
+    eng, gm, you = outpost()
+    gm.spawn("person", "The Flats", "Walker", state={"playable": True, "water": 10, "max_water": 10, "hp": 40,
+                                                     "max_hp": 40, "post": gm.inspect("The Flats")["id"]})
+    gm.world.set_meta({"idle_after": 50})
+    me = eng.session("player")
+    me.join("outpost", "Walker")
+    me.act("go", "The Road")
+    for _ in range(4):
+        gm.patch("Walker", {"water": 10})  # the open road dries a body: keep it watered for this half
+        gm.clock(step=60)
+    assert where(gm, "Walker") == "The Road"  # idle and away from the post: it stays where its player left it
+    assert state(gm, "Walker")["post"] == gm.inspect("The Flats")["id"]
+    gm.patch("Walker", {"water": 2})  # thirsty and idle: to water, and back to the Road it left from
+    trail = []
+    for _ in range(8):
+        gm.clock(step=60)
+        trail.append(where(gm, "Walker"))
+    went = trail.index("The Oasis")
+    assert "The Road" in trail[went:] and "The Flats" not in trail, trail  # back to the Road it left from
 
 
 def test_a_thirst_walk_goes_around_a_side_that_outlawed_the_body_or_waits():

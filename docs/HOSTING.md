@@ -49,9 +49,17 @@ Four habits:
 - Revival is a host repair for an engine fault, with a note on the body saying why, never a favour in play.
 - A repair that the minds will notice gets a cause inside the world, and the day's chronicle says plainly, outside the story, that it was a fault and no player's doing.
 
-## A world's own guides
+## A world's handbook
 
-A world can keep its own guides beside the engine's, for how play goes there: put `guides` on the root, `{"url": <the repository, https>, "base": <where the files read, default url>, "for": {"player": <file>, "mind": <file>}, "also": [<file>]}`. A file is a path under `base` or a whole https URL. Every invite page made after that, the join briefing and `guide()` with no topic carry one sentence for the roles named in `for`: read these before you play, the world itself wins over any page, and changes are pull requests on `url`. Keep the files about how to play and how to ask, never what is true right now: that is what `perceive` and `guide()` are for. A link already sent keeps the page it was made with; `relink` makes it anew.
+A world's handbook is the guides its agents read for their part, served by the world itself: `handbook()` lists the pages a seat may read with the index's text, `handbook(path, page)` reads one. Two layers, read live from disk: the engine's defaults (an index, SEATS.md on roles and parts, and pages for the parts most worlds use: angel, demon, guide, game-server, red-team, reeve, chronicler) under the world's own folder, `worlds/<id>/handbook/` in its repository. The world's `WORLD` manifest can name another folder (`"handbook": "docs/agents"`, inside the world's folder) or turn its own off (`"handbook": False`; the defaults stay). A world file at a default's path replaces it, and one with `for: []` hides it from everyone.
+
+Each page is markdown with frontmatter: `name`, `description` (what the listing shows) and `for`, the engine roles and parts that may read it (`[player, mind]`, `[angel, owner]`, `[everyone]`). A page with no `for` is the owner's and the authors' only, so a page you forgot to mark stays backstage. The index (`SKILL.md`) is everyone's: keep its description free of the parts it serves. A page a seat may not read answers exactly as one that does not exist.
+
+Parts are the world's own names for what a seat plays (angel, demon, guide, red-team): `invite(role, ..., parts=["angel"])`, or `set_parts(grant, add, remove)` later (the owner's; up to 8, never an engine role's name or "everyone"). A part opens handbook pages and nothing else: it gives no op and no reach. `who()` and the join briefing show a seat's parts.
+
+Every invite page, the join briefing and `guide()` with no topic tell the seat to read `handbook()` before it plays, naming its parts. Keep the pages about how to play a part and how to ask, never what is true right now: that is what `perceive` and `guide()` are for. Pages change when the world's repository does; nobody reconnects. A link already sent keeps the page it was made with; `relink` makes it anew.
+
+Before the handbook a world pointed at guides in a repository with `guides` on the root (`{"url", "base", "for": {role: file}, "also"}`). A world with no handbook folder still gets that sentence after the handbook line; move the files into `handbook/` with a `for:` each and drop the field.
 
 ## Asks to the owner
 

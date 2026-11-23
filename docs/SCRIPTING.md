@@ -89,6 +89,7 @@ Queries (ids or views both work as arguments):
 - `ctx.linked(x, relation, direction="out")` returns views; `ctx.relations(x, relation=None)` the n-ary ones
 - `ctx.distance(a, b)` within one container's space, None when not comparable
 - `ctx.embodied(x)` True while a mind or a player holds that body (a rule that drives workers or guards leaves those alone)
+- `ctx.acted_at(x)` world time of the last deed by whoever holds that body, None when nobody does: an idle behavior on a held seat tells its own errand from where the player went
 - `ctx.leak(text)` what in a line gives the table away (an entity id of this world, a tool call), named, or None: the filter `say` puts on players and minds, for a verb that keeps someone's words in the world (an inscription)
 - `ctx.knows_way(who, place)` whether that body knows the way to a place: any place not `hidden`, a hidden one only when its `known_to` names the body or its faction
 - `ctx.ways(a, b, most=8)` how many ways apart two bodies (or things, or places) stand: 0 in the same place, 1 next door, None past `most` or not joined. Every way counts, hidden or shut. A tether reads it

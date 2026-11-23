@@ -33,6 +33,7 @@ from .script import BUILTINS as SCRIPT_BUILTINS, Script, ScriptError
 from .store import Store
 from . import access as acl
 from . import chronicle_threads
+from . import handbooks
 from . import far as far_mod
 from . import looks as looks_mod
 from .world import ALWAYS_SECRET, LIMITS_HEAD, ORACLE_LIMITS, ORACLE_SCRIPT, ORACLE_TIMEOUT, ORACLE_TIMEOUT_MAX, Rejected, World, kept_from_self, rules_only_keys, _HOST_KINDS, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event, own_verbs
@@ -49,6 +50,7 @@ _HELD_HINT = "the owner keeps your seat where it is for now; ask_owner() if you 
 PRESENT_GRACE = 120.0  # real seconds after a wait(present=true) ends that the seat still counts as in the scene
 _STEP_MAX_S = 2.0  # a step covers at most this many world seconds of walking, however long since the last
 _SAY_BURST = 30
+_GESTURE_MAX = 300  # one sign, a sentence or two
 _NOTE_MAX = 2000  # a guest's remember() note, in characters
 _DESCRIPTION_MAX = 800  # how a newcomer looks, set once at join(template=..., description=...)
 _WAIT_BATCH = 50  # events one wait returns at most; the cursor stops at the last of a full batch
@@ -673,7 +675,13 @@ class Session:
                 out["label"] = self.grant["label"]
             if self.scope:
                 out["scope"] = list(self.scope)
+            if self._parts():
+                out["parts"] = self._parts()
         return out
+
+    def _parts(self) -> list[str]:
+        """This seat's parts in its world (angel, demon, ...): what the owner named on its grant."""
+        return [str(p) for p in ((self.grant or {}).get("parts") or [])]
 
     def door_path(self, ref: str, what: str) -> str:
         """A file reference from over the door (a grant) stays inside the workspace: a world id, a save name, or a
@@ -834,7 +842,9 @@ class Session:
 
     def _may_sit(self, eid: str, now: float) -> None:
         """Who may take which seat. Owners, authors and narrators sit anywhere free. A mind sits only where its
-        grant points. A player sits where its grant points, or in any `playable` seat nobody holds or has reserved."""
+        grant points. A player sits where its grant points, or in any `playable` seat nobody holds or has reserved.
+        Whether a dead body stays a seat is the world's (meta `dead_seats`): "closed" keeps it for the one still
+        sitting in it only, so a player who left a corpse for a new character never gets its view back."""
         w = self.world
         ent = w.need(eid)
         if self.role in (OWNER, AUTHOR_ROLE, NARRATOR_ROLE):
@@ -844,6 +854,10 @@ class Session:
             if held.get("body") == eid:
                 return
             raise Rejected("your seat is held", hint=held.get("why") or _HELD_HINT)
+        if ent["state"].get("dead") and not _dead_seats_open(w) and (w.principal(self.pid) or {}).get("entity_id") != eid:
+            raise Rejected(f"{ent['name']} is dead, and the dead are no seat",
+                           hint="seats() lists the open seats and the templates; an invite whose character died makes "
+                                "a new one: join(template=..., name=...)", alternatives=self._open_seat_names(now))
         if eid in self.scope:
             return
         if self.grant is None:
@@ -882,7 +896,8 @@ class Session:
             out.append({"id": e["id"], "name": e["name"], "type": e["type"], "place": place["name"] if place else None,
                         "about": e["state"].get("description") or e["state"].get("doc") or "",
                         "embodied_by": self._seat_name(emb["id"]) if emb else None, "reserved": bool(res),
-                        "open": emb is None and (not res or e["id"] in self.scope
+                        "open": emb is None and not (e["state"].get("dead") and not _dead_seats_open(w))
+                                and (not res or e["id"] in self.scope
                                                  or (held is not None and e["id"] == held.get("body")))})
         return out
 
@@ -1039,11 +1054,19 @@ class Session:
             w.store.set("grants", w.id, g["id"], made=eid)
         return eid
 
-    def _guides_line(self, role: str) -> str:
-        """The world's own guides for this role, when the root carries `guides` (docs/HOSTING.md): one sentence that
-        points at them and names the world the source of truth. Empty when the world keeps none for this role."""
-        root = self.world.get(self.world.root_id)
-        return guides_line((root["state"].get("guides") if root else None), role)
+    def _guides_line(self, role: str, parts: list[str] | None = None) -> str:
+        """The line every briefing and invite page carries: handbook() is this world's guide for the part, read
+        before play. A world with no handbook folder yet that keeps `guides` on its root (docs/HOSTING.md) adds that
+        sentence too."""
+        mine = list(parts if parts is not None else self._parts())
+        line = ("read handbook(), this world's guide for your part" + (f" (your parts here: {', '.join(mine)})" if mine else "")
+                + ", before you play, and handbook('<path>') for each page it lists")
+        if handbooks.world_folder(self.engine, self.world_id) is None:
+            root = self.world.get(self.world.root_id)
+            old = guides_line((root["state"].get("guides") if root else None), role)
+            if old:
+                line += ". " + old[0].upper() + old[1:]
+        return line
 
     def _briefing(self, eid: str) -> dict[str, Any]:
         """What join hands a newcomer: the world's own paragraph, who they are, the pace, and how to begin."""
@@ -1066,7 +1089,7 @@ class Session:
                *([f"every tool is also POST {u[:-4]}/op/<name> over plain HTTPS; {u[:-4]}/docs is a page of every "
                   "call, grouped by layer (in the world, your seat, to the owner, ...)"]
                  if (u := self.engine.url_now() or "").endswith("/mcp") else []),
-               *([line] if (line := self._guides_line(self.role)) else []),
+               self._guides_line(self.role),
                "the rules can change while you play: when perceive carries rules_notice, read guide('changes') before you "
                "act and rebuild your watch and notes on the new terms",
                "tell the human what happens as a story, in prose, in the fiction: no bullets, no stat sheets, no tool names"]
@@ -1080,6 +1103,8 @@ class Session:
         out = {"role": self.role, "role_doc": ROLE_DOC.get(self.role, ""), "world": w.name, "you": ent["name"] if ent else eid,
                "text": (root["state"].get("briefing") if root else None) or w.summary()["description"],
                "pace": pace, "how": how}
+        if self._parts():
+            out["parts"] = self._parts()
         if self.grant and self.grant.get("brief"):
             out["from_the_host"] = self.grant["brief"]  # this guest's own orders; nobody else's briefing carries them
         return out
@@ -1118,8 +1143,8 @@ class Session:
         text = re.sub(r"references/(\w+)\.md", r"guide('\1')", text)
         text = text.replace("is in `references/`, beside this file", "is in guide('<part>'), one call per part")
         out = {"topic": t or "index", "text": text, "topics": list(GUIDE_TOPICS)}
-        if not t and (line := self._guides_line(self.role)):
-            out["world_guides"] = line
+        if not t and self.world_id:
+            out["world_guides"] = self._guides_line(self.role)
         return out
 
     # ---- the rules' changelog: what changed, so a seat that has played for hours stops acting on the old -------------
@@ -1267,7 +1292,7 @@ class Session:
     def invite(self, role: str, entity: str | None = None, template: str | None = None, label: str = "",
                expires: float | None = None, principal: str | None = None,
                scope: list[str] | None = None, brief: str = "", limits: dict[str, Any] | None = None,
-               slots: int | None = None, vouched: bool = False) -> dict[str, Any]:
+               slots: int | None = None, vouched: bool = False, parts: list[str] | None = None) -> dict[str, Any]:
         """(owner) A grant that travels as a token. role: author, builder, narrator, player, mind or observer. entity: the
         seat kept for this invite (player) or the NPC it holds (mind; scope=[...] for more). template: the character
         it may make. expires: hours. brief: the host's word to this guest alone (their orders, their first goal); it
@@ -1275,7 +1300,9 @@ class Session:
         of the world it may change (an observer's limits={"under": ...}: a read-only hand on that part alone, as anyone
         there sees it, for a game's client); types=[...], what it may spawn; scripts=<prefix>, how its scripts and schemas are
         named (default: from the principal). A builder needs under. slots: how many seats the world may hand this
-        guest (claim_seat), over the root's `seat_slots`. vouched: the owner vouches for this hand (see vouch). Returns the token once, the link whose page carries it (good
+        guest (claim_seat), over the root's `seat_slots`. vouched: the owner vouches for this hand (see vouch). parts: the
+        world's own parts this seat plays (angel, demon, guide...): they pick the handbook pages it may read
+        (set_parts changes them later). Returns the token once, the link whose page carries it (good
         once, for a day) and the paste: the link with a line for the friend. Without a public URL the paste is the page."""
         if slots is not None and (not isinstance(slots, int) or slots < 0):
             raise Rejected("slots is a whole number, 0 or more", hint="slots=1")
@@ -1289,7 +1316,7 @@ class Session:
                     raise Rejected(f"{ref} already has an oracle (grant {g['id']})",
                                    hint="revoke that grant first; one oracle answers for a thing")
         out = self._mint(role, entity=entity, template=template, label=label, expires=expires, principal=principal,
-                         scope=scope, brief=brief, limits=limits, slots=slots)
+                         scope=scope, brief=brief, limits=limits, slots=slots, parts=parts)
         if vouched:
             self.world.store.set("grants", self.world.id, out["id"], vouched=1)
             out["vouched"] = True
@@ -1303,7 +1330,7 @@ class Session:
     def _mint(self, role: str, entity: str | None = None, template: str | None = None, label: str = "",
               expires: float | None = None, principal: str | None = None, scope: list[str] | None = None,
               brief: str = "", limits: dict[str, Any] | None = None, slots: int | None = None,
-              parent: str | None = None) -> dict[str, Any]:
+              parent: str | None = None, parts: list[str] | None = None) -> dict[str, Any]:
         """invite's work, also for a seat claimed in the world (`parent`: the grant it was claimed under)."""
         self._tick()
         w = self.world
@@ -1315,6 +1342,7 @@ class Session:
         sc = [self._resolve(x) for x in (scope or [])]
         if eid and eid not in sc:
             sc.insert(0, eid)
+        pts = _clean_parts(parts)
         if role == MIND and not sc:
             raise Rejected("a mind grant names its NPCs", hint="invite('mind', entity='Mara') or scope=[...]")
         if role == ORACLE and not sc:
@@ -1333,7 +1361,7 @@ class Session:
         url = self.engine.url_now() or ""
         code = new_code()
         link = link_for(url, code)
-        stored = self._page(role, eid, sc, brief, template, note, url, token, bool(link))
+        stored = self._page(role, eid, sc, brief, template, note, url, token, bool(link), parts=pts)
         text = stored.replace(HOST_MARK, url.removesuffix("/mcp"))
         exp = (now + float(expires) * 3600.0) if expires else None
         code_exp = min(now + LINK_HOURS * 3600.0, exp) if exp else now + LINK_HOURS * 3600.0
@@ -1341,17 +1369,18 @@ class Session:
                "entity_id": eid, "template": template, "label": label, "token_hash": token_hash(token),
                "created": now, "expires": exp, "revoked": 0, "last_used": None, "brief": brief or None,
                "code_hash": token_hash(code) if link else None, "code_expires": code_exp if link else None,
-               "page": stored if link else None, "limits": lim, "parent_id": parent, "slots": slots}
+               "page": stored if link else None, "limits": lim, "parent_id": parent, "slots": slots,
+               "parts": pts or None}
         w.store.put("grants", row)
         return {"ok": True, "id": row["id"], "principal": pid, "role": role, "entity": eid, "scope": sc, "limits": lim,
-                "template": template, "expires": row["expires"], "token": token, "url": url or None,
+                **({"parts": pts} if pts else {}), "template": template, "expires": row["expires"], "token": token, "url": url or None,
                 "link": link, "link_expires": row["code_expires"], "paste": paste(w.name, role, link, text, label=label),
                 "page": text,
                 "hint": ("send them the paste: the link works once and for a day" if link else
                          "no public URL, so no link: send them the paste whole") + "; grants() lists grants without the token"}
 
     def _page(self, role: str, eid: str | None, sc: list[str], brief: str | None, template: str | None, note: str,
-              url: str, token: str, link: bool) -> str:
+              url: str, token: str, link: bool, parts: list[str] | None = None) -> str:
         """The page an invite link serves, with the host's address left as HOST_MARK when there is a link."""
         w = self.world
         ck = w.clock()
@@ -1362,7 +1391,44 @@ class Session:
                     seat=(w.get(eid)["name"] if eid and w.get(eid) and role != MIND else None),
                     scope_names=names, rate=ck["rate"] if ck["running"] or waits else 0.0, waits=waits,
                     briefing=(f"From the host, for you alone: {brief}" if brief else ""), template=template,
-                    template_doc=tdoc, limits_note=note, guides=self._guides_line(role))
+                    template_doc=tdoc, limits_note=note, guides=self._guides_line(role, parts or []))
+
+    def set_parts(self, grant: str, add: list[str] | None = None, remove: list[str] | None = None) -> dict[str, Any]:
+        """(owner) The world's own parts a grant plays (angel, demon, guide, red-team...): add and remove by name. A
+        part picks the handbook pages its seat may read (a page's `for` names roles and parts); it gives no op and no
+        reach (the grant's role and limits do that). Takes hold on the seat's next call."""
+        w = self.world
+        g = w.store.get("grants", w.id, str(grant))
+        if g is None:
+            raise Rejected(f"no grant {grant!r} on this world", hint="grants() lists them")
+        if g["role"] == OWNER:
+            raise Rejected("the owner's grant reads every page already", hint="set parts on a guest's grant")
+        cur = [p for p in (g.get("parts") or []) if p not in set(_clean_parts(remove))]
+        new = list(dict.fromkeys([*cur, *_clean_parts(add)]))
+        if len(new) > _MAX_PARTS:
+            raise Rejected(f"a grant plays at most {_MAX_PARTS} parts", hint="remove one first")
+        w.store.set("grants", w.id, g["id"], parts=new or None)
+        self._record("set_parts", grant=g["id"], parts=new)
+        return {"ok": True, "grant": g["id"], "parts": new,
+                "hint": "their handbook() lists the pages these parts may read; their briefing names them"}
+
+    def handbook(self, path: str = "", page: int = 1) -> dict[str, Any]:
+        """This world's handbook: the pages for your part, from the world itself. No path: the index (how to read it)
+        and the pages your seat may read, each with its path and what it is for. path: one page (paged when long). The
+        world's own pages lie over the engine's; your role and your parts (the owner names them on your grant) decide
+        which you may read. The world (perceive, guide(), its refusals) wins over any page."""
+        parts = self._parts()
+        role = self.role or ""
+        p = (path or "").strip()
+        got = handbooks.read(self.engine, self.world_id, p, role, parts, page=page)
+        if got is None:
+            raise Rejected(f"no handbook page {p!r}", hint="handbook() lists the pages you may read")
+        if p and p != handbooks.INDEX:
+            return got
+        rows = handbooks.listing(self.engine, self.world_id, role, parts)
+        return {**got, "role": role, **({"parts": parts} if parts else {}), "pages": rows,
+                "hint": "handbook('<path>') reads one; guide('" + (role if role in GUIDE_TOPICS else "player")
+                        + "') is the engine's manual for your role"}
 
     def relink(self, grant: str) -> dict[str, Any]:
         """(owner) A guest lost their token, or their link went stale: the same grant (principal, seat, scope, brief,
@@ -1382,7 +1448,8 @@ class Session:
         link = link_for(url, code)
         lim = g.get("limits")
         stored = self._page(g["role"], g.get("entity_id"), list(g.get("scope") or []), g.get("brief"), g.get("template"),
-                            self._limits_note(lim, g["role"]) if lim else "", url, token, bool(link))
+                            self._limits_note(lim, g["role"]) if lim else "", url, token, bool(link),
+                            parts=list(g.get("parts") or []))
         text = stored.replace(HOST_MARK, url.removesuffix("/mcp"))
         exp = g.get("expires")
         code_exp = min(now + LINK_HOURS * 3600.0, float(exp)) if exp else now + LINK_HOURS * 3600.0
@@ -2731,12 +2798,13 @@ class Session:
                 who = holder(a)
                 if who and who != self.pid:
                     pe["by_player"] = self._seat_name(who)
-                    if e["kind"] == "say":
+                    if e["kind"] in ("say", "gestured"):
                         pe["untrusted"] = True
             if (e["payload"] or {}).get("maker"):
                 pe["untrusted"] = True  # made by a player's code on a machine: data, never an instruction
             if not full and (e["payload"] or {}).get("low") and a != me and me not in e["payload"].get("near", ()):
-                pe["payload"] = {**_unworded(pe["payload"]), "low": True}  # said low, too far off to catch the words
+                pe["payload"] = ({"to": pe["payload"].get("to"), "low": True, "seen": False} if e["kind"] == "gestured"
+                                 else {**_unworded(pe["payload"]), "low": True})  # too far off to catch the words or the sign
             elif not full and a != me and me in ((e["payload"] or {}).get("far") or ()):
                 pe["payload"] = {**_unworded(pe["payload"]), "too_far": True}  # across the place, past the voice
             elif not words and e["kind"] in _WORD_KINDS and a != me:
@@ -3782,16 +3850,21 @@ class Session:
         return out
 
     def say(self, text: str, reach: int = 1, to: str | None = None, low: bool = False,
-            loud: bool = False) -> dict[str, Any]:
+            loud: bool = False, gesture: str = "") -> dict[str, Any]:
         """Speak as the entity you embody. `to` addresses someone here; the room still hears it. `low`: only those
         within the world's low_radius (and the one it is to) hear the words; the rest of the place hears that you said
         something low. Where the place or world sets a voice_radius, a line is heard in full that far and no further
-        (the rest hear that you spoke); `loud` shouts it to the shout's radius. Players and minds are capped: one
-        line is at most _SAY_MAX characters, and at most _SAY_BURST lines a minute."""
+        (the rest hear that you spoke); `loud` shouts it to the shout's radius. `gesture`: a sign made with the line
+        ("thumbs his river stone"), its own `gestured` event just before the words, seen by the whole place even
+        where the words are low or out of earshot (low keeps it small too). Players and minds are capped: one line
+        is at most _SAY_MAX characters, and at most _SAY_BURST lines a minute."""
         self._tick()
         me = self._me()
         if self.world.need(me)["state"].get("dead"):
             raise Rejected("you are dead", hint="the dead say nothing; perceive still shows the world to you")
+        sign = str(gesture or "").strip()
+        if sign and not str(text or "").strip():
+            return self.gesture(sign, to=to, low=low)
         if not self._privileged():
             how = "whisper" if reach <= 0 or low else "shout" if reach > 1 or loud else "say"
             self.world._verbs_only(me, how, also=("say",))
@@ -3803,18 +3876,14 @@ class Session:
             if leak:
                 raise Rejected(f"that line says {leak} out loud: ids and tool calls are not words in the world",
                                hint="say a thing's or a person's name; do with act() what a tool does")
+        if sign:
+            self._sign_ok(sign)
         self._acted()
         if not self._privileged():
             if len(text) > _SAY_MAX:
                 raise Rejected(f"a line is at most {_SAY_MAX} characters; this one is {len(text)}",
                                hint="say less, or say it in turns")
-            dq = self.engine._said.setdefault(self.pid, collections.deque())
-            now = self.engine.now()
-            while dq and now - dq[0] > _SAY_WINDOW:
-                dq.popleft()
-            if len(dq) >= _SAY_BURST:
-                raise Rejected(f"{_SAY_BURST} lines in a minute is the most anyone says", hint="wait() and listen")
-            dq.append(now)
+            self._burst()
         whom = self._resolve(to) if to else None
         if whom is not None and not self._privileged() and not self._within_earshot(me, whom):
             raise Rejected(f"{self.world.need(whom)['name']} is not here to hear you: to= is for someone in this place",
@@ -3826,9 +3895,12 @@ class Session:
                                 "way to, or speak to someone who sees you")
         if low and loud:
             raise Rejected("a line is low or loud, not both", hint="say(text, low=true) or say(text, loud=true)")
+        sev = self.world.gesture(me, sign, to=whom, low=low) if sign else None
         ev = self.world.say(me, text, reach=reach, to=whom, low=low, loud=loud)
         self.world._bump_cursor(self.pid, ev["seq"])  # past your own line, not what answered it (an away answer)
         out = {"ok": True, "event": _public_event(ev)}
+        if sev is not None:
+            out["gesture"] = _public_event(sev)
         body = self.world.get(me)  # a line can end its speaker (a safe word that closes a dream): then nobody to count
         if body is None:
             pass
@@ -3850,6 +3922,70 @@ class Session:
         if deed:
             out["note"] = deed
         return out
+
+    def gesture(self, text: str, to: str | None = None, low: bool = False) -> dict[str, Any]:
+        """A sign made, seen and not said ("thumbs his river stone", "nods toward the gate"): a `gestured` event your
+        place sees, as an NPC's are, and never a change to the world (give, drop and the rest are act()). `to` turns
+        it toward someone here; `low` keeps it small: seen in full within the world's low_radius and by the one it
+        is to, the rest of the place see that you made a small sign. A watcher wakes on it with did('gestured',
+        by=...). Players and minds: at most _GESTURE_MAX characters, counted with say's lines a minute.
+        say(text, gesture=...) makes the sign and says the line at once."""
+        self._tick()
+        me = self._me()
+        if self.world.need(me)["state"].get("dead"):
+            raise Rejected("you are dead", hint="the dead make no sign; perceive still shows the world to you")
+        if not self._privileged():
+            self.world._verbs_only(me, "gesture", also=("say",))
+        text = str(text or "").strip()
+        if not text:
+            return {"ok": True, "event": None, "note": "an empty gesture is no sign: nothing was done"}
+        self._sign_ok(text)
+        self._acted()
+        if not self._privileged():
+            self._burst()
+        whom = self._resolve(to) if to else None
+        if whom is not None and not self._privileged() and not self._within_earshot(me, whom):
+            raise Rejected(f"{self.world.need(whom)['name']} is not here to see it: to= is for someone in this place",
+                           hint="go where they are, or make the sign to the room without to=")
+        veil = self.world._veil([me]) if whom is not None and not self._privileged() else None
+        if veil is not None and whom not in veil:
+            raise Rejected(f"{self.world.need(whom)['name']} can't see you: you are hidden from them",
+                           hint="only those in your shown_to see you; show yourself to them first, if you have a way to")
+        ev = self.world.gesture(me, text, to=whom, low=low)
+        self.world._bump_cursor(self.pid, ev["seq"])
+        out = {"ok": True, "event": _public_event(ev)}
+        if low:
+            out["seen_by"] = [c["name"] for x in ev["payload"]["near"] if x != me and (c := self.world.get(x))
+                              and self.world.is_a(c["type"], "creature")]
+            if not out["seen_by"]:
+                out["note"] = (f"nobody stood within {self.world.low_radius():g} m to see it: step closer, or make it "
+                               "to someone with to=")
+        deed = _deed_in(self.world, me, text, sign=True)
+        if deed:
+            out["note"] = deed
+        return out
+
+    def _sign_ok(self, text: str) -> None:
+        """A gesture's text, from a player or a mind: no ids or tool calls, and short."""
+        if self._privileged():
+            return
+        leak = _mechanics_in(self.world, text)
+        if leak:
+            raise Rejected(f"that gesture names {leak}: ids and tool calls are not part of the world",
+                           hint="name a thing or a person as perceive does; do with act() what a tool does")
+        if len(text) > _GESTURE_MAX:
+            raise Rejected(f"a gesture is at most {_GESTURE_MAX} characters; this one is {len(text)}",
+                           hint="one sign: what the body does, in a few words")
+
+    def _burst(self) -> None:
+        """At most _SAY_BURST lines and signs a minute from one principal."""
+        dq = self.engine._said.setdefault(self.pid, collections.deque())
+        now = self.engine.now()
+        while dq and now - dq[0] > _SAY_WINDOW:
+            dq.popleft()
+        if len(dq) >= _SAY_BURST:
+            raise Rejected(f"{_SAY_BURST} lines in a minute is the most anyone says", hint="wait() and listen")
+        dq.append(now)
 
     def step(self, to: Any = None, heading: float | None = None) -> dict[str, Any]:
         """A short move inside the place you stand in, without a `go`: to=[x, y] in the place's frame (z keeps your
@@ -5349,12 +5485,18 @@ def _mechanics_in(w: World, text: str) -> str | None:
     return f"{m.group(1)}(...)" if m else None
 
 
-def _deed_in(w: World, me: str, text: str) -> str | None:
-    """The note say adds when its line narrates a deed: a stage direction (*...*), or a hand-over of a thing the
-    speaker still holds."""
-    if re.search(r"\*[^*\n]{2,}\*", text):
-        return ("words only: nothing in a line happens, *stage directions* included; do the deed with act() first, "
-                "then say what you did")
+def _dead_seats_open(w: World) -> bool:
+    """Whether a dead body stays a seat others (or its own player, after leaving it) may join. Death is the world's,
+    not the engine's (Nate, 2026-11-23): open unless the world's meta says `dead_seats: "closed"`."""
+    return str(w.meta().get("dead_seats") or "open") != "closed"
+
+
+def _deed_in(w: World, me: str, text: str, sign: bool = False) -> str | None:
+    """The note say (and gesture, `sign`) adds when its text narrates a deed: a stage direction (*...*) in a line,
+    or a hand-over of a thing the speaker still holds."""
+    if not sign and re.search(r"\*[^*\n]{2,}\*", text):
+        return ("words only: nothing in a line happens, *stage directions* included; a sign goes in "
+                "say(text, gesture=...) or gesture(), a deed in act() first, then say what you did")
     if not _HANDING.search(text):
         return None
     low = text.lower()
@@ -5389,29 +5531,30 @@ INTRODUCE_HOW = {
 OPS = [
     "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats", "claim_seat",
     "invite", "grants", "revoke", "evict", "hold_seat", "requests", "minds", "chronicle", "chronicle_arc",
-    "publish_chronicle", "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
+    "publish_chronicle", "perceive", "inspect", "find", "history", "act", "act_many", "say", "gesture", "remember", "intend", "recall", "wait",
     "step", "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
     "measure", "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
     "chmod", "chown", "program", "unprogram", "programs", "review", "guide", "rules_changed", "verify",
     "grant_verb", "take_verb", "vouch", "review_script", "report_flaw", "flaws", "relink", "looks", "offer", "answer",
-    "ask_owner", "asks_to_owner", "answer_ask", "ask_readers",
+    "ask_owner", "asks_to_owner", "answer_ask", "ask_readers", "handbook", "set_parts",
 ]
 
 # Every op under one layer, so an agent (and /docs, and GET /op) can tell playing a character from talking to the
 # people who keep the world (Nate 2026-11-17). A test checks each op in OPS sits in exactly one.
 LAYERS: dict[str, tuple[str, list[str]]] = {
     "in the world": ("Your character's eyes, hands, voice and notes, inside the story.", [
-        "perceive", "inspect", "find", "history", "map", "measure", "looks", "timers", "clock", "act", "act_many", "say",
+        "perceive", "inspect", "find", "history", "map", "measure", "looks", "timers", "clock", "act", "act_many", "say", "gesture",
         "wait", "step", "remember", "intend", "recall", "away", "reclaim", "program", "unprogram", "programs"]),
     "your seat": ("Which world and which body: coming in, going out, the seats open, the guide.", [
-        "worlds", "use", "summary", "guide", "join", "leave", "seats", "claim_seat"]),
+        "worlds", "use", "summary", "guide", "handbook", "join", "leave", "seats", "claim_seat"]),
     "to the owner": ("Outside the story, to the people who keep the world: an ask, a proposal, a hole in the rules. "
                      "Nothing in the world sees it.", ["ask_owner", "asks_to_owner", "report_flaw"]),
     "keeping the world": ("The owner's tools, outside the story: who may come in, what they asked, what is reviewed, "
                           "the record.", [
-        "invite", "grants", "revoke", "evict", "hold_seat", "relink", "vouch", "requests", "minds", "flaws", "answer_ask",
+        "invite", "set_parts", "grants", "revoke", "evict", "hold_seat", "relink", "vouch", "requests", "minds", "flaws",
+        "answer_ask",
         "ask_readers", "review", "review_script", "verify", "rules_changed", "chronicle", "chronicle_arc",
         "publish_chronicle", "create_world", "fork_world", "save", "restore"]),
     "building": ("Making the world: kinds, things, places, rules, scripts and access.", [
@@ -5482,6 +5625,26 @@ def _rules_line(r: dict[str, Any]) -> str:
     if r["guide"]:
         out += " Guide: " + ", ".join(f"guide('{g}')" for g in r["guide"]) + "."
     return out
+
+
+_MAX_PARTS = 8
+
+
+def _clean_parts(parts: Any) -> list[str]:
+    """Parts as the owner names them: short lowercase names. An engine role or `everyone` is no part (a part named
+    `owner` would open the owner's pages to a guest)."""
+    out = []
+    for p in ([parts] if isinstance(parts, str) else list(parts or [])):
+        n = str(p).strip().lower()
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,31}", n):
+            raise Rejected(f"no part {p!r}", hint="a part is a short name: angel, demon, red-team")
+        if n in ROLES or n == handbooks.EVERYONE:
+            raise Rejected(f"{n!r} is an engine role, not a part", hint="the role is invite's first argument; parts are "
+                                                                         "the world's own (angel, demon, guide...)")
+        out.append(n)
+    if len(set(out)) > _MAX_PARTS:
+        raise Rejected(f"a grant plays at most {_MAX_PARTS} parts", hint="name fewer")
+    return list(dict.fromkeys(out))
 
 
 def _when(r: dict[str, Any], by: Any = None) -> dict[str, Any]:

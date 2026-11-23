@@ -830,3 +830,30 @@ def test_idle_care_takes_one_draw_from_a_store_and_leaves_water_kept_for_others(
     gm.spawn("thing", "Depot", "Flat stone", state={"portable": False})
     with pytest.raises(Rejected, match="empty"):
         gm.act_as("Warder", "drink", "Flat stone")
+
+
+def test_a_yield_to_one_fighter_stops_his_comrades_too():
+    # two guards kept cutting a man who had yielded to the first one, and killed him (a player's report, 2026-11-23)
+    eng, gm, you = outpost()
+    you.act("go", "The Yard")
+    for name in ("First guard", "Second guard"):
+        gm.spawn("fighter", "The Yard", name, state={"hp": 40, "max_hp": 40, "faction": "the Garrison"})
+    gm.patch("Warden", {"hp": 60, "max_hp": 60})
+    strong(gm, "Warden")
+    second = gm.inspect("Second guard")["id"]
+
+    def blows(by):
+        return len([e for e in gm.world.events(0, kinds=["hit", "missed"], limit=5000) if e["payload"]["by"] == by])
+
+    you.act("attack", "First guard")
+    you.act("attack", "Second guard")
+    you.act("yield", "First guard")
+    before = blows(second)
+    for _ in range(5):
+        gm.clock(step=6)
+    assert blows(second) == before
+    gm.spawn("fighter", "The Yard", "Sellsword", state={"hp": 40, "max_hp": 40})
+    you.act("attack", "Sellsword")  # one outside the Garrison owes the yield nothing
+    for _ in range(5):
+        gm.clock(step=6)
+    assert blows(gm.inspect("Sellsword")["id"]) >= 1

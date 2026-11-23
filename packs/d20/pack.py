@@ -46,7 +46,7 @@ The numbers, so a narrator can explain a roll:
   paused clock). Blows and shots, a player's or a fighter's, wait times the weapon's `cooldown_x` (2 for a maul).
   A world's own strike verbs say `strikes: true` and their `cooldown_x` and `cost`.
 - One bar, `hp`. At half hp you are `wounded`; at 0 you are `down` and can only yield, drink or crawl; `kill`
-  finishes someone down, and only a deliberate `kill` or a thirst left too long ends a life; striking someone who yielded to you is `dishonor` and every faction hears of it.
+  finishes someone down, and only a deliberate `kill` or a thirst left too long ends a life; striking someone who yielded to you is `dishonor` and every faction hears of it. A fighter without a mind never strikes one who yielded to it or to anyone of its faction.
 - A `challenge` makes a duel between two people in a place. While it stands nobody else there may strike,
   and the two may strike only each other. It ends when one is down, dead or yields, when one agrees to the
   other's `parley` (that is a yield on terms), or when one walks out of the ring: that one lost, and their own
@@ -211,6 +211,18 @@ RULES = [
             "nearest water it knows and back to its post, by the same safe way (never into or through a place where "
             "someone of a side that outlawed it stands).",
      "recheck": ["minds that carry water only because idle care would not fetch it"],
+     "guide": ["player", "mind"]},
+    {"id": "yield-stops-the-side", "date": "2026-11-23",
+     "was": "A yield stopped only the one you yielded to: his comrades and his faction's fighters kept striking.",
+     "now": "A fighter without a mind never strikes one who yielded to it or to anyone of its faction. A mind may, "
+            "and pays the dishonor as before.",
+     "recheck": ["plans that fight on after a yield", "a yield to one guard when the others wear another faction"],
+     "guide": ["player", "mind"]},    {"id": "idle-seats-keep-their-place", "date": "2026-11-23",
+     "was": "A held seat gone idle (a player or a mind on a watcher) was walked back to its post, a template's or an "
+            "old water walk's, even where its player had walked it on purpose.",
+     "now": "A held seat gone idle walks only for water, and back only to the place it left for it, while its player "
+            "has done nothing since. A post is for a body nobody holds.",
+     "recheck": ["watch filters that expect a quiet arrived at the post", "minds that count on idle care to bring them home"],
      "guide": ["player", "mind"]},
 ]
 

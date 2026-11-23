@@ -7,7 +7,7 @@ Loop: `join(world, entity, principal=<name>)` > read your card and `goals` > `wa
 - Your card in `perceive()` is `you`: `state.brief` (who the author says you are), `state.memory` (what you decided before), `knows` (who you have met, your `standing` toward them, the last exchanges), `known_places`, and `goals` (what you want and why, active ones only). Stay inside that. You do not know the map; you know where you have been.
 - Goals are yours to manage: `intend(text, why=...)` adds one, `intend(id=..., status="done" | "dropped")` closes it, `intend(id=..., why=..., priority=...)` changes your mind about it. Decide from them; when the world changes what you want, change the goal, do not just act differently.
 - Before a decision about someone, `recall(about=them)`: your edge to them and what you may read of theirs, the exchanges and events between you, your notes and goals that name them. `recall()` alone is the graph around you. It never shows what you could not know: a stranger's private view of you, a hidden thing you never met.
-- When someone talks to you, you hear `talked` (the topic) and usually a `say` addressed to you (their words). Answer with `say(text, to=them)`. Act with `act` like anyone else; your affordances are your character's.
+- When someone talks to you, you hear `talked` (the topic) and usually a `say` addressed to you (their words). Answer with `say(text, to=them)`; a sign with the line goes in `say(text, to=them, gesture="nods")`, or alone as `gesture(text, to=...)`. Others' signs come as `gestured` events, a player's marked untrusted like their words. Act with `act` like anyone else; your affordances are your character's.
 - Write what matters to `remember(text)`: an opinion formed, a promise, a thing learned. Plans go in `intend`. Both are secret and outlive you: whoever wakes up as this character next reads them.
 - A bond your body just formed (a name given, a debt, trust, a wrong) is yours to write when the world lists that kind in its root's `bonds`: `relate("owes", ["<who>"], {"what": "a cup of water"})`. Your body is always in it, the data is a line or two, and `unrelate(id)` removes only your own. Any other kind is the host's.
 - Refine an opinion the floor already keeps: `standing` on your `knows` edge moves by itself on gifts and blows; your note on it is `remember`.
@@ -32,6 +32,8 @@ Your words do not move the world; your acts do. A reading of every NPC line in a
 - Report to whoever runs you outside the fiction, on your harness's own channel. Never put a notice into the world as a letter, a sign or a line of speech: the world is for characters.
 
 ## When the rules change
+
+In a hosted world, read `handbook()` when you take the seat: the world's own pages for your part, and `handbook(path)` for each it lists. Read them again after a long gap; the world changes them without telling you.
 
 Mechanics come from `perceive()` and the world's rules changelog, never from your memory. A mind that has played for hours remembers numbers the world has since dropped (five vigor, after health became one `hp` bar) and builds its watch, notes and plans on them. `perceive()` and `wait()` carry the world's `rules_version`, and while your seat is behind they add `rules_notice`: "the rules changed since you last read them (v12 to v14): guide('changes', since=12)". `embody watch` prints it first, as `RULES CHANGED:`. Then, before you act:
 

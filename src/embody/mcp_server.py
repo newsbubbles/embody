@@ -249,7 +249,7 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
                expires: float | None = None, scope: list[str] | None = None,
                as_principal: str | None = None, brief: str = "",
                limits: dict[str, Any] | None = None, slots: int | None = None,
-               vouched: bool = False) -> dict[str, Any]:
+               vouched: bool = False, parts: list[str] | None = None) -> dict[str, Any]:
         """(owner) Make a grant and return the paste for the friend: a link their agent reads once, within a day, for
         the token and its brief (the agent is told to open in the world and say nothing of the setup). role: author,
         builder, narrator, player, mind or observer. entity keeps a seat (player) or names the NPC held (mind; scope=[...]
@@ -258,10 +258,18 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
         author): {"under": <entity>, "types": [...], "scripts": "prefix_"}, the part of the world it may change, what
         it may spawn, how its scripts are named; a builder needs under. slots: how many seats the world may hand
         this guest (ctx.offer_seat, claim_seat), over the root's seat_slots. vouched: you vouch for this hand (see
-        vouch). The token is shown once."""
+        vouch). parts: the world's own parts this seat plays (angel, demon, guide...): they pick which handbook pages
+        it may read. The token is shown once."""
         return S(None).invite(role, entity=entity, template=template, label=label, expires=expires,
                               principal=as_principal, scope=scope, brief=brief, limits=limits, slots=slots,
-                              vouched=vouched)
+                              vouched=vouched, parts=parts)
+
+    @tool()
+    @_wrap
+    def set_parts(grant: str, add: list[str] | None = None, remove: list[str] | None = None) -> dict[str, Any]:
+        """(owner) The world's own parts a grant plays (angel, demon, guide...), added or removed by name. A part picks
+        the handbook pages its seat may read; it gives no op and no reach."""
+        return S(None).set_parts(grant, add=add, remove=remove)
 
     @tool()
     @_wrap
@@ -487,16 +495,27 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def say(text: str, reach: int = 1, to: str | None = None, low: bool = False, loud: bool = False,
-            principal: str | None = None) -> dict[str, Any]:
+            gesture: str = "", principal: str | None = None) -> dict[str, Any]:
         """Speak as the entity you embody. to=<entity> addresses someone here (it lands in both your logs; the
         room still hears it). reach 1 = your place hears it, 2 = the place above too, -1 = the whole world.
         low=true: only those within a few metres (and the one it is to) hear the words; the rest of the place hears
         that you said something low, and to whom. `heard_by` names who caught it. Where the world sets a voice
         range, a normal line carries only so far across a place (heard_by says who caught it); loud=true shouts it
         further.
+        gesture="thumbs his river stone": a sign made with the line, its own event, seen by the whole place even
+        where the words are low or out of earshot.
         Words only: nothing in a line happens. Do a deed with act first (give, drop, put), then say it; a line that
         narrates one gets a `note`. Entity ids and tool calls are refused: say names."""
-        return S(principal).say(text, reach=reach, to=to, low=low, loud=loud)
+        return S(principal).say(text, reach=reach, to=to, low=low, loud=loud, gesture=gesture)
+
+    @tool()
+    @_wrap
+    def gesture(text: str, to: str | None = None, low: bool = False, principal: str | None = None) -> dict[str, Any]:
+        """A sign made, seen and not said: "nods toward the gate", "thumbs his river stone". Your place sees it as a
+        `gestured` event; it changes nothing in the world (give, drop, put are act). to=<someone here> turns it toward
+        them; low=true keeps it small, seen in full only within a few metres (`seen_by` says who). Watchers wake on
+        it with did('gestured', by=...). A short sentence at most; ids and tool calls are refused."""
+        return S(principal).gesture(text, to=to, low=low)
 
     @tool()
     @_wrap
@@ -564,6 +583,13 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
         """What is scheduled and when: each pending timer with its kind, entity, world time and seconds to go. A
         player or a mind sees what everyone in the world knows: the next dusk, the next dawn, in words."""
         return S(None).timers(limit or None, offset, sort)
+
+    @tool()
+    @_wrap
+    def handbook(path: str = "", page: int = 1, principal: str | None = None) -> dict[str, Any]:
+        """This world's handbook, from the world itself: no path, the index and the pages your seat may read (your role
+        and your parts pick them); path, one page. Read it before you play; the world wins over any page."""
+        return S(principal).handbook(path, page=page)
 
     @tool()
     @_wrap

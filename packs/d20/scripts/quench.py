@@ -1,18 +1,33 @@
 use("common")
-def walk(ctx, me, place, back):
-    # one step, toward water or back toward the post; quiet, so the story takes no first sight from it
+def walk(ctx, me, place, back, key):
+    # one step, toward water or back toward where it came from (`key`: the post of a body nobody holds, the place a
+    # held seat left for water); quiet, so the story takes no first sight from it
     here = me.parent
-    if not back and not me.state.post and here is not None:
-        ctx.patch(me, {"post": here.id})
+    if not back and not home_of(me, key) and here is not None:
+        ctx.patch(me, {key: here.id, "water_left_t": ctx.t})
     ctx.move(me, place)
     ctx.emit("arrived", target=place, reach=1, who=me.id, place=place.id, quiet=True, for_water=not back)
-    if back and me.state.post == place.id:
-        ctx.patch(me, {"post": None})
+    if back and home_of(me, key) == place.id:
+        ctx.patch(me, {key: None})
+
+def home_key(ctx, me):
+    # A body nobody holds goes back to its post. A held seat gone idle goes back only to the place it left for water,
+    # and only while its player has done nothing since: a post is an NPC's, and a player who walked off chose to (a
+    # player waiting on a watcher was walked back to his template post, 2026-11-23).
+    if not ctx.embodied(me):
+        return "post"
+    acted = ctx.acted_at(me)
+    if me.state.water_from and acted is not None and acted > float(me.state.water_left_t or 0):
+        ctx.patch(me, {"water_from": None})  # its errand is over: the player has moved it since
+    return "water_from"
+
+def home_of(me, key):
+    return me.state.post if key == "post" else me.state.water_from
 
 def tick(ctx):
     # Thirsty and water within reach: drink. A skin in hand first, then a source here (and fill the skin while at
     # it). Thirsty, nothing here and on my feet: a step toward the nearest water I know the way to, one step a look;
-    # there, a draw a look until full or near it, then a step a look back toward the post. A body that is down drinks what is put in its hand. Not an always
+    # there, a draw a look until full or near it, then a step a look back (home_key says where). A body that is down drinks what is put in its hand. Not an always
     # behavior: while someone embodies this body they choose when to drink and where to go. A held seat gone idle
     # (a mind on a watcher) looks after itself the same way: every walk goes around a side that outlawed the body.
     me = ctx.self
@@ -23,7 +38,8 @@ def tick(ctx):
     roams = not st.down
     water = int(st.water if st.water is not None else 10)
     mx = int(st.max_water or 10)
-    post = ctx.get(st.post) if st.post else None
+    key = home_key(ctx, me)
+    post = ctx.get(home_of(me, key)) if home_of(me, key) else None
     away = post is not None and here is not None and post.id != here.id
     # away from the post for water, drink your fill at an endless source before the walk back; a store with a
     # count gives one draw, enough to end the thirst, and its keeper's people the rest
@@ -32,7 +48,7 @@ def tick(ctx):
         if away and roams:
             step = first_step(ctx, me, here, post.id, 8)
             if step is not None:
-                walk(ctx, me, step, True)
+                walk(ctx, me, step, True, key)
         return
     skin = None
     for it in ([] if topping else me.children()):  # at the source the skin is for the road back
@@ -44,7 +60,7 @@ def tick(ctx):
         if roams and here is not None:
             near = water_near(ctx, me, here)
             if near is not None:
-                walk(ctx, me, near, False)
+                walk(ctx, me, near, False, key)
         return
     new = min(mx, water + 4)
     changes = {"water": new}

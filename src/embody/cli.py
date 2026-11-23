@@ -543,6 +543,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--expires", type=float, help="hours until the token stops working")
     c.add_argument("--url", help="server URL for the paste (default $EMBODY_URL)")
     c.add_argument("--principal", help="their principal id (default from the label)")
+    c.add_argument("--parts", nargs="*", default=None, help="the world's own parts they play (angel, demon...): which handbook pages they read")
     c.add_argument("--under", help="(builder, narrator, author) the entity whose subtree the grant may change")
     c.add_argument("--types", nargs="*", default=None, help="the types the grant may spawn (default any)")
     c.add_argument("--scripts", help="the prefix of the grant's scripts, schemas and event kinds")
@@ -620,7 +621,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "invite":
             eng.public_url = args.url or default_url()
             r = s.invite(args.role, entity=args.entity, template=args.template, label=args.label, expires=args.expires,
-                         principal=args.principal, scope=args.scope, brief=args.brief,
+                         principal=args.principal, scope=args.scope, brief=args.brief, parts=args.parts,
                          limits={k: v for k, v in (("under", args.under), ("types", args.types), ("scripts", args.scripts))
                                  if v is not None} or None)
             emit(args, r, f"grant {r['id']} for {r['principal']} ({r['role']}). Send them this:\n\n{r['paste']}"

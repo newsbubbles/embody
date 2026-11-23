@@ -22,7 +22,7 @@ def tick(ctx):
     if st.attacked_by and not grudge_holds(ctx, me, foe, bow):
         ctx.patch(me, {"attacked_by": None, "attacked_at": None})
         foe = None
-    if foe is not None and standing_foe(foe) and not in_a_ring(ctx, foe):
+    if foe is not None and standing_foe(foe) and not in_a_ring(ctx, foe) and not spared(ctx, me, foe):
         blow(ctx, me, foe, bow)
         return
     f = faction_of(ctx, me)
@@ -30,7 +30,7 @@ def tick(ctx):
         return
     hostile = f.state.hostile or {}
     for p in ctx.children(me.parent, "creature"):
-        if p.id != me.id and hostile.get(p.id) and standing_foe(p) and not in_a_ring(ctx, p) and outlaw_of(ctx, f, p):
+        if p.id != me.id and hostile.get(p.id) and standing_foe(p) and not in_a_ring(ctx, p) and not spared(ctx, me, p) and outlaw_of(ctx, f, p):
             blow(ctx, me, p, bow)
             return
     if bow is None:
@@ -40,14 +40,14 @@ def tick(ctx):
         if place is None:
             continue
         for p in ctx.children(place, "creature"):
-            if hostile.get(p.id) and standing_foe(p) and not in_a_ring(ctx, p) and in_sight(ctx, me, p) and outlaw_of(ctx, f, p):
+            if hostile.get(p.id) and standing_foe(p) and not in_a_ring(ctx, p) and not spared(ctx, me, p) and in_sight(ctx, me, p) and outlaw_of(ctx, f, p):
                 blow(ctx, me, p, bow)
                 return
 
 def grudge_holds(ctx, me, foe, bow):
     # whoever struck me last stays my foe while they are here (or in my bow's sight), have not yielded to me, and
     # struck me within the world's grudge_for (default a world hour). Walking away ends it, and so does peace.
-    if foe is None or foe.parent is None or foe.state.dead or foe.state.yielded == me.id:
+    if foe is None or foe.parent is None or foe.state.dead or spared(ctx, me, foe):
         return False
     if foe.parent.id != me.parent.id and not (bow is not None and in_sight(ctx, me, foe)):
         return False
@@ -55,6 +55,20 @@ def grudge_holds(ctx, me, foe, bow):
         ctx.patch(me, {"attacked_at": ctx.t})  # a grudge from before grudges had a clock: it starts now
         return True
     return ctx.t - float(me.state.attacked_at) < grudge_for(ctx)
+
+def spared(ctx, me, p):
+    # one who yielded to me, or to anyone of my faction, is out of my fight: a fighter without a mind never strikes
+    # them (a mind may, and pays the dishonor). Two guards who kept cutting a man who had yielded to the first one
+    # killed him (a player's report, 2026-11-23).
+    to = p.state.yielded
+    if not to:
+        return False
+    if to == me.id:
+        return True
+    if not me.state.faction:
+        return False
+    other = ctx.get(to)
+    return other is not None and other.state.faction == me.state.faction
 
 def standing_foe(p):
     return p.parent is not None and not p.state.down and not p.state.dead
