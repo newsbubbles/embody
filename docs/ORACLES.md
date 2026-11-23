@@ -22,7 +22,8 @@ ends it at once.
    an approved verb into something else.
 3. A player uses it: `act("search", "Terminal", params={"q": "glass harmonica"})`. Nothing runs in the world; the
    engine records `oracle_called` on the thing (its seq is the request number) and the act's log says the answer
-   comes as `oracle_answer`.
+   comes as `oracle_answer`. A rule or a timer can make the same call for a body nobody holds (a keeper that asks once
+   a week): `ctx.act(body, "search", thing, params)` in its script, under the same caps (SCRIPTING.md).
 4. The app's `wait(since=<cursor>, timeout=30)` returns the calls waiting for it:
    `{calls: [{request, thing, verb, args, caller, lapses_in}], cursor}`. `caller` is a handle that is the same for one
    body on one thing every time and names nobody. With no `since`, every open call comes back, so a restarted app picks

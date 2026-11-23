@@ -20,6 +20,7 @@ from . import access as acl
 from . import looks as looks_mod
 
 LISTENER_FUEL_MAX = 1_000_000  # the most a rule may ask for with set_rule(..., fuel=)
+_RULE_ACT_CHAIN = 2  # how deep acts made by ctx.act may nest (a rule's act whose own rule acts once more)
 
 ROOT_TYPE = "world"
 BASE_TYPE = "entity"
@@ -339,7 +340,7 @@ class Ctx(ScriptObject):
         "actor", "target", "self", "params", "event", "t", "rand", "verb",
         "get", "find", "children", "parent", "peers", "linked", "edges", "relations", "distance", "root",
         "patch", "spawn", "move", "set_pos", "destroy", "link", "unlink", "relate", "unrelate",
-        "emit", "say", "gesture", "witnesses", "schedule", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "ways", "day_seconds", "offer_seat", "withdraw_seat", "move_seat", "strike_wait", "mark_strike", "embodied", "event_at", "quiet", "locked", "shut", "remember",
+        "emit", "say", "gesture", "witnesses", "schedule", "act", "reject", "stop", "log", "set_rule", "clear_rule", "knows_way", "ways", "day_seconds", "offer_seat", "withdraw_seat", "move_seat", "strike_wait", "mark_strike", "embodied", "event_at", "quiet", "locked", "shut", "remember",
         "count", "split", "merge", "transfer", "bulk", "load", "may", "member", "chmod", "chown", "rename",
         "may_write_sheet", "named_entry", "mark", "unmark", "regrow", "step", "leak",
     )
@@ -1098,6 +1099,37 @@ class Ctx(ScriptObject):
         self._hold(tgt, kind=kind)
         return self._w.schedule(after, kind, entity=tgt, payload=p, every=every, caused_by=self._caused_by)
 
+    def act(self, body: Any, verb: str, target: Any = None, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Make a body nobody holds do one of its verbs (a keeper on a timer calls an oracle, a press records a
+        pressing), held to every check the body's own act meets: the verb's access, its oracle's rate and open calls,
+        before_act rules, costs and cooldowns. The act line names this script as its cause. Returns {ok: True, verb,
+        target, result}, or {ok: False, reason, hint} when the world refuses it, so the rule can fall back."""
+        self._no_frame("makes no acts")
+        if self._trial:
+            raise Rejected("this verb waits for the owner's review: until then it may only look, not make acts",
+                           hint="it runs in full once the owner approves it")
+        w = self._w
+        who = _ev(w, body)
+        self._hold(who)
+        if w.get(who) is None:
+            return {"ok": False, "reason": f"no body {who!r}", "hint": "find() the body first"}
+        if w.embodied(who) is not None:
+            return {"ok": False, "reason": f"someone holds {w.get(who)['name']}: it acts for itself",
+                    "hint": "a rule drives only a body nobody holds; check embodied() first"}
+        if w._rule_acts >= _RULE_ACT_CHAIN:
+            return {"ok": False, "reason": "an act made by a rule's act may not make another",
+                    "hint": "a rule's act starts at most one more; make the rest on a timer (schedule)"}
+        w._rule_acts += 1
+        try:
+            r = w.act(who, str(verb), _ev(w, target) if target is not None else None, dict(params or {}),
+                      caused_by=self._caused_by, by=self._script or None)
+        except Rejected as e:
+            return {"ok": False, "reason": e.reason, "hint": e.hint}
+        finally:
+            w._rule_acts -= 1
+        self.logs.extend(r.get("logs") or [])
+        return {"ok": True, "verb": r["verb"], "target": r["target"], "result": r["result"]}
+
     def set_rule(self, entity: Any, script: str, kinds: list[str] | None = None, fuel: int | None = None) -> None:
         self._no_rules()
         self._hold(entity)
@@ -1142,6 +1174,7 @@ class World:
         self.store = store
         self.id = world_id
         self._running: list[Ctx] = []  # the contexts of the scripts running now, innermost last
+        self._rule_acts = 0  # acts a script is making now through ctx.act, so a chain of them stays short
         self._answered: dict[tuple[str, str], float] = {}  # (idle body, asker) -> when its standing answer was said
         self._present: dict[str, float] = {}  # principal -> real time its wait(present=true) keeps it in the scene
         row = store.get("world", None, world_id)
@@ -2551,8 +2584,9 @@ class World:
         return adef, owner, s
 
     def act(self, actor_id: str, verb: str, target_id: str | None = None, params: dict[str, Any] | None = None,
-            principal_id: str | None = None) -> dict[str, Any]:
-        """The only way state changes on purpose. Returns {ok, events, logs} or raises Rejected."""
+            principal_id: str | None = None, caused_by: int | None = None, by: str | None = None) -> dict[str, Any]:
+        """The only way state changes on purpose. Returns {ok, events, logs} or raises Rejected. `by` and `caused_by`:
+        the script and event that made this act (ctx.act), when a rule or timer made it, not the body's holder."""
         params = dict(params or {})
         self.need(actor_id)
         self.store.begin()
@@ -2562,8 +2596,8 @@ class World:
             logs: list[str] = []
             private = bool(s is None and adef.get("private", True))  # a private oracle call: what was asked is the caller's
             ev = self.emit("act", actor=actor_id, target=target_id or actor_id, reach=1,
-                           payload={"verb": verb, "params": params, "target": target_id,
-                                    **({"seen_by": [actor_id]} if private else {})})
+                           payload={"verb": verb, "params": params, "target": target_id, **({"by": by} if by else {}),
+                                    **({"seen_by": [actor_id]} if private else {})}, caused_by=caused_by)
             if s is None:
                 result = self.oracle_call(owner, actor_id, verb, params, adef, ev["seq"])
                 logs.append(result.pop("log"))
