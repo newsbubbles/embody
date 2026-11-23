@@ -31,12 +31,13 @@ _WATCH = {"perceive", "inspect", "find", "history", "recall", "timers", "schemas
 _NARRATE = {"act_as", "say_as", "minds", "timers", "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "layout",
             "relate", "unrelate", "schedule", "unschedule", "remember", "intend", "recall", "chmod", "chown"}
 _AUTHOR = _NARRATE | _WATCH | {"create_world", "fork_world", "save", "restore", "define_schema", "define_script",
-                               "set_rule", "clear_rule", "mirror", "chronicle", "publish_chronicle", "review",
+                               "set_rule", "clear_rule", "mirror", "chronicle", "chronicle_arc", "publish_chronicle", "review",
                                "rules_changed", "grant_verb", "take_verb"}
 _OWN = _AUTHOR | {"invite", "grants", "revoke", "evict", "hold_seat", "requests", "vouch", "review_script", "flaws", "relink",
                   "ask_readers"}
 # The ops that reach the whole world at once, never a builder's: a builder works inside its plot while the world plays.
-_WORLDWIDE = {"minds", "create_world", "fork_world", "save", "restore", "mirror", "chronicle", "publish_chronicle", "rules_changed"}
+_WORLDWIDE = {"minds", "create_world", "fork_world", "save", "restore", "mirror", "chronicle", "chronicle_arc",
+              "publish_chronicle", "rules_changed"}
 
 ROLE_OPS: dict[str, frozenset[str]] = {
     OWNER: frozenset(_ANYONE | _PLAY | _OWN),

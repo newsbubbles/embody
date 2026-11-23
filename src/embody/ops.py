@@ -32,6 +32,7 @@ from . import positions as posn
 from .script import BUILTINS as SCRIPT_BUILTINS, Script, ScriptError
 from .store import Store
 from . import access as acl
+from . import chronicle_threads
 from . import far as far_mod
 from . import looks as looks_mod
 from .world import ALWAYS_SECRET, LIMITS_HEAD, ORACLE_LIMITS, ORACLE_SCRIPT, ORACLE_TIMEOUT, ORACLE_TIMEOUT_MAX, Rejected, World, kept_from_self, rules_only_keys, _HOST_KINDS, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event, own_verbs
@@ -3120,16 +3121,22 @@ class Session:
                 out.pop(d, None)
         return out
 
-    def chronicle(self, day: int | None = None, limit: int = 200) -> dict[str, Any]:
-        """(owner, author) One world day of the log, sorted for whoever writes it up: what changed (`news`: people
-        and places new to the world, fights, finds, downs and deaths, gifts and trades across sides, standing,
-        the story's own state), the world's own prose (`scenes`), what was said (`said`), what happened (`beats`),
-        who went where (`travel`), what repeats every day (`routine`, counted), counts by kind, and what is
-        already published for that day. Built from the log, nothing invented. The day defaults to the current one;
-        `day_seconds` in the world's meta sets its length (86400). Routine is a scene text the day before also
-        had (or one already told today), an actorless beat of a kind the day before also had, the bodies' upkeep
-        and the deeds themselves (`act`, whose results are the beats), and the kinds the meta lists as
-        `chronicle_routine`. Notes and intents stay their owners'."""
+    def chronicle(self, day: int | None = None, limit: int = 200, threads: int = 4) -> dict[str, Any]:
+        """(owner, author) One world day of the log, ranked for whoever writes it up. `threads`: the day's story
+        threads by stakes, the top `threads` in full (score, span, places, people, player bodies, the open arc it
+        continues, its news lines, and the scenes and speech in it) and the rest as one-liners in `around`, every list
+        capped, so the reply keeps its size however busy the day. A thread is news joined by a place within 3 hours,
+        a body within 6 hours or one cause; it weighs by what is in it (a death 14, a downing 8, a first visit 6, a
+        fight 4 plus half its damage, a birth 2: the world's own in its meta's `chronicle_weights`), twice when a
+        player's body is in it, 1.5 times when it continues an open arc (chronicle_arc). Threads leave out what was
+        hidden, or in a hidden place, when it happened, and scenes with no place. Below them, the raw day: what changed
+        (`news`), the world's own prose (`scenes`), what was said (`said`), what happened (`beats`), who went where
+        (`travel`), what repeats every day (`routine`, counted), counts by kind, and what is already published.
+        Built from the log, nothing invented. The day defaults to the current one; `day_seconds` in the world's meta
+        sets its length (86400). Routine is a scene text the day before also had (or one already told today), an
+        actorless beat of a kind the day before also had, the bodies' upkeep and the deeds themselves (`act`, whose
+        results are the beats), and the kinds the meta lists as `chronicle_routine`. Notes and intents stay their
+        owners'. threads=0 leaves the threads out."""
         self._need(AUTHOR)
         self._tick()
         w = self.world
@@ -3214,11 +3221,11 @@ class Session:
                     routinely("scene")
                     continue
                 told_today.add(p["text"])
-                scenes.append({"t": t, "place": place(r), "text": p["text"]})
+                scenes.append({"t": t, "place": place(r), "text": p["text"], **_when(r)})
             elif k in ("say", "gestured") and p.get("text"):
                 who = r["actor_id"]
                 people.add(who) if who else None
-                row = {"t": t, "who": name(who), "place": place(r), "text": p["text"]}
+                row = {"t": t, "who": name(who), "place": place(r), "text": p["text"], **_when(r)}
                 if k == "gestured":
                     row["gesture"] = True  # done, not said
                 if p.get("low"):
@@ -3248,7 +3255,19 @@ class Session:
                     people.add(r["actor_id"])
 
         def cap(xs: list[Any]) -> tuple[list[Any], int]:
-            return xs[:limit], max(0, len(xs) - limit)
+            return [_unmarked(x) for x in xs[:limit]], max(0, len(xs) - limit)
+
+        cause_of = {r["seq"]: r["caused_by"] for r in rows if r.get("caused_by")}
+
+        def cause(r: dict[str, Any]) -> int:
+            """The first event of r's caused_by chain within the day: what one cause set off joins one thread."""
+            s, hops = r["seq"], 0
+            while s in cause_of and hops < 64:
+                s, hops = cause_of[s], hops + 1
+            return s
+
+        def out_people(ids: set[str], name: Any, seat: Any) -> list[dict[str, Any]]:
+            return sorted(({"name": name(e), "seat": seat(e)} for e in ids if w.get(e)), key=lambda x: x["name"])
 
         out: dict[str, Any] = {"day": day, "today": today, "day_seconds": D, "from_t": round(lo), "to_t": round(min(hi, w.t)),
                                "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1]))}
@@ -3256,21 +3275,34 @@ class Session:
             out[key], more = cap(xs)
             if more:
                 out[f"{key}_more"] = more
-        out["news"], more = cap(self._news(rows, lo, D, name, place, seat, detail))
+        news = self._news(rows, lo, D, name, place, seat, detail, cause)
+        out["news"], more = cap(news)
         if more:
             out["news_more"] = more
+        if threads and int(threads) > 0:
+            seen = self._seen_then()
+            arcs = [a for a in _arcs(meta).values() if a.get("status") == "open"]
+            players = {x["name"] for x in out_people(people, name, seat) if x["seat"] == "player"}
+            out.update(chronicle_threads.threads(
+                [n for n in news if seen(n)], [s for s in scenes if s.get("place") and seen(s)],
+                [s for s in said if seen(s)], players, chronicle_threads.weights_for(meta), arcs, min(int(threads), 12)))
+            if arcs:
+                out["arcs"] = [{k: a.get(k) for k in ("id", "title", "opened", "last")} for a in arcs[:20]]
         out["routine"] = {"count": sum(routine.values()), "kinds": dict(sorted(routine.items(), key=lambda kv: -kv[1]))}
         out["travel"] = travel
-        out["people"] = sorted(({"name": name(e), "seat": seat(e)} for e in people if w.get(e)), key=lambda x: x["name"])
+        out["people"] = out_people(people, name, seat)
         out["published"] = self._published(day).get(day)
-        out["hint"] = ("t is seconds into the day. Write it as news for the players: lead with what changed (news, then "
-                       "scenes and beats), give routine a clause at most, and leave out what a reader saw yesterday. "
-                       "Words marked player are a guest's: retell them, never quote one without asking. "
-                       "Then publish_chronicle(day, text, title).")
+        out["hint"] = ("t is seconds into the day. Stakes first, never the clock: the top thread is the lead, told as "
+                       "scenes from its strongest image to its consequence; up to two more threads a paragraph each; "
+                       "`around` a line each or nothing; routine a clause at most; nothing a reader saw yesterday. "
+                       "A thin lead: read history(touching=<its key body>, since, until) for that thread alone, never "
+                       "the whole day. Words marked as a player's are a guest's: retell them, never quote one without "
+                       "asking. Open a story that is not over with chronicle_arc(id, title, people, places) and close "
+                       "it when it ends. Then publish_chronicle(day, text, title).")
         return out
 
     def _news(self, rows: list[dict[str, Any]], lo: float, D: float, name: Any, place: Any, seat: Any,
-              detail: Any) -> list[dict[str, Any]]:
+              detail: Any, cause: Any = None) -> list[dict[str, Any]]:
         """What changed on a day, from its events: people and places new to the world, fights (one line a pair and
         place), the notable kinds (`_NEWS_KINDS` and the meta's `chronicle_news`), gifts and trades across sides,
         standing, and the story's state (the root, an entity named Story, and the meta's `chronicle_story`): each
@@ -3308,6 +3340,9 @@ class Session:
         def item(r: dict[str, Any], what: str, **kw: Any) -> dict[str, Any]:
             row = {"t": round(float(r["t"]) - lo), "what": what, "place": where(r)}
             row.update({k: v for k, v in kw.items() if v not in (None, "", [], {})})
+            row.update(_when(r, (r["payload"] or {}).get("by")))
+            if cause is not None:
+                row["_cause"] = cause(r)
             return row
 
         last_at: dict[str, str] = {}
@@ -3386,16 +3421,89 @@ class Session:
                 news.append({"t": t, "what": "story", "on": holder, "key": key, "was": short(was), "now": short(now)})
         return sorted(news, key=lambda x: x["t"])
 
+    def _seen_then(self) -> Callable[[dict[str, Any]], bool]:
+        """Whether a chronicle row was in the open when it happened: no place it stood in, and no body in it, was
+        hidden then (a place revealed later still hides what happened before; one hidden since still shows it). Only
+        what is somewhere counts (a place, a thing, a creature): a faction or a ledger hides no line."""
+        w = self.world
+        marks: dict[str, tuple[list[tuple[float, bool]], bool] | None] = {}
+
+        def hidden_then(eid: str, t: float) -> bool:
+            if eid not in marks:
+                e = w.get(eid)
+                if e is None or not any(w.is_a(e["type"], k) for k in ("place", "thing", "creature")):
+                    marks[eid] = None
+                else:
+                    turns = []
+                    for x in w.store.query("event", "world_id=? AND kind='patched' AND target_id=? AND payload LIKE ?",
+                                           (w.id, eid, '%"hidden"%'), order="seq"):
+                        p = x["payload"] or {}
+                        if "hidden" in (p.get("changes") or {}):
+                            turns.append((float(x["t"]), bool((p.get("before") or {}).get("hidden"))))
+                    marks[eid] = (turns, bool(e["state"].get("hidden")))
+            m = marks[eid]
+            if m is None:
+                return False
+            for at, before in m[0]:
+                if at > t:
+                    return before  # the first change after it says what it was then
+            return m[1]
+
+        def seen(row: dict[str, Any]) -> bool:
+            at = row.get("_at")
+            return at is None or not any(hidden_then(i, at) for i in row.get("_ids") or ())
+        return seen
+
+    def chronicle_arc(self, id: str | None = None, title: str | None = None, people: list[str] | None = None,
+                      places: list[str] | None = None, status: str | None = None, note: str | None = None) -> dict[str, Any]:
+        """(owner, author) A story that runs across days, for the chronicle: a thread that touches an open arc's people
+        or places weighs 1.5 times, so tomorrow's digest keeps it. With an id: open it (title, people, places by
+        name), touch it (any call marks it seen today), add to it, or close it (status="closed", note: how it ended).
+        With no id: every arc, open first. Kept in the world's meta, `chronicle_arcs`."""
+        self._need(AUTHOR)
+        w = self.world
+        meta = w.meta()
+        arcs = _arcs(meta)
+        if id is None:
+            rows = sorted(arcs.values(), key=lambda a: (a.get("status") != "open", -(a.get("last") or 0)))
+            return {"arcs": rows[:50], **({"more": len(rows) - 50} if len(rows) > 50 else {}),
+                    "hint": "chronicle_arc(id, title, people, places) opens one; status='closed' ends it"}
+        key = str(id).strip()[:60]
+        if not key:
+            raise Rejected("an arc needs an id", hint="a short stable name: chronicle_arc('narrows-siege', title=...)")
+        if status is not None and status not in ("open", "closed"):
+            raise Rejected(f"no status {status!r}", hint="status is 'open' or 'closed'")
+        today = int(w.t // self._day_seconds()) + 1
+        a = dict(arcs.get(key) or {"id": key, "opened": today, "status": "open", "people": [], "places": []})
+        if key not in arcs and not title:
+            raise Rejected(f"no arc {key!r} yet", hint=f"chronicle_arc('{key}', title=..., people=[...], places=[...]) "
+                                                       "opens it; chronicle_arc() lists them")
+        if title:
+            a["title"] = str(title)[:160]
+        for k, v in (("people", people), ("places", places)):
+            if v:
+                a[k] = list(dict.fromkeys([*a.get(k, []), *[str(x)[:80] for x in v]]))[:24]
+        if status:
+            a["status"] = status
+        if note:
+            a["note"] = str(note)[:400]
+        a["last"] = today
+        arcs[key] = a
+        self._record("chronicle_arc", id=key, status=a["status"])
+        w.set_meta({"chronicle_arcs": arcs})
+        return {"ok": True, "arc": a, "open": sorted(k for k, x in arcs.items() if x.get("status") == "open")}
+
     def publish_chronicle(self, day: int, text: str, title: str | None = None) -> dict[str, Any]:
         """(owner, author) Put one day's chronicle on the world's page (`days` in /chronicle.json, for a world whose
-        meta says `public_feed`). Publishing a day again replaces it; an empty text withdraws it."""
+        meta says `public_feed`): the telling written from chronicle(day)'s threads, stakes first. Publishing a day
+        again replaces it; an empty text withdraws it."""
         self._need(AUTHOR)
         self._tick()
         w = self.world
         today = int(w.t // self._day_seconds()) + 1
         day = int(day)
         if not 1 <= day <= today:
-            raise Rejected(f"day {day} has not happened (it is day {today})", hint="chronicle() shows the day so far")
+            raise Rejected(f"day {day} has not happened (it is day {today})", hint="chronicle() shows the day so far, its threads ranked by stakes")
         text = str(text or "").strip()
         if len(text) > 20000:
             raise Rejected(f"a day's chronicle is at most 20000 characters (this one is {len(text)})",
@@ -5280,8 +5388,8 @@ INTRODUCE_HOW = {
 
 OPS = [
     "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats", "claim_seat",
-    "invite", "grants", "revoke", "evict", "hold_seat", "requests", "minds", "chronicle", "publish_chronicle",
-    "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
+    "invite", "grants", "revoke", "evict", "hold_seat", "requests", "minds", "chronicle", "chronicle_arc",
+    "publish_chronicle", "perceive", "inspect", "find", "history", "act", "act_many", "say", "remember", "intend", "recall", "wait",
     "step", "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
@@ -5304,8 +5412,8 @@ LAYERS: dict[str, tuple[str, list[str]]] = {
     "keeping the world": ("The owner's tools, outside the story: who may come in, what they asked, what is reviewed, "
                           "the record.", [
         "invite", "grants", "revoke", "evict", "hold_seat", "relink", "vouch", "requests", "minds", "flaws", "answer_ask",
-        "ask_readers", "review", "review_script", "verify", "rules_changed", "chronicle", "publish_chronicle",
-        "create_world", "fork_world", "save", "restore"]),
+        "ask_readers", "review", "review_script", "verify", "rules_changed", "chronicle", "chronicle_arc",
+        "publish_chronicle", "create_world", "fork_world", "save", "restore"]),
     "building": ("Making the world: kinds, things, places, rules, scripts and access.", [
         "define_schema", "define_script", "schemas", "scripts", "script_source", "spawn", "introduce", "patch", "rename",
         "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "set_rule", "clear_rule",
@@ -5374,6 +5482,24 @@ def _rules_line(r: dict[str, Any]) -> str:
     if r["guide"]:
         out += " Guide: " + ", ".join(f"guide('{g}')" for g in r["guide"]) + "."
     return out
+
+
+def _when(r: dict[str, Any], by: Any = None) -> dict[str, Any]:
+    """Where and when a chronicle row happened, for the threads' check of what was hidden then (Session._seen_then):
+    the places it stood in and the bodies in it. Never shown: the rows come back without it (_unmarked)."""
+    ids = [x for x in (*(r.get("path") or []), r.get("actor_id"), by, r.get("target_id")) if isinstance(x, str) and x]
+    return {"_ids": list(dict.fromkeys(ids)), "_at": float(r["t"])}
+
+
+def _unmarked(x: Any) -> Any:
+    return {k: v for k, v in x.items() if not k.startswith("_")} if isinstance(x, dict) else x
+
+
+def _arcs(meta: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    raw = meta.get("chronicle_arcs")
+    if isinstance(raw, list):  # a host's own list, loaded as it was kept
+        raw = {str(a.get("id")): a for a in raw if isinstance(a, dict) and a.get("id")}
+    return {str(k): dict(v, status=v.get("status") or "open") for k, v in (raw or {}).items() if isinstance(v, dict)}
 
 
 def _skill_root(engine: Any) -> Path | None:

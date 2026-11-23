@@ -101,6 +101,10 @@ Your agent now holds the owner grant. Ask it: "invite Sam as a player" (or as a 
 
 `grants()` lists who holds what, `revoke(id)` ends a grant, `seats()` shows what is open. docs/HOSTING.md, "Invites", has the rest.
 
+## 5. Tell each day
+
+Once a world day is over, ask your agent for the day's chronicle. `chronicle(day)` ranks the day into story threads by stakes (a death over a fight over a birth, twice when a player was in it; your world's own weights go in its meta as `chronicle_weights`), the same size however busy the day, with nothing in it that was hidden when it happened. The agent writes the top thread as the lead, stakes first and never in clock order, keeps stories that run across days with `chronicle_arc`, and publishes with `publish_chronicle(day, text, title)`. With `public_feed` in the world's meta, it shows on the world's page under `/chronicle.json`. docs/HOSTING.md has the whole method.
+
 ## Quirks we hit
 
 - **Upload the stage, not the clone.** git ignores `worlds/`, and an upload that follows `.gitignore` leaves your world behind. The stage carries it.

@@ -114,4 +114,4 @@ def test_the_digest_leads_with_what_changed_and_counts_the_routine():
     assert news["downed"]["who"] == "Guard" and news["downed"]["target"] == "Prisoner"
     assert news["story"]["key"] == "alarm" and news["story"]["was"] is None and news["story"]["now"] == "sounding"
     assert all("t" in x and "place" in x or x["what"] == "story" for x in d["news"])
-    assert "news" in d["hint"] and "routine" in d["hint"]
+    assert "thread" in d["hint"] and "routine" in d["hint"] and "Stakes first" in d["hint"]

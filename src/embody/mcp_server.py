@@ -444,17 +444,29 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
-    def chronicle(day: int | None = None, limit: int = 200) -> dict[str, Any]:
-        """(owner, author) One world day of the log sorted for writing it up as news: what changed (news), new
-        scenes, what was said, beats, who went where, the routine counted, and what is already published. Nothing
+    def chronicle(day: int | None = None, limit: int = 200, threads: int = 4) -> dict[str, Any]:
+        """(owner, author) One world day ranked for writing it up, stakes first: `threads`, the day's stories scored
+        by what is in them (a death over a fight over a birth; the world's own weights in meta `chronicle_weights`),
+        twice with a player's body, 1.5 times on an open arc, the top `threads` in full with their scenes and speech
+        and the rest as one-liners in `around`, the same size however busy the day; nothing hidden then. Below them
+        the raw day: news, scenes, said, beats, travel, routine counted, and what is already published. Nothing
         invented. Default: today so far."""
-        return S(None).chronicle(day=day, limit=limit)
+        return S(None).chronicle(day=day, limit=limit, threads=threads)
+
+    @tool()
+    @_wrap
+    def chronicle_arc(id: str | None = None, title: str | None = None, people: list[str] | None = None,
+                      places: list[str] | None = None, status: str | None = None, note: str | None = None) -> dict[str, Any]:
+        """(owner, author) A story that runs across days: open it (id, title, people, places by name), touch or add to
+        it, or close it (status="closed", note). Threads that touch an open arc weigh 1.5 times in chronicle. No id:
+        every arc."""
+        return S(None).chronicle_arc(id=id, title=title, people=people, places=places, status=status, note=note)
 
     @tool()
     @_wrap
     def publish_chronicle(day: int, text: str, title: str | None = None) -> dict[str, Any]:
-        """(owner, author) Publish one day's chronicle on the world's page (/chronicle.json, days). Again replaces;
-        an empty text withdraws it."""
+        """(owner, author) Publish one day's chronicle on the world's page (/chronicle.json, days), written from
+        chronicle(day)'s threads, stakes first. Again replaces; an empty text withdraws it."""
         return S(None).publish_chronicle(day=day, text=text, title=title)
 
     @tool()

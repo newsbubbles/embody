@@ -320,7 +320,7 @@ Decisions from Nate on 2026-11-09: an invite is a block of text a friend pastes 
 - [ ] Web client without an agent: room, people, exits, inventory and the evaluated affordances as text and buttons, `say` as a box. Reads the same bundle.
 - [ ] Accounts, rosters, world listings, invitations.
 - [x] A per-world page with the live graph: the viewer lives in the package (`embody.watch`) and the hosted server serves it at `/watch` behind the bearer door, the grant's world only, for the roles that read everything; `tools/watch.py` stays the local way to run it.
-- [x] A daily chronicle for a world's page: `chronicle(day)` digests the day's log for a writer, `publish_chronicle` puts the telling on `/chronicle.json` (2026-11-10, 3bc4540). Next: a scheduled chronicler, a mind-like grant that writes each day at dawn.
+- [x] A daily chronicle for a world's page: `chronicle(day)` digests the day's log for a writer, `publish_chronicle` puts the telling on `/chronicle.json` (2026-11-10, 3bc4540). Ranked by stakes since 2026-11-23: `threads` scored and joined on the server (weights in meta `chronicle_weights`, place, body and cause joins, hidden-then left out, arcs with `chronicle_arc`), the same size however busy the day. Next: a scheduled chronicler, a mind-like grant that writes each day at dawn.
 - [ ] Security audit before any public world: auth, grants, the script sandbox under hostile authors, rate limits, abuse of `fill`, what a captured mind token can do. Done so far: guest checks and script review (922f97c), the maker's frame audit (78e5fe9, 0fbb525), holes from a playtest report closed and `report_flaw` (0b451f0).
 
 ### Later
