@@ -2489,8 +2489,9 @@ class Session:
         for c, d in rows:
             lay = self._own_layout(c["id"])
             at = self._world_at(c["id"])
+            moving = posn.along_at(w, lay) is not None  # on its way (a vehicle on a leg): a spot of its own all the same
             row = {"id": c["id"], "name": c["name"], "type": c["type"], "parent": c["parent_id"], "level": d,
-                   "own": bool(lay.get("at")), "at": [round(x, 1) for x in at] if at else None,
+                   "own": bool(lay.get("at")) or moving, "at": [round(x, 1) for x in at] if at else None,
                    **self._how_placed(c["id"])}
             if at and (spot := posn.spot_words(w, (posn._places_up(w, c["parent_id"]) or [None])[0], at)):
                 row["spot"] = spot
@@ -2501,7 +2502,7 @@ class Session:
             if c["state"].get("hidden"):
                 row["hidden"] = True
             items.append(row)
-            if not lay.get("at") and w.is_a(c["type"], "place"):
+            if not lay.get("at") and not moving and w.is_a(c["type"], "place"):
                 unplaced.append(c["name"])
             elif row["how"] not in ("own", "grid") and posn.needs_own(w, c):
                 no_spot.append(c["name"])

@@ -46,7 +46,12 @@ A vehicle's state (all optional but `stops`):
 - `resume_wait`: seconds before a run that was stopped (halted, blocked, held, its driver down) sets out again for
   where it was going, once nothing stops it (default 120).
 
-Written by play: `moving`, `trip` {path, i, to, by, origin, run, half, t0, t1, eta}, `driving`, `stopped` (why it last
+On the map: on a leg along a drawn way (a `connects_to` edge's `route`, either way round) it rides the route through
+the leg (`layout.along`), so the map, `apart` and `nearness` see it move and those aboard ride with it; it ends the leg
+at the route's end, and halted it stands where it was on the road. On a leg with no drawing it pulls up at its
+`stop_at` {place name or id: a landmark's name or [x, y]} for the place it rolls into, if it has one.
+
+Written by play: `moving`, `trip` {path, i, to, by, origin, run, half, t0, t1, eta, routed}, `driving`, `stopped` (why it last
 stopped short), `resume_to`, `arrived_t`, `broken`, `fuel`, `hull`, `heading`, `next_departure`, and `fault` (secret: the leg under way breaks it).
 
 Verbs, done to the vehicle: `board`, `alight`, `drive` (params to; aboard; also on a `wheel` standing in it),

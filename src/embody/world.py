@@ -769,14 +769,17 @@ class Ctx(ScriptObject):
             raise Rejected(f"their hands are full ({_num(load)} of {carry}): the machine keeps it",
                            hint="hand over less, or let them put something down first")
 
-    def move(self, id: Any, parent: Any, pos: Any = None) -> None:
+    def move(self, id: Any, parent: Any, pos: Any = None, at: Any = None) -> None:
+        """Put x in parent. at: its spot there, [x, y(, z)] or a landmark's name in the new place (a vehicle pulling up
+        at its stop); without it, it lands where World.move puts it."""
         if self._frame_lifts(id, parent):
             self._hold(parent)
         else:
             self._hold(id, parent)
         if (self._limits or {}).get("frame"):
             self._frame_hands(parent, id)
-        self._w.move(_ev(self._w, id), _ev(self._w, parent), pos=pos, actor=self._actor, caused_by=self._caused_by)
+        self._w.move(_ev(self._w, id), _ev(self._w, parent), pos=pos, actor=self._actor, caused_by=self._caused_by,
+                     at=at)
 
     def count(self, id: Any, what: str | None = None) -> int:
         """How many of a thing there are (its `count`, else 1). With `what`, how many units of things by that name
@@ -1787,11 +1790,16 @@ class World:
         self.store.put("entity", e)
 
     def move(self, id: str, parent: str, pos: Any = None, actor: str | None = None,
-             caused_by: int | None = None, quiet: bool = False) -> None:
+             caused_by: int | None = None, quiet: bool = False, at: Any = None) -> None:
         """Put an entity in a new container. quiet (an author regrouping the world, a place into its region): it keeps
-        its own spot and pos, nobody hears it, and the log keeps one `regrouped` event for the hosts."""
+        its own spot and pos, nobody hears it, and the log keeps one `regrouped` event for the hosts. at: its spot in
+        the new container ([x, y(, z)] or a landmark's name there), instead of where it would land."""
         e = self.need(id)
         self.need(parent)
+        spot_at = None
+        if at is not None:
+            from .positions import resolve_at
+            spot_at = resolve_at(self, parent, at, skip=id)[0]  # a bad name refuses before anything moves
         if parent == id or parent in self.subtree_ids(id):
             raise Rejected("cannot move an entity into itself")
         old = e["parent_id"]
@@ -1813,7 +1821,7 @@ class World:
             # place until someone places it (positions.py, DESIGN.md section 8, Layout)
             from .positions import arrival
             lay = e["state"].get("layout") if isinstance(e["state"].get("layout"), dict) else {}
-            spot = arrival(self, e, old, parent)
+            spot = spot_at if spot_at is not None else arrival(self, e, old, parent)
             if spot is not None:
                 e["state"]["layout"] = {**{k: v for k, v in lay.items() if k != "heading"}, "at": spot}
             elif "at" in lay:

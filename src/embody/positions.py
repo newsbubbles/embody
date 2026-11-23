@@ -106,6 +106,35 @@ def nearness(w: "World", a: str, b: str) -> str | None:
     return "beside" if d <= BESIDE_M else "here" if d <= HERE_M else "across"
 
 
+def along_at(w: "World", lay: Any) -> list[float] | None:
+    """Where a thing on its way stands now: layout `along` {route: [[x, y(, z)], ...], t0, t1, stop?} puts it on the
+    route at the share of [t0, t1] the world's time has run (a vehicle on a leg), held at `stop` when it was stopped
+    short. None once t1 has passed with no stop (its `at` holds again), or when `along` is missing or malformed."""
+    al = lay.get("along") if isinstance(lay, dict) else None
+    if not isinstance(al, dict):
+        return None
+    try:
+        pts = [[float(c) for c in p] + [0.0] * (3 - len(p)) for p in al.get("route") or []]
+        t0, t1 = float(al["t0"]), float(al["t1"])
+        stop = float(al["stop"]) if al.get("stop") is not None else None
+    except (TypeError, ValueError, KeyError):
+        return None
+    if len(pts) < 2 or any(len(p) != 3 for p in pts):
+        return None
+    if stop is None and w.t >= t1:
+        return None
+    now = min(w.t, stop) if stop is not None else w.t
+    f = 1.0 if t1 <= t0 else min(1.0, max(0.0, (now - t0) / (t1 - t0)))
+    segs = [math.dist(a[:2], b[:2]) for a, b in zip(pts, pts[1:])]
+    goal, run = f * sum(segs), 0.0
+    for (a, b), d in zip(zip(pts, pts[1:]), segs):
+        if d > 0 and run + d >= goal:
+            k = (goal - run) / d
+            return [round(a[i] + (b[i] - a[i]) * k, 2) for i in range(3)]
+        run += d
+    return [round(c, 2) for c in pts[-1]]
+
+
 def _room(w: "World", parent: str | None) -> dict[str, Any]:
     """A container's extent as its contents see it: its layout, unless it starts a frame (its own spot and shape are
     in the frame above, not the one its contents are in)."""
@@ -119,7 +148,8 @@ def resolve(w: "World", eid: str) -> dict[str, Any]:
     first = eid
     carrier = e["parent_id"] if e else None  # what it rides on: the name an inherited spot is "from"
     while e is not None and hops < _MAX_DEPTH:
-        own = (e["state"].get("layout") or {}).get("at") if isinstance(e["state"].get("layout"), dict) else None
+        lay = e["state"].get("layout") if isinstance(e["state"].get("layout"), dict) else None
+        own = (along_at(w, lay) or lay.get("at")) if lay else None  # on its way (along), else where it stands
         if own:
             return {"at": list(own), "how": "own" if e["id"] == first else "inherited",
                     "from": None if e["id"] == first else carrier}
@@ -392,13 +422,14 @@ def spot_words(w: "World", place: str | None, at: list[float] | None) -> str | N
 def arrival(w: "World", e: dict[str, Any], old: str | None, new: str) -> list[float] | None:
     """Where a thing that changes container lands, when it lands directly in a place: where the one who put it down
     stands (the old container's own spot, if that lies in the new place), else where the way from the old place comes
-    in (the end of the drawn route). None when neither is known."""
+    in (the end of the drawn route). A place that moves (a vehicle rolling on) takes only the way's end. None when
+    neither is known."""
     np_ = w.get(new)
-    if np_ is None or not is_place(w, np_) or is_place(w, e) or not old:
+    if np_ is None or not is_place(w, np_) or not old:
         return None
     nl = _room(w, new)
     src = resolve(w, old)
-    if src["how"] in ("own", "grid") and src["at"] and not is_place(w, w.get(old) or {}) and \
+    if not is_place(w, e) and src["how"] in ("own", "grid") and src["at"] and not is_place(w, w.get(old) or {}) and \
             (not nl.get("at") or geo.contains(nl, src["at"]) is not False):
         return find_spot(w, new, src["at"], within=2.0, skip=e["id"])
     for ed in w.edges(old, "connects_to", "out"):

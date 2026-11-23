@@ -28,7 +28,7 @@ def advance(ctx, v):
             if ctx.get(nxt) is None:
                 stop_here(ctx, v, "the road ends", None)
                 return
-            ctx.move(v, nxt)
+            ctx.move(v, nxt, at=stop_spot(ctx, v, tr, nxt))
             tr["half"] = True
             ctx.patch(v, {"trip": tr})
             if v.state.fault:
@@ -51,7 +51,8 @@ def advance(ctx, v):
         if ctx.t < float(tr["t1"]):
             return
         if last:
-            ctx.patch(v, {"moving": False, "trip": None, "driving": None, "arrived_t": ctx.t, "fault": None})
+            ctx.patch(v, {"moving": False, "trip": None, "driving": None, "arrived_t": ctx.t, "fault": None,
+                          "layout": {"along": None}})
             ctx.emit("pulled_in", target=v, reach=1, place=nxt, origin=tr.get("origin"), by=tr.get("by"),
                      run=bool(tr.get("run")), loud=bool(v.state.loud))
             tell(ctx, v, "arrive", nxt, nxt, None)

@@ -188,6 +188,28 @@ def tell(ctx, v, key, place, to, why):
     t = t.replace("{why}", str(why or "")).replace("{driver}", drv.name if drv is not None else "nobody")
     ctx.emit("scene", target=v, reach=1, text=t, loud=bool(v.state.loud))
 
+def way_route(ctx, a, b):
+    # the drawn road from a to b: the route on the way a -> b, else the way b -> a run backwards; None when undrawn
+    for e in ctx.edges(a, "connects_to", "out"):
+        if e["target"] == b and (e["data"] or {}).get("route"):
+            return list(e["data"]["route"])
+    for e in ctx.edges(b, "connects_to", "out"):
+        if e["target"] == a and (e["data"] or {}).get("route"):
+            return list(reversed(e["data"]["route"]))
+    return None
+
+def stop_spot(ctx, v, tr, place):
+    # where it pulls up in a place it rolls into on a leg with no drawn road: its stop_at for that place (a landmark's
+    # name or [x, y]), by id or name; None leaves it to the engine
+    if tr.get("routed"):
+        return None
+    sa = v.state.stop_at or {}
+    p = ctx.get(place)
+    s = sa.get(place)
+    if s is None and p is not None:
+        s = sa.get(p.name)
+    return s
+
 def begin_leg(ctx, v, tr, t0):
     # the next leg of a trip: fuel spent, a breakdown rolled, the clock set. A reason when it cannot go
     per = v.state.fuel_per_leg
@@ -200,8 +222,13 @@ def begin_leg(ctx, v, tr, t0):
     tr["t0"] = t0
     tr["t1"] = t0 + leg_secs(ctx, v, a, b)
     tr["half"] = False
+    # on a drawn road it rides the route through the leg (layout.along: the map, apart and nearness see it move)
+    rt = way_route(ctx, a, b)
+    tr["routed"] = bool(rt)
+    along = {"route": rt, "t0": tr["t0"], "t1": tr["t1"], "stop": None} if rt else None
     # whether this leg breaks it is rolled now and kept secret (state.fault), so nobody aboard reads it off the card
-    ctx.patch(v, {"fault": bool(v.state.breakdown) and ctx.rand.chance(float(v.state.breakdown))})
+    ctx.patch(v, {"fault": bool(v.state.breakdown) and ctx.rand.chance(float(v.state.breakdown)),
+                  "layout": {"along": along}})
     return None
 
 def start_trip(ctx, v, dest, by, run):
@@ -227,6 +254,8 @@ def stop_here(ctx, v, why, by):
     # it stops in the place it is in; a run (a timetable or a world's dispatch) takes up its trip again later
     tr = v.state.trip or {}
     ch = {"moving": False, "trip": None, "driving": None, "stopped": why, "fault": None}
+    if (v.state.layout or {}).get("along"):
+        ch["layout"] = {"along": {"stop": ctx.t}}  # it stands where it was on the road
     if tr.get("run"):
         ch["resume_to"] = tr.get("to")
         ch["resume_after"] = ctx.t + float(v.state.resume_wait or 120)
