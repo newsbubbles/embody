@@ -72,11 +72,13 @@ def _wrap(fn, lock: threading.RLock | None = None):
                 return fn(*a, **kw)
         except Rejected as r:
             return r.to_dict()
-    sig = inspect.signature(fn, eval_str=True)
-    if typing.get_origin(sig.return_annotation) is list:
+    # the signature keeps its annotations as written (strings): the tools' output schemas are a contract with every
+    # client that listed them when it connected, so their shape never changes under a live agent (tests/test_mcp_schema.py)
+    sig = inspect.signature(fn)
+    if typing.get_origin(inspect.signature(fn, eval_str=True).return_annotation) is list:
         # a tool that answers with a list answers a refusal with the refusal's dict: the output schema says either,
         # or the refusal fails it and the agent sees a bare "Error executing tool" with no reason (flaw, 2026-11-23)
-        sig = sig.replace(return_annotation=sig.return_annotation | dict[str, Any])
+        sig = sig.replace(return_annotation=f"{sig.return_annotation} | dict[str, Any]")
     inner.__signature__ = sig  # type: ignore[attr-defined]
     return inner
 
