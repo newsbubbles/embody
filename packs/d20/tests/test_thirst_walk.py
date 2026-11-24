@@ -79,3 +79,17 @@ def test_a_thirst_walk_goes_around_a_side_that_outlawed_the_body_or_waits():
     gm.patch("Carter", {"down": True})
     gm.clock(step=60)
     assert where(gm, "Walker") == "The Oasis"  # a foe who is down guards nothing: the near way is open
+
+
+def test_a_body_that_stays_drinks_what_is_at_hand_and_never_walks_for_water():
+    # a world that keeps its player characters where their players left them marks them `stays` (a world's fix, 2026-11-23)
+    eng, gm, you = outpost()
+    gm.spawn("person", "The Flats", "Walker", state={"playable": True, "stays": True, "water": 2, "max_water": 10,
+                                                     "hp": 40, "max_hp": 40})
+    gm.world.set_meta({"idle_after": 50})
+    eng.session("mind").join("outpost", "Walker")
+    gm.spawn("waterskin", "Walker", "Walker's skin", state={"left": 1})
+    for _ in range(6):
+        gm.clock(step=60)
+        assert where(gm, "Walker") == "The Flats"
+    assert state(gm, "Walker's skin")["left"] == 0  # the skin in hand, yes; the road, no

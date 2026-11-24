@@ -2931,6 +2931,8 @@ class World:
         if eid and self.get(eid) is None:
             return
         if kind == "tick":
+            if eid and (self.get(eid)["state"].get("crossed")):
+                return  # a body whose person has crossed to another world waits out of play: no thirst, no fight
             if eid is None or (self.embodied(eid) and not p.get("always")
                                and not (self._runs_idle(eid, p["script"]) and self.idle(eid))):
                 return  # controller swap: an embodied entity is driven by its principal; `always` behaviors are

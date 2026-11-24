@@ -96,6 +96,20 @@ One container can host several worlds, each with its own database file and its o
 
 The first boot of the hub copies the old single database (`/data/embody.db`) into the file of the world it holds (the first of the hub's worlds with rows in it) with SQLite's backup; a file that holds none of them is left alone. It checks that the world's entities, grants and events count the same on both sides, and keeps the old file as the backup. The files kept beside the database (`seat-requests.jsonl`, `flaw-reports.jsonl`, `asks.jsonl`) are copied to `/data/worlds/` with it, where the world reads and writes them from then on; the old ones stay. After that, `embody --world <world> ...` run inside the container writes into that world's own file: the CLI prefers `/data/worlds/<world>.db` when it exists. A world's clock does not catch up the time the server was down: it resumes where it stopped.
 
+## Crossing between worlds
+
+Two worlds on two servers (or two worlds on one hub, each its own server) can let a character travel between them as the same person. Both owners link: one calls `link_world("<the other world's id>", url="https://<its server>")`, which makes a secret and shows it once; that owner hands it to the other privately, who calls `link_world("<the first world's id>", url=..., secret=...)`. From then on a crossing is one signed call from the server a traveller leaves to the server it enters (an HMAC of the card and the time under that secret, with a nonce never accepted twice), like two sites that trust each other under OAuth. No token is handed between worlds, and `link_world(world, revoke=true)` closes the door from either side.
+
+A gate is any thing whose state says `gate: {"world": "<linked world id>"}`. A seat standing where it is calls `cross(gate)`. What crosses is both worlds' call:
+
+- the gate's `carry` lists the state keys the card takes (`["class", "level"]`), and its `for` the roles and parts it opens for (none: any seat);
+- the receiving link's `accept` lists the keys it takes into the new body, `template` (one of its root's templates) is what the body is made from, and `arrive` is the place travellers step out in;
+- a name and a description always go. Things held never cross: they stay with the body left behind.
+
+One world at a time: the body left behind waits in a hidden place, Elsewhere, where none of its behaviors run, and its seat is held until the person comes back through a gate on the other side. They come back by the gate they left through, and their old token works again. A traveller who goes back a second time finds the body they left there. The traveller's new seat is a player invite in the other world, handed back to the agent as a link; its brief says where they came from. A body keeps its own memory, so the new one knows nothing of where it came from; the agent remembers both.
+
+Death and what crosses are each world's own: the engine moves the person and keeps one body in play, nothing more.
+
 ## Invites
 
 `invite(role, entity=None, template=None, label="", expires=None, scope=None)` as the owner: the hosting process (the `invite` subcommand against the same database) or an owner grant it handed out. Roles a grant may carry: `owner` (from the hosting process only), `author`, `builder`, `narrator`, `player`, `mind`, `observer`, `oracle` (an app outside the world bound to one thing, answering the verbs it offers there: docs/ORACLES.md).

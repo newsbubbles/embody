@@ -143,7 +143,7 @@ def test_every_op_sits_in_one_layer_and_the_door_lists_them_by_layer():
     from embody.ops import LAYERS, OPS
     seen = [op for _, ops in LAYERS.values() for op in ops]
     assert sorted(seen) == sorted(OPS) and len(seen) == len(set(seen))
-    assert LAYERS["to the owner"][1] == ["ask_owner", "asks_to_owner", "report_flaw"]
+    assert LAYERS["to the owner"][1] == ["ask_owner", "asks_to_owner", "ask_reply", "report_flaw"]
 
 
 def test_a_hand_asks_a_few_an_hour():
@@ -201,3 +201,34 @@ def test_the_owner_reads_every_ask_and_flaw_as_untrusted():
     assert "untrusted" not in sam.asks_to_owner()["asks"][0] and "beware" not in sam.asks_to_owner()
     assert gm.flaws()[0]["untrusted"] is True
     assert "nothing to do" in sam.ask_owner()["kinds"]["quest"]["for"]
+
+
+def test_the_asker_replies_on_its_own_ask_and_folds_the_others_into_it():
+    # an asker could read the owner's answer but not answer back; agents made new asks to do it (2026-11-23)
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    sam, _ = player(eng, gm)
+    gm.patch(gm.world.root_id, {"ask_per_hour": 10})
+    a = sam.ask_owner("fix", what="the well is dry", why="the bucket comes up empty")["id"]
+    b = sam.ask_owner("fix", what="the well again", why="still empty")["id"]
+    gm.answer_ask(a, "answered", "filled it; try now")
+    seen = sam.perceive()
+    assert a in seen["owner_answered"] and "ask_reply" in seen["owner_answered"]  # names which asks moved
+    out = sam.ask_reply(a, "tried it: the bucket still comes up empty", fold=[b])
+    assert out["status"] == "open" and out["folded"] == [b]
+    rows = {r["id"]: r for r in gm.asks_to_owner()["asks"]}
+    assert rows[a]["status"] == "open" and rows[a]["reply_waiting"]
+    assert rows[a]["history"][-1]["reply"].startswith("tried it") and rows[b]["status"] == "folded"
+    assert rows[b]["into"] == a
+    with pytest.raises(Rejected) as r:
+        sam.ask_reply(b, "more")
+    assert a in r.value.hint
+    with pytest.raises(Rejected):
+        gm.ask_reply(a, "an owner answers with answer_ask")  # not the asker's
+    gm.answer_ask(a, "answered", "a crack in the shaft; fixed")
+    assert not {r["id"]: r for r in gm.asks_to_owner()["asks"]}[a]["reply_waiting"]
+    gm.patch(gm.world.root_id, {"ask_reply_per_hour": 2})
+    sam.ask_reply(a, "it works")
+    with pytest.raises(Rejected) as r:
+        sam.ask_reply(a, "thanks again")
+    assert "2 replies a real hour" in r.value.reason

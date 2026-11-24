@@ -57,6 +57,20 @@ def test_a_mixed_line_is_a_gesture_then_the_quoted_words(tmp_path):
                                               ("say", "Bench is busy, love.")]
 
 
+def test_a_loud_person_says_its_lines_aloud(tmp_path):
+    # a barker's table answers carried only a normal voice where the world keeps a voice_radius (a builder, 2026-11-24)
+    eng, gm, me = world(tmp_path)
+    w = eng.world("bench")
+
+    def said(about):
+        since = w.store.next_seq(w.id)
+        me.act("talk", "Varn", params={"about": about})
+        return [e["payload"] for e in w.events(since=since - 1, limit=50) if e["kind"] == "say" and e["actor_id"] != me._me()]
+    assert not said("the cat")[0].get("loud")
+    gm.patch("Varn", {"loud_voice": True})
+    assert said("the cat")[0].get("loud") and said("the weather")[0].get("loud")  # whole lines and quoted words
+
+
 def test_an_unquoted_line_is_said_unless_lines_are_quoted(tmp_path):
     eng, gm, me = world(tmp_path)
     assert answer(eng, me, "the cat") == [("say", "The cat opens one eye, judges you, and closes it.")]

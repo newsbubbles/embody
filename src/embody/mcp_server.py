@@ -20,6 +20,7 @@ import json
 import os
 import threading
 import time
+import typing
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
@@ -48,6 +49,18 @@ fresh game on the same state with fork_world. Every entity is content (state), c
 would work instead. Call guide('scripting') before writing scripts."""
 
 
+# The ops whose tools read limit=0 as "all" (the tool passes None on): POST /op reads it the same way, so the doc
+# line holds on both doors (a report from a builder, 2026-11-23). Every other op refuses limit 0 with its range.
+ZERO_IS_ALL = frozenset({"worlds", "seats", "minds", "inspect", "timers", "schemas", "scripts", "programs"})
+
+
+def op_args(op: str, kw: dict[str, Any]) -> dict[str, Any]:
+    """POST /op's arguments as the op's tool would pass them."""
+    if op in ZERO_IS_ALL and kw.get("limit") == 0:
+        return {**kw, "limit": None}
+    return kw
+
+
 def _wrap(fn, lock: threading.RLock | None = None):
     """Rejected becomes the {ok: false, reason, hint, alternatives} dict; one call at a time on the store."""
     @functools.wraps(fn)
@@ -59,7 +72,12 @@ def _wrap(fn, lock: threading.RLock | None = None):
                 return fn(*a, **kw)
         except Rejected as r:
             return r.to_dict()
-    inner.__signature__ = inspect.signature(fn)  # type: ignore[attr-defined]
+    sig = inspect.signature(fn, eval_str=True)
+    if typing.get_origin(sig.return_annotation) is list:
+        # a tool that answers with a list answers a refusal with the refusal's dict: the output schema says either,
+        # or the refusal fails it and the agent sees a bare "Error executing tool" with no reason (flaw, 2026-11-23)
+        sig = sig.replace(return_annotation=sig.return_annotation | dict[str, Any])
+    inner.__signature__ = sig  # type: ignore[attr-defined]
     return inner
 
 
@@ -330,6 +348,13 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
+    def ask_reply(id: str, text: str, fold: list[str] | None = None, principal: str | None = None) -> dict[str, Any]:
+        """(to the owner, outside the story) Answer back on one of your own asks: the owner reads your reply in its
+        history, and it is open for them again. fold: ids of your other asks this one now stands for. A few an hour."""
+        return S(principal).ask_reply(id, text=text, fold=fold)
+
+    @tool()
+    @_wrap
     def ask_readers(add: list[str] | None = None, remove: list[str] | None = None) -> dict[str, Any]:
         """(owner) Who besides you reads the asks guests let be shared, and answers them: grant ids or principal
         ids (a host's helper, a keeper). Returns the list."""
@@ -507,6 +532,27 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
         Words only: nothing in a line happens. Do a deed with act first (give, drop, put), then say it; a line that
         narrates one gets a `note`. Entity ids and tool calls are refused: say names."""
         return S(principal).say(text, reach=reach, to=to, low=low, loud=loud, gesture=gesture)
+
+    @tool()
+    @_wrap
+    def cross(gate: str, principal: str | None = None) -> dict[str, Any]:
+        """Step through a gate into another embody world, as the same person: that world makes your body there by its
+        own rules and gives you a seat (a link to open; coming home, your old token works again). One world at a time:
+        the body you leave waits out of sight and this seat is held until you come back. The new body starts with no
+        memory of this world; you, the agent, keep yours. Things you hold stay behind."""
+        return S(principal).cross(gate)
+
+    @tool()
+    @_wrap
+    def link_world(world: str | None = None, url: str | None = None, secret: str | None = None,
+                   accept: list[str] | None = None, template: str | None = None, arrive: str | None = None,
+                   revoke: bool = False, principal: str | None = None) -> dict[str, Any]:
+        """(owner) Link this world to another embody world for crossings through gates. Both owners link, naming the
+        other world by its id with its base URL and one shared secret: the first call makes it (shown once), the other
+        owner passes it as secret. template, arrive and accept say what the other world's travellers become here. No
+        world: the links, without secrets. revoke=true closes the link from this side."""
+        return S(principal).link_world(world, url=url, secret=secret, accept=accept, template=template, arrive=arrive,
+                                       revoke=revoke)
 
     @tool()
     @_wrap
@@ -1041,6 +1087,9 @@ class Bearer:
         if path.startswith("/i/"):
             await self._invite(scope, path[len("/i/"):], send)
             return
+        if path == "/link/arrive":
+            await self._arrive(scope, receive, send)
+            return
         if path in ("/openapi.json", "/docs") and scope.get("method") == "GET" and self.srv is not None:
             await self._api(scope, path, send)
             return
@@ -1121,6 +1170,7 @@ class Bearer:
         except ValueError:
             await _reply(send, 400, {"ok": False, "reason": "the body is not a JSON object", "hint": "send {} for no arguments"})
             return
+        kw = op_args(op, kw)
         eng = self.hub.engine
         if op == "wait":
             kw["timeout"] = min(float(kw.get("timeout", 30.0)), wait_max())
@@ -1131,6 +1181,26 @@ class Bearer:
                     return call(sess, op, **kw)
             out = await asyncio.to_thread(run)
         await _reply(send, 200, json.dumps(out, default=str).encode())
+
+    async def _arrive(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        """A traveller from a linked world: a signed card, no bearer (links.py). The host's own session takes it."""
+        if scope.get("method") != "POST":
+            await _reply(send, 405, {"ok": False, "reason": "a crossing is a POST"})
+            return
+        raw = b""
+        while True:
+            msg = await receive()
+            raw += msg.get("body", b"")
+            if not msg.get("more_body"):
+                break
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in (scope.get("headers") or [])}
+        eng, main = self.hub.engine, self.hub.main
+
+        def run() -> tuple[int, dict[str, Any]]:
+            with eng.lock:
+                return main.link_arrive(headers, raw)
+        status, out = await asyncio.to_thread(run)
+        await _reply(send, status, json.dumps(out, default=str).encode())
 
     async def _invite(self, scope: dict[str, Any], code: str, send: Any) -> None:
         """An invite link's page. A chat app's link preview gets a stub without the token, so pasting the link into a

@@ -54,18 +54,21 @@ def speak(ctx, line, asker):
     # Text in double quotes is said and the rest is done, in the order written:
     # 'Varn doesn't look up. "Bench is busy, love."' is a gesture, then a line said. A line with no double
     # quotes is said whole, unless the person (or the world's root) keeps lines: "quoted", where it is a gesture.
+    # A person whose state has `loud_voice` (a barker, a tout) says every line aloud: it carries as a shout where the
+    # world keeps a voice_radius.
+    loud = bool(ctx.self.state.loud_voice)
     text = str(line).replace("“", "\"").replace("”", "\"")
     if "\"" not in text:
         if (ctx.self.state.lines or ctx.root().state.lines) == "quoted":
             ctx.gesture(text, to=asker)
         else:
-            ctx.say(text, to=asker)
+            ctx.say(text, to=asker, loud=loud)
         return
     i = 0
     for part in text.split("\""):  # even pieces lie outside the quotes
         if part.strip():
             if i % 2 == 1:
-                ctx.say(part.strip(), to=asker)
+                ctx.say(part.strip(), to=asker, loud=loud)
             else:
                 ctx.gesture(part.strip(), to=asker)
         i = i + 1

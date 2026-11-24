@@ -151,3 +151,34 @@ def test_a_guest_writes_no_sheet_or_skills():
         with pytest.raises(Rejected) as r:
             b.patch("Dummy", {key: {"blade": 9}})
         assert f"may not write {key}" in r.value.reason
+
+
+def test_a_builders_refusals_reach_it_with_their_reason_on_every_path():
+    import asyncio
+    from embody.mcp_server import build_server
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    b, inv = builder(eng, gm)
+    b.use("two-rooms")
+    srv = build_server(b, None, eng)
+    out = asyncio.run(srv.call_tool("history", {}))  # a tool typed to answer a list answers a refusal too
+    assert "your own body" in str(out)
+    assert "1 to 100" in str(asyncio.run(srv.call_tool("find", {"limit": 0})))
+    from embody.mcp_server import op_args
+    assert call(b, "inspect", **op_args("inspect", {"entity": "Guard", "limit": 0}))["name"] == "Guard"  # POST /op too
+    assert call(gm, "grants", **op_args("grants", {"limit": 0}))["ok"] is False  # an op with no "0 for all" refuses it
+
+
+def test_a_hosts_look_through_a_held_body_leaves_its_cursor_alone():
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    inv = gm.invite("player", entity="Prisoner", label="Sam")
+    sam = eng.session_for_token(inv["token"])
+    sam.join()
+    sam.perceive()
+    body = gm.world.find(name="Prisoner")[0]["id"]
+    sam.say("Anyone awake?")
+    before = gm.world.entity_cursor(body)
+    seen = gm.perceive(from_entity="Prisoner", events=5)
+    assert any(e["kind"] == "say" for e in seen["events"])  # the last few, not "since he last looked"
+    assert gm.world.entity_cursor(body) == before  # and his own cursor did not move

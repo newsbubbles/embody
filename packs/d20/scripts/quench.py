@@ -30,12 +30,13 @@ def tick(ctx):
     # there, a draw a look until full or near it, then a step a look back (home_key says where). A body that is down drinks what is put in its hand. Not an always
     # behavior: while someone embodies this body they choose when to drink and where to go. A held seat gone idle
     # (a mind on a watcher) looks after itself the same way: every walk goes around a side that outlawed the body.
+    # A body whose state says `stays` (the world's call, per body) drinks what is at hand and never walks for it.
     me = ctx.self
     st = me.state
     if st.dead:
         return
     here = me.parent
-    roams = not st.down
+    roams = not st.down and not st.stays
     water = int(st.water if st.water is not None else 10)
     mx = int(st.max_water or 10)
     key = home_key(ctx, me)

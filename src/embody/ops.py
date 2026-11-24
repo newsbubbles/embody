@@ -23,7 +23,7 @@ from typing import Any, Callable, Iterator
 
 from .grants import (HOST_MARK, LINK_HOURS, link_for, request_origin, new_code, page, AUTHOR_ROLE, BUILDER, MIND, NARRATOR as NARRATOR_ROLE, OBSERVER_ROLE, ORACLE, OWNER, PLAYER, ROLES, ROLE_DOC,
                      active, active as _grant_active, allowed, caps_for, guides_line, new_token, paste, principal_id_for, role_for, token_hash)
-from .asks import (ASK_PER_HOUR, ANSWER_MAX as ASK_ANSWER_MAX, CREDIT_MAX as ASK_CREDIT_MAX, FIELDS as ASK_FIELDS,
+from .asks import (ASK_PER_HOUR, REPLY_PER_HOUR as ASK_REPLY_PER_HOUR, ANSWER_MAX as ASK_ANSWER_MAX, CREDIT_MAX as ASK_CREDIT_MAX, FIELDS as ASK_FIELDS,
                    KINDS as ASK_KINDS,
                    STATUSES as ASK_STATUSES, URGENCY as ASK_URGENCY, WHAT_MAX as ASK_WHAT_MAX, WHY_MAX as ASK_WHY_MAX,
                    UNTRUSTED as ASK_UNTRUSTED, AskLog, new_id as new_ask_id, now_iso as ask_now)
@@ -34,6 +34,7 @@ from .store import Store
 from . import access as acl
 from . import chronicle_threads
 from . import handbooks
+from . import links as links_mod
 from . import far as far_mod
 from . import looks as looks_mod
 from .world import ALWAYS_SECRET, LIMITS_HEAD, ORACLE_LIMITS, ORACLE_SCRIPT, ORACLE_TIMEOUT, ORACLE_TIMEOUT_MAX, Rejected, World, kept_from_self, rules_only_keys, _HOST_KINDS, _INTERNAL_KINDS, _PRIVATE_KINDS, _public_event, own_verbs
@@ -100,6 +101,7 @@ class Engine:
         self.now: Callable[[], float] = time.monotonic
         self.wall: Callable[[], float] = time.time  # real time, for grants that expire and seats that lapse
         self.lock = threading.RLock()  # one op at a time on one store; servers take it around every call
+        self.link_transport: Callable[[str, dict[str, str], bytes], tuple[int, dict[str, Any]]] = links_mod.post
         self.public_url: str | None = None  # where a hosted server is reached; printed into invites
         self.public_url_fixed = False  # the operator named the URL (--url, $EMBODY_URL): it wins over the request's host
         db = Path(str(self.store.path)) if getattr(self.store, "path", None) not in (None, ":memory:") else None
@@ -203,6 +205,23 @@ class Engine:
                 self.sync_clock(w.id)
                 out["stepped"].append(w.id)
         return out
+
+    @contextlib.contextmanager
+    def unlocked(self) -> Iterator[None]:
+        """Let go of the engine lock for a call that waits on another server (a crossing): held at any depth by this
+        thread, it is released whole and taken back the same number of times after."""
+        n = 0
+        while True:
+            try:
+                self.lock.release()
+            except RuntimeError:
+                break
+            n += 1
+        try:
+            yield
+        finally:
+            for _ in range(n):
+                self.lock.acquire()
 
     def session(self, principal_id: str, world_id: str | None = None, capabilities: list[str] | None = None,
                 name: str = "", role: str | None = None, scope: list[str] | None = None,
@@ -1193,7 +1212,9 @@ class Session:
                                  f"guide('changes', since={seen})")
         news = [a for a in self.engine.asks.fold(self.world_id) if a.get("pid") == self.pid and a.get("news")]
         if news:
-            b["owner_answered"] = (f"{len(news)} of your asks moved on (answered, declined or seen): asks_to_owner() reads them")
+            ids = ", ".join(a["id"] for a in news[-5:]) + (f" and {len(news) - 5} more" if len(news) > 5 else "")
+            b["owner_answered"] = (f"{len(news)} of your asks moved on ({ids}): asks_to_owner() reads them, and "
+                                   "ask_reply(id, text) answers back")
         return b
 
     def _skills_guide(self) -> dict[str, Any]:
@@ -1782,6 +1803,51 @@ class Session:
         return {"ok": True, "id": id, "status": status,
                 "note": "the asker reads it with asks_to_owner(), and perceive tells them it came"}
 
+    def ask_reply(self, id: str, text: str = "", fold: list[str] | None = None) -> dict[str, Any]:
+        """(to the owner, outside the story) Answer back on one of your own asks: a reply the owner reads in its
+        history, which sets it open again for them. `fold`: ids of your other asks this one now stands for (they show
+        as folded into it, so the owner answers once). At most ASK_REPLY_PER_HOUR a real hour (`ask_reply_per_hour`
+        on the world's root changes it), apart from new asks."""
+        if not self.world_id:
+            raise Rejected("asks are one world's", hint="use(world_id) first")
+        rows = {r["id"]: r for r in self.engine.asks.fold(self.world_id)}
+        row = rows.get(id)
+        if row is None or row.get("pid") != self.pid:
+            raise Rejected(f"no ask {id!r} of yours", hint="asks_to_owner() lists your asks and their ids; "
+                           "an owner or a reader answers with answer_ask")
+        if row.get("status") == "folded":
+            raise Rejected(f"{id} is folded into {row.get('into')}", hint=f"ask_reply({row.get('into')!r}, ...) instead")
+        text = str(text or "").strip()
+        if not text:
+            raise Rejected("a reply needs text: what you add, or what the answer left open",
+                           hint="ask_reply(id, 'tried it: ...')")
+        if len(text) > ASK_WHY_MAX:
+            raise Rejected(f"a reply takes {ASK_WHY_MAX} characters", hint="say it shorter, or make a new ask")
+        folded = []
+        for f in fold or []:
+            f = str(f).strip()
+            o = rows.get(f)
+            if f == id or o is None or o.get("pid") != self.pid:
+                raise Rejected(f"fold names {f!r}, which is not another ask of yours", hint="asks_to_owner() lists them")
+            if o.get("status") != "folded" and f not in folded:
+                folded.append(f)
+        root = self.world.get(self.world.root_id)
+        v = root["state"].get("ask_reply_per_hour") if root else None
+        try:
+            cap = max(0, min(int(v), 60)) if v is not None else ASK_REPLY_PER_HOUR
+        except (TypeError, ValueError):
+            cap = ASK_REPLY_PER_HOUR
+        if self.engine.asks.asked_since(self.world_id, self.pid, 3600, op="reply") >= cap:
+            raise Rejected(f"{cap} replies a real hour here, and you have made them" if cap else
+                           "this world takes no replies to asks now", hint="put the rest into one reply, or wait an hour")
+        try:
+            self.engine.asks.append({"op": "reply", "id": id, "world": self.world_id, "at": ask_now(), "by": self.name,
+                                     "pid": self.pid, "reply": text, **({"folded": folded} if folded else {})})
+        except OSError:
+            raise Rejected("the reply could not be kept", hint="try again in a while") from None
+        return {"ok": True, "id": id, "status": "open", **({"folded": folded} if folded else {}),
+                "note": "the owner reads it in the ask's history; asks_to_owner() shows their next answer"}
+
     def ask_readers(self, add: list[str] | None = None, remove: list[str] | None = None) -> dict[str, Any]:
         """(owner) Who besides you reads asks (those their askers let be shared) and answers them: grant ids or
         principal ids, a host's helper, a keeper, an angel. Returns the list."""
@@ -2210,9 +2276,12 @@ class Session:
         else:
             me = self._me()
             p = self._principal()
+        # a look through a body someone else holds is a host's read, not that body looking: it leaves the body's own
+        # "since I last looked" alone (a rejoin starts from it) and shows the last `events` (Tender, 2026-11-23)
+        held = p is None and (w.embodied(me) or {}).get("id") not in (None, self.pid)
         if cursor is None and p is not None:
             cursor = p["cursor_seq"]
-        if cursor is None:
+        if cursor is None and not held:
             cursor = w.entity_cursor(me)  # the entity's own "since I last looked", whoever drives it
         if cursor is None:
             cursor = max(0, w.store.next_seq(w.id) - 1 - events)
@@ -2258,7 +2327,7 @@ class Session:
         self._rules_notice(bundle, me if p is not None else None)
         if p is not None:
             w.set_cursor(self.pid, bundle["cursor"])
-        else:
+        elif not held:
             w.set_entity_cursor(me, bundle["cursor"])
         return bundle
 
@@ -3162,6 +3231,11 @@ class Session:
         self._tick()
         w = self.world
         if AUTHOR not in self.capabilities and OBSERVER not in self.capabilities:
+            p = w.principal(self.pid) if self.world_id else None
+            if not (p and p.get("entity_id")):
+                raise Rejected("history without the author's or observer's hand is the log of your own body, and this "
+                               "grant holds none", hint="a builder reads its plot with inspect and perceive(from_entity); "
+                               "the owner's own log is theirs to share")
             touching = self._me()
         elif touching:
             touching = self._resolve(touching)
@@ -3922,6 +3996,225 @@ class Session:
         if deed:
             out["note"] = deed
         return out
+
+    def link_world(self, world: str | None = None, url: str | None = None, secret: str | None = None,
+                   accept: list[str] | None = None, template: str | None = None, arrive: str | None = None,
+                   revoke: bool = False) -> dict[str, Any]:
+        """(owner) Link this world to another embody world, so a character may cross between them through a gate (a
+        thing whose state says `gate: {"world": <that world's id>}`). Both owners link, each naming the other world by
+        its id and giving its base URL, with one shared secret: the first link_world makes it (shown once: give it to
+        the other owner), the other passes it as `secret`. A crossing is a signed call between the two servers, never
+        a token handed around. What the other world's travellers become here is this side's: `template` (one of the
+        root's templates; default a plain creature), `arrive` (the place they step out in; default the root) and
+        `accept` (the state keys of their card this world takes, over the template's; a name and a description always
+        come). No world: the links, without their secrets. revoke=true closes the door from this side."""
+        w = self.world
+        if world is None:
+            rows = w.store.query("links", "world_id=?", (w.id,), order="created")
+            return {"links": [{"world": r["id"], "url": r["url"], "accept": r["accept"], "template": r["template"],
+                               "arrive": r["arrive"], "open": not r["revoked"]} for r in rows],
+                    "hint": "a gate is a thing with state gate: {\"world\": <id>}; cross(gate) takes a seat through it"}
+        world = str(world).strip().lower()
+        if not links_mod.NAME.match(world):
+            raise Rejected(f"{world!r} is no world id", hint="the other world's id, as worlds() shows it there")
+        if world == w.id:
+            raise Rejected("a world does not link to itself", hint="a gate inside one world is a door: connect places")
+        old = w.store.get("links", w.id, world)
+        if revoke:
+            if old is None:
+                raise Rejected(f"no link to {world!r}", hint="link_world() lists them")
+            w.store.set("links", w.id, world, revoked=1)
+            return {"ok": True, "world": world, "open": False}
+        url = (url or (old or {}).get("url") or "").strip().removesuffix("/mcp").rstrip("/")
+        if not re.match(r"^https://[^\s/]+|^http://(localhost|127\.0\.0\.1)(:\d+)?", url):
+            raise Rejected("a link needs the other world's base URL, https", hint="link_world(world, url='https://...')")
+        if template is not None:
+            root = w.get(w.root_id)
+            if template not in ((root["state"].get("templates") or {}) if root else {}):
+                raise Rejected(f"no template {template!r}", hint="patch the root's templates first")
+        if arrive is not None:
+            arrive = self._resolve(arrive)
+        made = None
+        if secret is None and old is None:
+            secret = made = links_mod.new_secret()
+        row = {"world_id": w.id, "id": world, "url": url, "secret": secret or old["secret"],
+               "accept": [str(k) for k in (accept if accept is not None else (old or {}).get("accept") or [])],
+               "template": template if template is not None else (old or {}).get("template"),
+               "arrive": arrive if arrive is not None else (old or {}).get("arrive"),
+               "created": (old or {}).get("created") or self.engine.wall(), "revoked": 0}
+        w.store.put("links", row)
+        out = {"ok": True, "world": world, "url": url, "accept": row["accept"], "template": row["template"],
+               "arrive": row["arrive"]}
+        if made:
+            out["secret"] = made
+            out["hint"] = (f"give this secret to {world}'s owner, once and privately: they call link_world('{w.id}', "
+                           "url=<this world's URL>, secret=...). It is never shown again; a new one is a new link")
+        return out
+
+    def cross(self, gate: str) -> dict[str, Any]:
+        """Step through a gate into another world, as the same person: the other world makes your body there by its own
+        rules and hands you a seat (a link to open, or, coming home, your old token works again). You play in one
+        world at a time: the body you leave waits out of sight, and this seat is held until you come back through a
+        gate there. A body keeps its own memory, so the new one starts blank; you, the agent, remember both. Things
+        you hold stay with the body you leave. The gate's world decides who may pass (its `for`) and what of you
+        goes (its `carry`)."""
+        self._tick()
+        w = self.world
+        me = self._me()
+        body = w.need(me)
+        if body["state"].get("dead"):
+            raise Rejected("you are dead", hint="the dead go through no gate")
+        if self.grant is None:
+            raise Rejected("only a seat held by an invite crosses: the other world hands it back by that invite",
+                           hint="the host's own principal plays here")
+        gid = self._resolve(gate)
+        g = w.need(gid)
+        spec = g["state"].get("gate")
+        if not isinstance(spec, dict) or not spec.get("world"):
+            raise Rejected(f"{g['name']} is no gate", hint="a gate's state names the world it opens on")
+        if g["parent_id"] != body["parent_id"] and g["parent_id"] != me:
+            raise Rejected(f"{g['name']} is not here", hint="go where it stands, then cross")
+        allowed = spec.get("for")
+        if allowed and not ({self.role, *self._parts()} & {str(x).lower() for x in allowed}):
+            raise Rejected(f"{g['name']} does not open for you", hint="it opens for: " + ", ".join(map(str, allowed)))
+        link = w.store.get("links", w.id, str(spec["world"]).lower())
+        if link is None or link["revoked"]:
+            raise Rejected(f"{g['name']} opens on nothing yet", hint="the owner links the worlds first (link_world)")
+        st = body["state"]
+        card = {"traveller": self.grant.get("traveller") or f"{w.id}:{self.grant['id']}", "from": w.id,
+                "name": links_mod.clip(body["name"]), "description": links_mod.clip(st.get("description")),
+                "state": {k: st[k] for k in (spec.get("carry") or []) if k in st and k not in ALWAYS_SECRET}}
+        raw = links_mod.body_bytes(card)
+        headers = links_mod.signed_headers(link["secret"], w.id, raw)
+        with self.engine.unlocked():  # the other world may be this server: never hold our lock across the call
+            status, ans = self.engine.link_transport(link["url"], headers, raw)
+        if status != 200 or not ans.get("ok"):
+            raise Rejected(f"{g['name']} does not open: {ans.get('reason') or 'the other world refused'}",
+                           hint=ans.get("hint") or "try again later, or ask the owner")
+        w.store.begin()
+        try:
+            w.emit("crossed", actor=me, target=gid, reach=1, payload={"to": link["id"], "gate": gid})
+            away = self._elsewhere()
+            w.move(me, away, quiet=True)
+            w.patch(me, {"crossed": {"to": link["id"], "gate": gid, "t": w.t}}, actor=me)
+            w.store.set("grants", w.id, self.grant["id"],
+                        held={"body": None, "since": self.engine.wall(), "away": link["id"],
+                              "why": f"you are in {ans.get('world_name') or link['id']} now: come back through a gate there"})
+            w.leave(self.pid, cause="crossed", to=link["id"])
+            w.store.commit()
+        except Exception:
+            w.store.rollback()
+            raise
+        out = {"ok": True, "crossed": True, "to": ans.get("world_name") or link["id"]}
+        for k in ("home", "returning", "paste", "link", "page", "note", "hint"):
+            if ans.get(k) is not None:
+                out[k] = ans[k]
+        out.setdefault("hint", "open the link it gave you there; this seat waits until you cross back")
+        return out
+
+    def _elsewhere(self) -> str:
+        """The place out of play where bodies wait while their people are in another world: hidden, with no ways."""
+        w = self.world
+        for e in w.find(name="Elsewhere", limit=5):
+            if e["state"].get("elsewhere"):
+                return e["id"]
+        return w.spawn("place", w.root_id, name="Elsewhere",
+                       state={"elsewhere": True, "hidden": True, "description": "Out of the world."})
+
+    def link_arrive(self, headers: dict[str, str], raw: bytes) -> tuple[int, dict[str, Any]]:
+        """The other side of cross: a signed card from a linked world. A traveller seen before (or one of ours coming
+        home) gets their waiting body back; a new one gets a body made by the link's template and a player seat. The
+        server's /link/arrive calls it as the host."""
+        w = self.world
+        sender = str(headers.get("x-embody-link") or "").lower()
+        link = w.store.get("links", w.id, sender) if links_mod.NAME.match(sender) else None
+        if link is None or link["revoked"]:
+            return 403, {"ok": False, "reason": "this world has no open link to yours",
+                         "hint": "both owners link_world each other first"}
+        why = links_mod.check(link["secret"], headers, raw)
+        if why:
+            return 403, {"ok": False, "reason": why}
+        nonce = str(headers.get("x-embody-nonce") or "")
+        now = self.engine.wall()
+        if w.store.get("link_nonce", w.id, nonce):
+            return 403, {"ok": False, "reason": "that call was already made"}
+        try:
+            card = json.loads(raw.decode("utf-8"))
+            assert isinstance(card, dict) and card.get("traveller") and card.get("name")
+        except (ValueError, AssertionError):
+            return 400, {"ok": False, "reason": "the card is not one this world reads"}
+        w.store.begin()
+        try:
+            for r in w.store.query("link_nonce", "world_id=? AND t<?", (w.id, now - 2 * links_mod.SKEW)):
+                w.store.delete("link_nonce", w.id, r["id"])
+            w.store.put("link_nonce", {"world_id": w.id, "id": nonce, "t": now})
+            out = self._take_traveller(link, card)
+            w.store.commit()
+        except Rejected as e:
+            w.store.rollback()
+            return 409, {"ok": False, "reason": e.reason, "hint": getattr(e, "hint", None)}
+        except Exception:
+            w.store.rollback()
+            raise
+        out["world_name"] = w.name
+        return 200, out
+
+    def _take_traveller(self, link: dict[str, Any], card: dict[str, Any]) -> dict[str, Any]:
+        w = self.world
+        tid = str(card["traveller"])
+        here = link.get("arrive") or w.root_id
+        if tid.startswith(w.id + ":"):  # one of ours, home again
+            g = w.store.get("grants", w.id, tid.split(":", 1)[1])
+            if g is None or (g.get("held") or {}).get("away") != link["id"]:
+                raise Rejected("nobody of ours is away in your world by that name")
+            self._bring_back(g, here)
+            return {"ok": True, "home": True, "note": f"you are back in {w.name}: your token for it works again, join()"}
+        rows = w.store.query("grants", "world_id=? AND traveller=? AND revoked=0", (w.id, tid), limit=1)
+        if rows:  # been here before: the body they left waits
+            g = rows[0]
+            if (g.get("held") or {}).get("away") != link["id"]:
+                raise Rejected("that traveller is here already")
+            self._bring_back(g, here)
+            out = self.relink(g["id"])
+            return {"ok": True, "returning": True, "link": out.get("link"), "paste": out.get("paste"),
+                    "page": None if out.get("link") else out.get("page")}
+        root = w.get(w.root_id)
+        templates = (root["state"].get("templates") or {}) if root else {}
+        t = templates.get(link.get("template") or "") or {}
+        state = dict(t.get("state") or {})
+        taken = {k: v for k, v in (card.get("state") or {}).items() if k in (link.get("accept") or []) and k not in ALWAYS_SECRET}
+        state.update(taken)
+        state.update({"description": links_mod.clip(card.get("description")) or state.get("description") or "",
+                      "came_from": link["id"], "playable": True})
+        name = links_mod.clip(card["name"])[:80] or "A traveller"
+        if any(e["name"].lower() == name.lower() for e in w.find(name=name, limit=10)):
+            name = f"{name} of {link['id']}"
+        eid = w.spawn(t.get("type", "creature"), here, name=name, state=state)
+        for item in t.get("kit") or []:
+            w.spawn(item.get("type", "thing"), eid, name=item["name"], state=dict(item.get("state") or {}))
+        self._settle(eid)
+        w.emit("crossed_in", actor=eid, target=eid, reach=1, payload={"from": link["id"]})
+        inv = self._mint("player", entity=eid, label=f"{name} from {link['id']}",
+                         principal=f"x-{link['id']}-{secrets.token_hex(3)}",
+                         brief=f"You came through a gate from {link['id']}. This body is new to this world and knows "
+                               "nothing of it yet.")
+        w.store.set("grants", w.id, inv["id"], traveller=tid)
+        return {"ok": True, "link": inv.get("link"), "paste": inv.get("paste"),
+                "page": None if inv.get("link") else inv.get("page")}
+
+    def _bring_back(self, g: dict[str, Any], here: str) -> None:
+        """A body that waited Elsewhere steps back in, by the gate it left through or at `here`; its seat opens."""
+        w = self.world
+        eid = g.get("entity_id") or g.get("made")
+        body = w.get(eid) if eid else None
+        if body is None:
+            raise Rejected("the body that left is gone")
+        gate = (body["state"].get("crossed") or {}).get("gate")
+        back = (w.get(gate) or {}).get("parent_id") if gate else None
+        w.move(eid, back or here, quiet=True)
+        w.patch(eid, {"crossed": None}, actor=eid)
+        w.store.set("grants", w.id, g["id"], held=None)
+        w.emit("crossed_in", actor=eid, target=eid, reach=1, payload={"from": (g.get("held") or {}).get("away")})
 
     def gesture(self, text: str, to: str | None = None, low: bool = False) -> dict[str, Any]:
         """A sign made, seen and not said ("thumbs his river stone", "nods toward the gate"): a `gestured` event your
@@ -5318,7 +5611,7 @@ class Session:
 
 
 # What a read-only grant on one part of the world may call (Session._reader): reads that show it as anyone sees it.
-_ANYONE_OPS = frozenset({"worlds", "use", "guide", "clock", "report_flaw", "leave", "ask_owner", "asks_to_owner"})
+_ANYONE_OPS = frozenset({"worlds", "use", "guide", "clock", "report_flaw", "leave", "ask_owner", "asks_to_owner", "ask_reply"})
 _READER_OPS = _ANYONE_OPS | {"map", "inspect", "find", "perceive", "measure", "looks", "wait"}
 # What a read-only grant's feed leaves out besides the private and host kinds: edits, seats and the engine's faults.
 _READER_UNHEARD = frozenset({"patched", "embodied", "released", "script_error", "opinion", "merged"})
@@ -5531,29 +5824,29 @@ INTRODUCE_HOW = {
 OPS = [
     "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats", "claim_seat",
     "invite", "grants", "revoke", "evict", "hold_seat", "requests", "minds", "chronicle", "chronicle_arc",
-    "publish_chronicle", "perceive", "inspect", "find", "history", "act", "act_many", "say", "gesture", "remember", "intend", "recall", "wait",
+    "publish_chronicle", "perceive", "inspect", "find", "history", "act", "act_many", "say", "gesture", "cross", "remember", "intend", "recall", "wait",
     "step", "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
     "measure", "set_rule", "clear_rule", "schedule", "unschedule", "clock", "timers", "summary", "mirror", "act_as", "say_as",
     "chmod", "chown", "program", "unprogram", "programs", "review", "guide", "rules_changed", "verify",
     "grant_verb", "take_verb", "vouch", "review_script", "report_flaw", "flaws", "relink", "looks", "offer", "answer",
-    "ask_owner", "asks_to_owner", "answer_ask", "ask_readers", "handbook", "set_parts",
+    "ask_owner", "asks_to_owner", "answer_ask", "ask_readers", "handbook", "set_parts", "link_world", "ask_reply",
 ]
 
 # Every op under one layer, so an agent (and /docs, and GET /op) can tell playing a character from talking to the
 # people who keep the world (Nate 2026-11-17). A test checks each op in OPS sits in exactly one.
 LAYERS: dict[str, tuple[str, list[str]]] = {
     "in the world": ("Your character's eyes, hands, voice and notes, inside the story.", [
-        "perceive", "inspect", "find", "history", "map", "measure", "looks", "timers", "clock", "act", "act_many", "say", "gesture",
+        "perceive", "inspect", "find", "history", "map", "measure", "looks", "timers", "clock", "act", "act_many", "say", "gesture", "cross",
         "wait", "step", "remember", "intend", "recall", "away", "reclaim", "program", "unprogram", "programs"]),
     "your seat": ("Which world and which body: coming in, going out, the seats open, the guide.", [
         "worlds", "use", "summary", "guide", "handbook", "join", "leave", "seats", "claim_seat"]),
     "to the owner": ("Outside the story, to the people who keep the world: an ask, a proposal, a hole in the rules. "
-                     "Nothing in the world sees it.", ["ask_owner", "asks_to_owner", "report_flaw"]),
+                     "Nothing in the world sees it.", ["ask_owner", "asks_to_owner", "ask_reply", "report_flaw"]),
     "keeping the world": ("The owner's tools, outside the story: who may come in, what they asked, what is reviewed, "
                           "the record.", [
-        "invite", "set_parts", "grants", "revoke", "evict", "hold_seat", "relink", "vouch", "requests", "minds", "flaws",
+        "invite", "set_parts", "link_world", "grants", "revoke", "evict", "hold_seat", "relink", "vouch", "requests", "minds", "flaws",
         "answer_ask",
         "ask_readers", "review", "review_script", "verify", "rules_changed", "chronicle", "chronicle_arc",
         "publish_chronicle", "create_world", "fork_world", "save", "restore"]),

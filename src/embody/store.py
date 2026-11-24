@@ -142,6 +142,22 @@ CREATE TABLE IF NOT EXISTS rules_change (
     PRIMARY KEY (world_id, id)
 );
 CREATE INDEX IF NOT EXISTS rules_change_version ON rules_change (world_id, version);
+CREATE TABLE IF NOT EXISTS links (
+    world_id TEXT NOT NULL, id TEXT NOT NULL,
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL,
+    accept TEXT NOT NULL DEFAULT '[]',
+    template TEXT,
+    arrive TEXT,
+    created REAL NOT NULL,
+    revoked INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (world_id, id)
+);
+CREATE TABLE IF NOT EXISTS link_nonce (
+    world_id TEXT NOT NULL, id TEXT NOT NULL,
+    t REAL NOT NULL,
+    PRIMARY KEY (world_id, id)
+);
 CREATE TABLE IF NOT EXISTS seat_offer (
     world_id TEXT NOT NULL, id TEXT NOT NULL,
     entity_id TEXT NOT NULL,
@@ -160,7 +176,7 @@ _ADDED_COLS = {"principal": (("role", "TEXT"), ("grant_id", "TEXT"), ("last_seen
                "grants": (("brief", "TEXT"), ("code_hash", "TEXT"), ("code_expires", "REAL"), ("page", "TEXT"),
                           ("limits", "TEXT"), ("parent_id", "TEXT"), ("slots", "INTEGER"),
                           ("made", "TEXT"), ("vouched", "INTEGER"), ("spent_hash", "TEXT"), ("held", "TEXT"),
-                          ("parts", "TEXT"))}
+                          ("parts", "TEXT"), ("traveller", "TEXT"))}
 
 JSON_COLS = {
     "world": {"counters", "meta"},
@@ -175,6 +191,8 @@ JSON_COLS = {
     "grants": {"scope", "limits", "held", "parts"},
     "rules_change": {"recheck", "guide", "retired"},
     "seat_offer": set(),
+    "links": {"accept"},
+    "link_nonce": set(),
 }
 
 

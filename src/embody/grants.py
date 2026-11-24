@@ -22,10 +22,10 @@ ORACLE = "oracle"
 ROLES = (OWNER, AUTHOR_ROLE, BUILDER, NARRATOR, PLAYER, MIND, OBSERVER_ROLE, ORACLE)
 
 # Ops by what they are for. A role is a union of these.
-_ANYONE = {"worlds", "use", "summary", "seats", "leave", "clock", "guide", "handbook", "report_flaw", "ask_owner", "asks_to_owner", "answer_ask"}
+_ANYONE = {"worlds", "use", "summary", "seats", "leave", "clock", "guide", "handbook", "report_flaw", "ask_owner", "asks_to_owner", "answer_ask", "ask_reply"}
 _PLAY = {"join", "perceive", "inspect", "find", "history", "act", "act_many", "say", "gesture", "remember", "intend", "recall", "wait",
          "step", "timers", "reclaim", "away", "program", "unprogram", "programs", "claim_seat", "looks",
-         "relate", "unrelate"}  # relate for a seat: its own bonds, of the kinds the world's root lists
+         "relate", "unrelate", "cross"}  # relate for a seat: its own bonds, of the kinds the world's root lists
 _WATCH = {"perceive", "inspect", "find", "history", "recall", "timers", "schemas", "scripts", "script_source", "wait",
           "map", "measure", "verify", "looks"}
 _NARRATE = {"act_as", "say_as", "minds", "timers", "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "layout",
@@ -34,9 +34,9 @@ _AUTHOR = _NARRATE | _WATCH | {"create_world", "fork_world", "save", "restore", 
                                "set_rule", "clear_rule", "mirror", "chronicle", "chronicle_arc", "publish_chronicle", "review",
                                "rules_changed", "grant_verb", "take_verb"}
 _OWN = _AUTHOR | {"invite", "grants", "revoke", "evict", "hold_seat", "requests", "vouch", "review_script", "flaws", "relink",
-                  "ask_readers", "set_parts"}
+                  "ask_readers", "set_parts", "link_world"}
 # The ops that reach the whole world at once, never a builder's: a builder works inside its plot while the world plays.
-_WORLDWIDE = {"minds", "create_world", "fork_world", "save", "restore", "mirror", "chronicle", "chronicle_arc",
+_WORLDWIDE = {"minds", "create_world", "fork_world", "save", "restore", "mirror", "chronicle", "chronicle_arc", "link_world",
               "publish_chronicle", "rules_changed"}
 
 ROLE_OPS: dict[str, frozenset[str]] = {

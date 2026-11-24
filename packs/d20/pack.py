@@ -221,7 +221,8 @@ RULES = [
      "was": "A held seat gone idle (a player or a mind on a watcher) was walked back to its post, a template's or an "
             "old water walk's, even where its player had walked it on purpose.",
      "now": "A held seat gone idle walks only for water, and back only to the place it left for it, while its player "
-            "has done nothing since. A post is for a body nobody holds.",
+            "has done nothing since. A post is for a body nobody holds. A body whose state says `stays` drinks what "
+            "is at hand and is never walked, for water or a post.",
      "recheck": ["watch filters that expect a quiet arrived at the post", "minds that count on idle care to bring them home"],
      "guide": ["player", "mind"]},
 ]
