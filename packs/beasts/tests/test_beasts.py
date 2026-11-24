@@ -432,7 +432,7 @@ def test_a_played_goat_grazes_the_herds_forage_once_in_six_hours(wild):
     ev = next(e for e in r["events"] if e["kind"] == "grazed")
     assert ev["payload"]["left"] == 5 and ev["payload"]["fed"] == 2 and r["duration"] == 600
     assert st(gm, "Ridge")["forage"]["graze"]["left"] == 5  # the herd's own forage
-    with pytest.raises(Rejected, match="you can graze again in about 360 s"):  # six world hours at 60x
+    with pytest.raises(Rejected, match="you can graze again in about 6 minutes"):  # six world hours at 60x
         kid.act("graze")
     gm.clock(step=6 * 3600 + 1)
     kid.act("graze")

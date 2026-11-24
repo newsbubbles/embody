@@ -176,6 +176,37 @@ def test_idle_grant_holder_lapses_and_the_seat_frees():
     assert eng.tick_all()["released"] == {}
 
 
+def test_a_player_sets_its_own_seats_lapse_up_to_the_worlds_max():
+    # 2026-11-24, a player's agent: a seat lapsed at 901 quiet seconds in the middle of a night out
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    w.set_meta({"claim_lapse": 900})
+    wall = [1000.0]
+    eng.wall = lambda: wall[0]
+    a = eng.session_for_token(gm.invite("player", entity="Prisoner", label="a")["token"])
+    a.join()
+    with pytest.raises(Rejected) as r:
+        a.away(lapse=3600)  # the world sets no max: a player may shorten its lapse, never lengthen it
+    assert "900" in r.value.reason and "ask_owner" in r.value.hint
+    assert a.away(lapse=120)["lapse"] == 120
+    wall[0] += 180
+    assert eng.tick_all()["released"] == {"two-rooms": [a.pid]}
+    w.set_meta({"claim_lapse_max": 14400})
+    a.join()
+    assert a.away(lapse=14400)["lapse"] == 14400
+    assert a.away(answer="Back at dawn.")["lapse"] == 14400  # other orders leave it as it is
+    wall[0] += 3 * 3600
+    assert w.principal(a.pid)["entity_id"] == i["Prisoner"] and eng.tick_all()["released"] == {}  # past 3h of quiet
+    wall[0] += 1800
+    assert eng.tick_all()["released"] == {}
+    a.perceive()
+    w.set_meta({"claim_lapse_max": 1800})  # the owner lowers the max: every seat's lapse comes down with it
+    wall[0] += 1900
+    assert eng.tick_all()["released"] == {"two-rooms": [a.pid]}
+    a.join()
+    assert a.away(lapse=0)["lapse"] == 900  # 0: back to the world's
+
+
 def test_template_makes_a_new_character_in_its_place():
     eng, w, i = engine_with_two_rooms()
     gm = owner(eng)

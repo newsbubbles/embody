@@ -27,6 +27,27 @@ def populate(s):
 '''
 
 
+def test_a_follow_ends_when_the_followers_seat_is_given_back(tmp_path):
+    # 2026-11-24, a player's agent: a seat that lapsed mid-night still followed, so its empty body would be led along
+    eng, gm = world(tmp_path)
+    w = gm.world
+    gm.patch("Pell", {"playable": True})
+    wall = [1000.0]
+    eng.wall = lambda: wall[0]
+    pell = eng.session_for_token(gm.invite("player", entity="Pell", label="pell")["token"])
+    pell.join()
+    gm.patch("Pell", {"follows": ident(gm, "Ruhl")})
+    gm.patch("Moss", {"follows": ident(gm, "Ruhl")})  # nobody's seat: it keeps following
+    wall[0] += w.claim_lapse() + 60
+    assert eng.tick_all()["released"] == {"lane": [pell.pid]}
+    gone = [e["payload"] for e in w.events(kinds=["released"], limit=5)][-1]
+    assert gone["let_go"] == ["follows"] and gone["cause"] == "quiet"
+    ruhl = eng.session("ruhl")
+    ruhl.join("lane", "Ruhl")
+    ruhl.act("go", "Road")
+    assert [where(gm, n) for n in ["Ruhl", "Moss", "Pell"]] == ["Road", "Road", "Yard"]  # Pell stays where it was left
+
+
 def world(tmp_path):
     ws = tmp_path / "ws"
     shutil.copytree(REPO / "packs" / "village", ws / "packs" / "village",

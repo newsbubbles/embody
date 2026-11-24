@@ -33,12 +33,15 @@ own, so a world may replace any of them with a file of the same name in its scri
   in its state, or a lit light in hand. It is destroyed, what it held drops where you stand, and the room sees a
   `burned` event and a scene (that it burned, never what it said). Memories and past `read` events are untouched:
   whoever read it keeps it. Bind it with a duration of a few seconds.
-- follow: someone here; when they `go`, you go with them (`state.follows`). stay: stop following.
+- follow: someone here; when they `go`, you go with them (`state.follows`). stay: stop following. A follow ends when
+  the follower's seat is given back (its player left or went quiet: RELEASE_CLEARS), and the body stays where it is.
 - watch: a connected place, without stepping into it: who and what is there now, for your eyes only.
 - a whisper is not a verb: `say(text, to=someone, reach=0)` reaches that one person and nobody else in the room.
 """
 
 PACK = {"name": "village", "description": "go, take, drop, put, give, show, talk, leave_word, read, burn, follow, stay, watch and the dialog-table listener person_on."}
 
-# What the engine reads back from this pack (world.PACK_DECLARES): the chronicle's news kinds.
+# What the engine reads back from this pack (world.PACK_DECLARES): the chronicle's news kinds, and what a seat lets go
+# of when its player goes (a follow ends, so an empty body is not led into fights it never chose).
 CHRONICLE_NEWS = ["burned"]
+RELEASE_CLEARS = ["follows"]

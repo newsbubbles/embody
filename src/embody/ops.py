@@ -715,9 +715,12 @@ class Session:
                            hint="name a world id or a save (save(name) made it); only the host's own process reaches other files")
         return ref
 
-    def use(self, world_id: str) -> dict[str, Any]:
+    def use(self, world_id: str | None = None, world: str | None = None) -> dict[str, Any]:
         """Point this session at a world without embodying anything (authors, observers). The answer says who you are
-        there (`you`: principal and role)."""
+        there (`you`: principal and role). `world` is taken for world_id (an agent called use(world=...), 2026-11-24)."""
+        world_id = world_id or world
+        if not world_id:
+            raise Rejected("use needs the world's id", hint='use(world_id="...") ; worlds() lists them')
         self._own_world(world_id)
         self.engine.world(world_id)
         self.world_id = world_id
@@ -3846,7 +3849,8 @@ class Session:
 
     def away(self, give: list[dict[str, Any]] | None = None, answer: str | None = None,
              entity: str | None = None, sleep: bool = False, patrol: list[str] | None = None,
-             dwell: float | None = None, dialog: dict[str, str] | None = None) -> dict[str, Any]:
+             dwell: float | None = None, dialog: dict[str, str] | None = None,
+             lapse: float | None = None) -> dict[str, Any]:
         """Standing orders for your body while your seat is idle (you went to bed, your mind is on a long watch).
         give=[{"item": <name>, "to": <name> or "anyone"}]: who may reclaim() what from you. answer: one line your
         body says to whoever speaks to it, heard by them alone. Others see them on your card while you are idle.
@@ -3860,7 +3864,11 @@ class Session:
         the way it came), `dwell` world seconds at each (default 120), from now until the seat's next deed. Keep a
         wait(until=...) going and it sees what the body sees wherever it stands (until="len(present) > 0" wakes you
         when anyone is there). dialog={"ferry|crossing": "line", ...}: the body's own answers while the seat is idle,
-        over the author's table; others hear the lines, never the table."""
+        over the author's table; others hear the lines, never the table.
+
+        lapse: real seconds of silence before your seat is given back, your own (60 up to the world's
+        claim_lapse_max; 0 goes back to the world's claim_lapse). It stays with the seat until you set it again or
+        the seat is given back; away() with nothing leaves it as it is."""
         self._tick()
         w = self.world
         eid = self._resolve(entity) if entity else self._me()
@@ -3905,6 +3913,16 @@ class Session:
                                    hint='{"water|well": "Ask Mara at the well."}')
             idle["dialog"] = {str(k).strip().lower(): str(v) for k, v in dialog.items()}
             idle["fresh"] = True  # they answer from now until the seat's next deed, then whenever it is idle
+        if lapse is not None:
+            me = w.principal(self.pid)
+            top = w.claim_lapse_max()
+            if me is None or not me.get("entity_id"):
+                raise Rejected("a lapse is for the seat you hold", hint="join a seat first")
+            if lapse and not 60 <= float(lapse) <= top:
+                raise Rejected(f"a seat's lapse is 60 to {top:g} real seconds in this world (claim_lapse_max)",
+                               hint=f"lapse={top:g}, or ask the owner (ask_owner) for a longer claim_lapse_max")
+            me["lapse"] = float(lapse) or None
+            w.store.put("principal", me)
         if sleep and not w.need(eid)["state"].get("asleep"):
             if "sleep" not in w.schema_actions(w.need(eid)["type"]):
                 raise Rejected("this body has no sleep verb", hint="away() without sleep; a world gets sleep from the sleep pack (or d20's)")
@@ -3921,6 +3939,8 @@ class Session:
                                      "when anyone is where it stands"}
         if idle.get("dialog"):
             out["dialog"] = sorted(idle["dialog"])
+        if w.principal(self.pid) is not None:
+            out["lapse"] = w.seat_lapse(w.principal(self.pid))  # real seconds of silence this seat keeps
         return out
 
     def say(self, text: str, reach: int = 1, to: str | None = None, low: bool = False,

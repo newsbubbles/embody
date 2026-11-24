@@ -5,6 +5,13 @@ Read this before you make or change a world: schemas, scripts, rules, timers, th
 Order: `create_world` > `define_script` > `define_schema` > `spawn` places > `connect` them > spawn contents > `layout` the map > `set_rule(root, ...)` for the storyline > `schedule` timers > `clock(turn=3)` > play it yourself once.
 
 - Read `guide('scripting')` first; it is the full ctx reference.
+- What a world already does, before you ask for an engine change (SKILL.md, "Engine or world?"):
+  - Refuse an act by what it carries (a link in a note, a name, a word): a `before_act` rule on the root sees every act's verb and params and says no with `ctx.reject(reason, hint)`.
+  - Set up each new guest (a plot, a line on a roster): a `before_act` rule makes what a body lacks the first time it acts (or the guest's first verb, a profile, does it); world code, so what it makes is this instance's state, not a line in changes.jsonl. Rules do not hear `embodied`: a join itself runs no world code.
+  - Keep a pace (notes per ten minutes), a trusted list or a counter: state on the root or the body, read and written by your own verbs; `cooldown` on an action for a simple wait.
+  - Ask the new human something (a language, a name to go by): the invite's `brief` carries the question, and a rule holds the verbs until your profile verb has the answer.
+  - Gate who may do what: per-verb access (`verbs: {...}`), `verbs_only`, `canon`, `offer_seat` and `claim_seat` with `seat_slots`.
+  - Names your world keeps for itself: check them in your own rename, profile and join rules.
 - Holder verbs carry `targets` (a type) and a `scope` (`exits`, `here`, `held`, `any`) so players see only possible pairs. Object verbs do not. Give slow verbs a `duration`.
 - Rules are listeners on a place or the root with `kinds=["before_act"]`; `ctx.reject(reason, hint)` is how they say no, in the world's words. A rule installed with `set_rule` hears every event under its entity whatever the reach, so a root rule is the table's rule; schema listeners hear only what bubbles past them. A holder verb with `self: true` may also target the actor (`wake`, `check`).
 - Ambient facts: an `ambient` dict on the root (`time_of_day`, `weather`, `light`) and one on any place that differs; perceive shows them merged. Drive them with timers (`schedule`, `timers`, `unschedule`) and a root rule that patches them and emits `scene` events.

@@ -194,9 +194,10 @@ BODY_KEYS = frozenset({"sheet", "attributes", "skills", "xp", "body", "wits", "w
 CATCH_UP_MAX = 20000
 
 # What a pack's pack.py may declare for the engine to read back, so the core names no pack's mechanics: body keys only
-# the rules write (BODY_KEYS), the chronicle's routine and news kinds, and a condition's way out ({condition: text}).
+# the rules write (BODY_KEYS), the chronicle's routine and news kinds, a condition's way out ({condition: text}), and
+# the body keys a released seat lets go of (RELEASE_CLEARS: village's `follows`, so an empty body is not led along).
 # install_pack keeps them in the world's meta under `pack_declares`; World.declared merges them.
-PACK_DECLARES = ("BODY_KEYS", "CHRONICLE_ROUTINE", "CHRONICLE_NEWS", "WAYS_OUT")
+PACK_DECLARES = ("BODY_KEYS", "CHRONICLE_ROUTINE", "CHRONICLE_NEWS", "WAYS_OUT", "RELEASE_CLEARS")
 
 
 class EntityView(ScriptObject):
@@ -2541,12 +2542,12 @@ class World:
             wait = self.strike_wait(actor_id, target_id)
             if wait > 0:
                 name = self.need(target_id)["name"] or target_id
-                raise Rejected(f"you can strike {name} again in about {self._real_s(wait)} s",
+                raise Rejected(f"you can strike {name} again in about {self._wait_words(wait)}",
                                hint="a blow takes its time: do something else, or wait (it shows in perceive)")
         if adef.get("cooldown"):
             wait = self.verb_wait(actor_id, verb)
             if wait > 0:
-                raise Rejected(f"you can {verb} again in about {self._real_s(wait)} s",
+                raise Rejected(f"you can {verb} again in about {self._wait_words(wait)}",
                                hint="that takes its time: do something else, or wait")
         for k, n in (adef.get("cost") or {}).items():
             have = self.need(actor_id)["state"].get(k)
@@ -2586,8 +2587,13 @@ class World:
             ctx._trial = bool(adef.get("trial"))
             before = self.store.conn.total_changes
             try:
-                res = ctx.run(s, "check", [ctx], fuel=5_000)
+                # a check that reads a big state may ask for more, as apply does: `check_fuel`, else the action's `fuel`
+                res = ctx.run(s, "check", [ctx], fuel=min(int(adef.get("check_fuel") or adef.get("fuel") or 5_000), 1_000_000))
             except ScriptError as e:
+                if "out of fuel" in e.reason:
+                    raise Rejected(f"the world's check for {verb!r} ran out of fuel: its script does too much for one "
+                                   "check, not your call", hint="report_flaw so the owner raises the action's "
+                                   "check_fuel (or fuel); a smaller call will not help") from None
                 raise Rejected(f"check for {verb!r} failed: {e.reason}", hint=e.hint) from None
             if ctx._trial and self.store.conn.total_changes != before:
                 raise Rejected(f"{verb} waits for the owner's review: until then it may only look, and this run would change the world", hint="it runs in full once the owner approves it (review(thing, verb)); until then use it to look, or ask the owner")
@@ -2758,6 +2764,19 @@ class World:
         """World seconds as the real seconds a player waits."""
         rate = self.clock()["rate"] or 1
         return max(1, round(world_s / rate))
+
+    def _wait_words(self, world_s: float) -> str:
+        """The real wait as a person says it: "45 s", "6 minutes", "an hour", "3 hours", "2 days"."""
+        s = self._real_s(world_s)
+        if s < 120:
+            return f"{s} s"
+        if s < 3300:
+            return f"{round(s / 60)} minutes"
+        if s < 5400:
+            return "an hour"
+        if s < 129600:
+            return f"{round(s / 3600)} hours"
+        return f"{round(s / 86400)} days"
 
     def in_sight(self, actor_id: str) -> list[str]:
         """The creatures one way over that a body can see (scope "sight": a bow, a thrown spear): through a way it
@@ -3129,7 +3148,7 @@ class World:
                "entity_id": entity_id,
                "cursor_seq": ecur if ecur is not None else (old["cursor_seq"] if old else self.store.next_seq(self.id) - 1),
                "role": role or (old.get("role") if old else None), "grant_id": grant_id or (old.get("grant_id") if old else None),
-               "last_seen": now, "acted_t": self.t}
+               "last_seen": now, "acted_t": self.t, "lapse": old.get("lapse") if old else None}
         self.store.put("principal", row)
         self.emit("embodied", actor=entity_id, target=entity_id, reach=1,
                   payload={"principal": principal_id, "as": kind})
@@ -3144,8 +3163,14 @@ class World:
             return
         self.store.delete("principal", self.id, principal_id)
         if p["entity_id"]:
+            # what the packs say a seat lets go of when its player goes (RELEASE_CLEARS: village's follows), so the body
+            # stays where it was left and is not led into what its player never chose
+            body = self.get(p["entity_id"])
+            keys = sorted(k for k in self.declared("RELEASE_CLEARS") if body and body["state"].get(k) is not None)
+            if keys:
+                self.patch(p["entity_id"], {k: None for k in keys})
             self.emit("released", actor=p["entity_id"], target=p["entity_id"], reach=1,
-                      payload={"principal": principal_id, "cause": cause, **why})
+                      payload={"principal": principal_id, "cause": cause, **why, **({"let_go": keys} if keys else {})})
 
     def principal(self, principal_id: str) -> dict[str, Any] | None:
         return self.store.get("principal", self.id, principal_id)
@@ -3153,6 +3178,17 @@ class World:
     def claim_lapse(self) -> float:
         """Real seconds of silence after which an invited principal's seat is released (world meta `claim_lapse`)."""
         return float(self._row["meta"].get("claim_lapse", 900.0))
+
+    def claim_lapse_max(self) -> float:
+        """The longest lapse a player may set on its own seat (away(lapse=)): world meta `claim_lapse_max`, never less
+        than claim_lapse, so a world that sets none lets a player shorten its lapse and never lengthen it."""
+        return max(self.claim_lapse(), float(self._row["meta"].get("claim_lapse_max") or 0.0))
+
+    def seat_lapse(self, p: dict[str, Any] | None) -> float:
+        """A seat's own lapse: what its player set with away(lapse=), up to the world's claim_lapse_max (read now, so
+        an owner who lowers the max lowers every seat's), else the world's claim_lapse."""
+        own = (p or {}).get("lapse")
+        return min(float(own), self.claim_lapse_max()) if own else self.claim_lapse()
 
     def sleep_lapse(self) -> float:
         """Real seconds of silence a seat keeps while its body is asleep (sleep, or away(sleep=true)): world meta
@@ -3276,7 +3312,7 @@ class World:
         quiet = now - float(p["last_seen"])
         body = self.get(p["entity_id"]) if p.get("entity_id") else None
         asleep = bool(body and body["state"].get("asleep"))
-        if quiet <= (self.sleep_lapse() if asleep else self.claim_lapse()):
+        if quiet <= (max(self.sleep_lapse(), self.seat_lapse(p)) if asleep else self.seat_lapse(p)):
             return None
         return {"cause": "quiet", "quiet_s": round(quiet), **({"asleep": True} if asleep else {})}
 

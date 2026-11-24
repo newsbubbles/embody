@@ -182,3 +182,49 @@ def test_a_hosts_look_through_a_held_body_leaves_its_cursor_alone():
     seen = gm.perceive(from_entity="Prisoner", events=5)
     assert any(e["kind"] == "say" for e in seen["events"])  # the last few, not "since he last looked"
     assert gm.world.entity_cursor(body) == before  # and his own cursor did not move
+
+
+def test_a_long_wait_reads_in_minutes_and_hours_and_a_heavy_check_may_ask_for_fuel(tmp_path):
+    # 2026-11-24, a world builder: "press again in about 3600 s", and a full profile ran out of fuel in check while
+    # the hint told the agent to split its call
+    from embody.workspace import Workspace
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.clock(run=True, rate=1)
+    gm.define_script("press", "def apply(ctx):\n    ctx.emit('pressed', target=ctx.actor, reach=1)\n")
+    gm.define_script("heavy", "def check(ctx):\n    n = 0\n    for k in range(4000):\n        n = n + k\n    return True\n"
+                     "\ndef apply(ctx):\n    ctx.emit('weighed', target=ctx.actor, reach=1)\n")
+    gm.define_schema("presser", extends="creature", actions={"press": {"script": "press", "reach": "self", "cooldown": 3600},
+                                                              "weigh": {"script": "heavy", "reach": "self"},
+                                                              "lift": {"script": "heavy", "reach": "self", "check_fuel": 50_000}})
+    gm.spawn("presser", "Hall", "Pim", state={"playable": True})
+    sam = eng.session("sam")
+    sam.join("two-rooms", "Pim")
+    sam.act("press")
+    with pytest.raises(Rejected, match="you can press again in about an hour"):
+        sam.act("press")
+    with pytest.raises(Rejected) as r:
+        sam.act("weigh")
+    assert "ran out of fuel" in r.value.reason and "not your call" in r.value.reason and "check_fuel" in r.value.hint
+    assert sam.act("lift")["ok"]
+    assert w._wait_words(100) == "100 s" and w._wait_words(360) == "6 minutes" and w._wait_words(3 * 3600) == "3 hours"
+    # use(world=...) as well as use(world_id=...), and a bare use() names what it needs
+    assert eng.session("o", role="observer").use(world="two-rooms")["you"]
+    with pytest.raises(Rejected, match="world's id"):
+        eng.session("o2", role="observer").use()
+    # git_init walks the real folder: a world folder linked in from its own repository makes no nested one
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    (repo / "world").mkdir()
+    link = tmp_path / "ws" / "worlds" / "linked"
+    link.parent.mkdir(parents=True)
+    try:
+        link.symlink_to(repo / "world", target_is_directory=True)
+    except OSError:
+        try:
+            import _winapi  # a Windows junction needs no developer mode
+            _winapi.CreateJunction(str(repo / "world"), str(link))
+        except (ImportError, OSError):
+            pytest.skip("this machine cannot make a directory link")
+    assert Workspace(tmp_path / "ws").git_init(link) == f"inside {repo.resolve()}"
+    assert not (repo / "world" / ".git").exists()

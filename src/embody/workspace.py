@@ -151,7 +151,9 @@ class Workspace:
         return {"folder": str(d), "made": made}
 
     def git_init(self, folder: Path) -> str:
-        """Start a repository in the folder unless it already sits inside one. Returns what happened."""
+        """Start a repository in the folder unless it already sits inside one. Returns what happened. The walk is on
+        the resolved folder: a world folder linked in from its own repository is inside that one, not the link's."""
+        folder = Path(folder).resolve()
         for p in [folder] + list(folder.parents):
             if (p / ".git").exists():
                 return f"inside {p}"

@@ -66,7 +66,7 @@ Builtins: `len min max abs int float str bool list dict tuple set sorted range r
 
 Methods: the usual ones on `str`, `list`, `dict`, `tuple`, `set` (`lower`, `split`, `join`, `append`, `get`, `items`...).
 
-Not available: `import`, `class`, `try`, `with`, `lambda`, `yield`, `global`, nested `def`, `*args`, `**kwargs`, decorators, anything starting with `_`. Each call has a fuel budget (about 20k to 50k operations); a runaway loop is an error, not a hang. A verb that walks a long list may ask for more with `fuel` on its action (at most a million).
+Not available: `import`, `class`, `try`, `with`, `lambda`, `yield`, `global`, nested `def`, `*args`, `**kwargs`, decorators, anything starting with `_`. Each call has a fuel budget (about 20k to 50k operations); a runaway loop is an error, not a hang. A verb that walks a long list may ask for more with `fuel` on its action (at most a million); its `check` gets the same, or its own `check_fuel` (a check alone has 5,000 otherwise). A check that runs out tells the agent the world's script is at fault, not its call.
 
 ## ctx
 

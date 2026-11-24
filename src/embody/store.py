@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS principal (
     grant_id TEXT,
     last_seen REAL,
     acted_t REAL,
+    lapse REAL,
     PRIMARY KEY (world_id, id)
 );
 CREATE TABLE IF NOT EXISTS grants (
@@ -172,7 +173,8 @@ CREATE TABLE IF NOT EXISTS seat_offer (
 """
 
 # Columns added after a table was first shipped: a database from before gets them on open.
-_ADDED_COLS = {"principal": (("role", "TEXT"), ("grant_id", "TEXT"), ("last_seen", "REAL"), ("acted_t", "REAL")),
+_ADDED_COLS = {"principal": (("role", "TEXT"), ("grant_id", "TEXT"), ("last_seen", "REAL"), ("acted_t", "REAL"),
+                              ("lapse", "REAL")),
                "grants": (("brief", "TEXT"), ("code_hash", "TEXT"), ("code_expires", "REAL"), ("page", "TEXT"),
                           ("limits", "TEXT"), ("parent_id", "TEXT"), ("slots", "INTEGER"),
                           ("made", "TEXT"), ("vouched", "INTEGER"), ("spent_hash", "TEXT"), ("held", "TEXT"),
