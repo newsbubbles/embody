@@ -340,3 +340,23 @@ def test_a_frames_machine_lifts_loose_stone_where_it_stands_and_nothing_else():
         with pytest.raises(Rejected) as r:
             nate.act("crane", "Cart", {"id": thing})
         assert "reaches only the thing it runs on" in r.value.reason or "not here" in r.value.reason or "nothing" in r.value.reason
+
+
+def test_a_limited_authors_program_reaches_only_under_its_grant_and_its_code_carries_the_limits():
+    # 2026-11-24, a world's own owner seat: program was not among the held writes, so an author limited to one bay put
+    # unlimited code on things anywhere in the world, held back only by the owner's review
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    gm.spawn("thing", "Hall", name="Bell")
+    inv = gm.invite("author", label="Ada", limits={"under": "Hall"}, vouched=True)
+    ada = eng.session_for_token(inv["token"])
+    ada.use("two-rooms")
+    out = call(ada, "program", thing="Rusty key", verb="hail", source=HAIL)
+    assert out["ok"] is False and "only under Hall" in out["reason"]
+    out = ada.program("Bell", "hail", HAIL)
+    assert out["limits"]["under"] == i["Hall"] and not out["pending"]
+    assert w.script(out["script"]).limits["under"] == i["Hall"]
+    assert call(ada, "unprogram", thing="Rusty key", verb="hail")["ok"] is False
+    ring = gm.program("Rusty key", "ring", HAIL)  # the owner programs anything, unlimited
+    assert ring["limits"] is None and not w.script(ring["script"]).limits
+    assert "only under Hall" in call(ada, "unprogram", thing="Rusty key", verb="ring")["reason"]

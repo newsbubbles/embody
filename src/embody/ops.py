@@ -607,6 +607,8 @@ class Session:
                 need(item[0].get("entity_id"))
         elif op in ("remember", "intend") and args.get("entity"):
             need(args["entity"])
+        elif op in ("program", "unprogram"):
+            need(args["thing"])
         elif op in ("set_rule", "clear_rule"):
             need(args["entity"])
             named(args["script"], "scripts")
@@ -5110,7 +5112,9 @@ class Session:
                     raise Rejected(f"{f['name']} has made {len(recent)} verbs this hour, its most", hint="wait a while")
             pre = str(m.get("scripts") or f"maker_{f['id']}_")
             limits = {"under": "self", "frame": f["id"], "scripts": pre}
-        sid = f"{limits['scripts'] if limits else 'program_'}{verb}_{eid}"
+        elif self.limits:
+            limits = dict(self.limits)  # a limited grant's code carries its grant's limits, as define_script's does
+        sid = f"{(limits or {}).get('scripts') or 'program_'}{verb}_{eid}"
         src = source.split("\n", 1)[1] if source.startswith(LIMITS_HEAD) and "\n" in source else source
         text = LIMITS_HEAD + json.dumps(limits, sort_keys=True) + "\n" + src if limits else src
         try:
@@ -6039,7 +6043,8 @@ def allowed_ops(role: str) -> frozenset[str]:
 # Ops that write where canon and a grant's limits are checked before they run (Session._hold).
 _HELD = frozenset({"spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "schedule", "layout",
                    "unschedule", "act_as", "say_as", "remember", "intend", "set_rule", "clear_rule", "define_script",
-                   "define_schema", "clock", "create_world", "fork_world", "save", "restore", "mirror", "chmod", "chown"})
+                   "define_schema", "clock", "create_world", "fork_world", "save", "restore", "mirror", "chmod", "chown",
+                   "program", "unprogram"})
 
 
 def _guard(name: str, fn: Callable[..., Any]) -> Callable[..., Any]:
