@@ -175,6 +175,7 @@ def test_the_chronicle_feed_tells_only_what_happened_in_the_open():
     w.emit("scene", target=i["Hall"], payload={"text": "You dream of the sea.", "dream": True})
     w.emit("scene", target=i["Hall"], payload={"text": "Only the guard sees it.", "seen_by": [i["Guard"]]})
     w.emit("scene", target=i["Hall"], payload={"text": "The hall's torches gutter."})
+    w.emit("scene", target=i["Hall"], payload={"text": "A slate says a name aloud.", "public": False})
     site = Site(eng, w.id)
     assert [e["text"] for e in site.chronicle()["entries"]] == ["Rain on the cell's one window.", "The hall's torches gutter."]
     w.set_meta({"public_exclude": [i["Hall"]]})  # the world fences a region off: the hall and what is in it

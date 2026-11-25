@@ -201,8 +201,7 @@ class Site:
         day = float(meta.get("day_seconds") or 86400)
         kinds = [str(k) for k in (meta.get("public_chronicle") or ["scene"])]
         marks = ",".join("?" * len(kinds))
-        rows = w.store.query("event", f"world_id=? AND kind IN ({marks}) AND reach != 0", [w.id, *kinds],
-                             order="seq DESC", limit=400)
+        rows = w.store.query("event", f"world_id=? AND kind IN ({marks})", [w.id, *kinds], order="seq DESC", limit=400)
         is_open = self._open(w, meta)
         entries, told = [], set()
         for r in reversed(rows):
@@ -224,8 +223,8 @@ class Site:
 
     @staticmethod
     def _open(w: Any, meta: dict[str, Any]) -> Any:
-        """Whether a scene was told in the open, for anyone to read: not to one body (reach 0, kept out by the query),
-        not veiled (`seen_by`), not a dream, and no place or body in it (its path then, its actor, and its target's
+        """Whether a scene was told in the open, for anyone to read: not to one body (reach 0), not veiled (`seen_by`),
+        not a dream, not one its world marked `public: false`, and no place or body in it (its path then, its actor, and its target's
         places now) hidden then or now, or one of the world's own fences (meta `public_exclude`: ids of places, whose
         insides stay off the feed too)."""
         from .ops import hidden_when
@@ -239,7 +238,7 @@ class Site:
 
         def is_open(r: dict[str, Any]) -> bool:
             p = r.get("payload") or {}
-            if p.get("seen_by") is not None or p.get("dream"):
+            if r.get("reach") == 0 or p.get("seen_by") is not None or p.get("dream") or p.get("public") is False:
                 return False
             ids = list(r.get("path") or [])
             if r.get("actor_id"):
