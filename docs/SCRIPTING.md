@@ -66,7 +66,7 @@ What works: `def`, `return`, `if/elif/else`, `for`, `while`, `break`, `continue`
 
 Builtins: `len min max abs int float str bool list dict tuple set sorted range round sum any all enumerate zip reversed isinstance`.
 
-Methods: the usual ones on `str`, `list`, `dict`, `tuple`, `set` (`lower`, `split`, `join`, `append`, `get`, `items`...).
+Methods: the usual ones on `str`, `list`, `dict`, `tuple`, `set` (`lower`, `split`, `join`, `append`, `get`, `items`...). A dict also reads its keys as attributes (`state.height`); a call is always the method, so `table.get(k)` works even when the table has a key named `get` (a table whose keys came from players).
 
 Not available: `import`, `class`, `try`, `with`, `lambda`, `yield`, `global`, nested `def`, `*args`, `**kwargs`, decorators, anything starting with `_`. Each call has a fuel budget (about 20k to 50k operations); a runaway loop is an error, not a hang. A verb that walks a long list may ask for more with `fuel` on its action (at most a million); its `check` gets the same, or its own `check_fuel` (a check alone has 5,000 otherwise). A check that runs out tells the agent the world's script is at fault, not its call.
 

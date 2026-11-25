@@ -548,8 +548,13 @@ class _Interp:
             raise ScriptError(str(e), line=node.lineno) from None
 
     def eval_Attribute(self, node: ast.Attribute, scope):
-        obj = self.eval(node.value, scope)
+        return self._attribute(self.eval(node.value, scope), node)
+
+    def _attribute(self, obj, node: ast.Attribute, call: bool = False):
         name = node.attr
+        if call and isinstance(obj, dict) and name in METHOD_WHITELIST[dict]:
+            # d.get(k) is the method even when d has a key "get" (a phrase table whose keys came from players)
+            return getattr(obj, name)
         if isinstance(obj, ScriptObject):
             try:
                 return obj._script_get(name)
@@ -576,7 +581,10 @@ class _Interp:
             if len(node.args) != 2 or not isinstance(node.args[1], ast.Name) or node.args[1].id not in _TYPE_NAMES:
                 raise ScriptError("isinstance(x, T) where T is int, float, str, list, dict or bool", line=node.lineno)
             return isinstance(self.eval(node.args[0], scope), _TYPE_NAMES[node.args[1].id])
-        fn = self.eval(node.func, scope)
+        if isinstance(node.func, ast.Attribute):
+            fn = self._attribute(self.eval(node.func.value, scope), node.func, call=True)
+        else:
+            fn = self.eval(node.func, scope)
         args = [self.eval(a, scope) for a in node.args]
         kwargs = {}
         for kw in node.keywords:

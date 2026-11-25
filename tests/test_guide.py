@@ -71,9 +71,13 @@ def test_a_watch_is_checked_when_it_is_armed():
     p.join("two-rooms", "Prisoner")
     with pytest.raises(Rejected, match="cannot read payload"):
         p.wait(until="heard('x') and payload", timeout=0)
-    with pytest.raises(Rejected, match="key 'payload' not found.*when armed"):
-        p.wait(until="heard('x') and events[-1]['payload'] == 1", timeout=0)
+    with pytest.raises(Rejected, match="key 'amount' not found.*when armed"):
+        p.wait(until="heard('x') and events[-1]['amount'] == 1", timeout=0)
     assert p.wait(until="any(e['kind'] == 'say' for e in events)", timeout=0)["timed_out"]
+    # each event carries its payload as the waiter perceives it (a world's keeper, 2026-11-24)
+    since = w.store.next_seq(w.id) - 1
+    p.act("take", "Rusty key")
+    assert p.wait(until="any(e['payload'].get('verb') == 'take' for e in events)", timeout=0, since=since)["fired"]
 
 
 def test_a_url_door_reads_the_token_from_the_environment(monkeypatch):

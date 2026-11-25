@@ -27,16 +27,27 @@ BASE_TYPE = "entity"
 
 
 class Rejected(Exception):
-    """An op could not be done. Says why, what is true instead, and what would work."""
+    """An op could not be done. Says why, what is true instead, and what would work.
 
-    def __init__(self, reason: str, hint: str | None = None, alternatives: list[str] | None = None):
+    `layer` says which part to change (a mind's harness asked, 2026-11-24, to branch on it without reading the words):
+    `call` (the call's own shape: an op or param that does not exist, a target missing), `target` (what it names:
+    nothing by that name, not in reach, the wrong kind, no such verb on it), or `rule` (the world said no: the default).
+    `code` is one stable word for the case; `param` the param at fault, `accepts` what would be taken instead."""
+
+    def __init__(self, reason: str, hint: str | None = None, alternatives: list[str] | None = None,
+                 layer: str | None = None, code: str | None = None, param: str | None = None,
+                 accepts: list[str] | None = None):
         self.reason = reason
         self.hint = hint
         self.alternatives = alternatives or []
+        self.layer, self.code, self.param, self.accepts = layer, code, param, accepts
         super().__init__(reason)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"ok": False, "reason": self.reason, "hint": self.hint, "alternatives": self.alternatives}
+        return {"ok": False, "reason": self.reason, "hint": self.hint, "alternatives": self.alternatives,
+                "layer": self.layer or "rule", "code": self.code or "refused",
+                **({"param": self.param} if self.param else {}),
+                **({"accepts": self.accepts} if self.accepts is not None else {})}
 
 
 class _Stop(Exception):
@@ -1826,8 +1837,9 @@ class World:
             self.emit("regrouped", actor=actor, target=id, reach=0, caused_by=caused_by, payload={"from": old, "to": parent})
             return
         if old != parent:
-            # it arrived: where the one who put it down stands, or where the way comes in; else somewhere in the new
-            # place until someone places it (positions.py, DESIGN.md section 8, Layout)
+            # it arrived: where the one who put it down stands, where the way comes in, by the door's landmark, or near
+            # the place's centre; else somewhere in the new place until someone places it (positions.py, DESIGN.md
+            # section 8, Layout)
             from .positions import arrival
             lay = e["state"].get("layout") if isinstance(e["state"].get("layout"), dict) else {}
             spot = spot_at if spot_at is not None else arrival(self, e, old, parent)
@@ -2282,9 +2294,11 @@ class World:
         if verb in acts:
             tt = acts[verb].get("targets")
             if tt is not None and target_id is None:
-                raise Rejected(f"{verb} needs a target", hint=f"{verb} works on a {tt}; pick one perceive lists")
+                raise Rejected(f"{verb} needs a target", hint=f"{verb} works on a {tt}; pick one perceive lists",
+                               layer="call", code="missing_target")
             if tt not in (None, "any") and target_id and not self.is_a(self.need(target_id)["type"], tt):
-                raise Rejected(f"you can only {verb} a {tt}, and {target_id} is a {self.need(target_id)['type']}")
+                raise Rejected(f"you can only {verb} a {tt}, and {target_id} is a {self.need(target_id)['type']}",
+                               layer="target", code="wrong_target_type")
             return acts[verb], actor_id
         prog = own_verbs(actor).get(verb) if target_id and target_id != actor_id else None
         if isinstance(prog, dict) and prog.get("script") and prog.get("targets"):
@@ -2293,13 +2307,14 @@ class World:
                 raise Rejected(f"{verb} waits for the owner's review", hint="try it again once the owner has looked at it")
             tt = prog["targets"]
             if tt != "any" and not self.is_a(self.need(target_id)["type"], tt):
-                raise Rejected(f"you can only {verb} a {tt}, and {target_id} is a {self.need(target_id)['type']}")
+                raise Rejected(f"you can only {verb} a {tt}, and {target_id} is a {self.need(target_id)['type']}",
+                               layer="target", code="wrong_target_type")
             return _programmed(prog), actor_id
         known = sorted(set(self.own_actions(actor)) |
                        (set(self.schema_actions(self.need(target_id)["type"])) if target_id else set()))
         raise Rejected(f"no action {verb!r} on {target_id or actor_id}",
                        hint=f"verbs here: {', '.join(known) or 'none'}. Use perceive to see affordances.",
-                       alternatives=known)
+                       alternatives=known, layer="target", code="unknown_verb", accepts=known)
 
     def reachable(self, actor_id: str, target_id: str) -> tuple[bool, str]:
         """Can actor act on target? self, container, siblings, inventory, what lies on a holder here, or a connected place."""
@@ -2519,43 +2534,46 @@ class World:
                     if a.get("dead_ok") and not a.get("targets")]
             raise Rejected("you are dead", hint="nothing you do reaches the world now; perceive still shows it. "
                                                 + (f"Your seat may still: {', '.join(sorted(left))}. " if left else "")
-                                                + "A guest whose invite makes characters may join(template=...) for a new one")
+                                                + "A guest whose invite makes characters may join(template=...) for a new one",
+                           code="dead")
         self._verbs_only(actor_id, verb)
         adef, owner = self.resolve_action(actor_id, verb, target_id)
         if owner != actor_id:
             me = self.need(actor_id)
             if me["state"].get("hands", self.schema_defaults(me["type"]).get("hands")) is False:
                 raise Rejected(f"you have no hands in this world: {verb} is a thing's verb, and you can't take, give, "
-                               "open or use things", hint="your own verbs are the ones you have; perceive lists them")
+                               "open or use things", hint="your own verbs are the ones you have; perceive lists them",
+                               code="no_hands")
         reach = adef.get("reach", "near")
         if target_id and reach == "near":
             ok, why = self.reachable(actor_id, target_id)
             if not ok:
-                raise Rejected(why, hint=self._closer_hint(actor_id, target_id))
+                raise Rejected(why, hint=self._closer_hint(actor_id, target_id), layer="target", code="not_here")
             rng = adef.get("range")
             if rng is not None:
                 d = self.distance(actor_id, target_id)
                 if d is not None and d > float(rng):
                     raise Rejected(f"{target_id} is {d:.1f} away; {verb} reaches {rng}",
-                                   hint="walk nearer to it first, then try again")
+                                   hint="walk nearer to it first, then try again", layer="target", code="out_of_range")
         elif target_id and reach == "self" and target_id != actor_id:
-            raise Rejected(f"{verb} can only target yourself")
+            raise Rejected(f"{verb} can only target yourself", layer="target", code="self_only")
         if adef.get("strikes") and target_id and target_id != actor_id:
             wait = self.strike_wait(actor_id, target_id)
             if wait > 0:
                 name = self.need(target_id)["name"] or target_id
                 raise Rejected(f"you can strike {name} again in about {self._wait_words(wait)}",
-                               hint="a blow takes its time: do something else, or wait (it shows in perceive)")
+                               hint="a blow takes its time: do something else, or wait (it shows in perceive)",
+                               code="cooldown")
         if adef.get("cooldown"):
             wait = self.verb_wait(actor_id, verb)
             if wait > 0:
                 raise Rejected(f"you can {verb} again in about {self._wait_words(wait)}",
-                               hint="that takes its time: do something else, or wait")
+                               hint="that takes its time: do something else, or wait", code="cooldown")
         for k, n in (adef.get("cost") or {}).items():
             have = self.need(actor_id)["state"].get(k)
             if not isinstance(have, (int, float)) or have < n:
                 raise Rejected(f"{verb} costs {n:g} {k} and you have {have if isinstance(have, (int, float)) else 0:g}",
-                               hint=f"get more {k} first")
+                               hint=f"get more {k} first", code="cost")
         acc = acl.of(self.get(target_id)) if target_id and target_id != actor_id else None
         if acc is not None and not acl.may_verb(acc, self.subjects(actor_id), self.get(self.root_id), verb,
                                                 own=owner == target_id):
@@ -3697,11 +3715,12 @@ def _loud(ev: dict[str, Any]) -> bool:
 # Events that exist for the log, not for listeners.
 _SILENT_KINDS = frozenset({"before_act", "schema_defined", "script_defined", "scheduled", "patched", "linked", "unlinked",
                            "related", "unrelated", "spawned", "destroyed", "left", "moved", "embodied", "released", "regrouped",
-                           "tick", "script_error", "finished", "opinion", "remembered", "intended", "merged", "act_refused"})
+                           "tick", "script_error", "finished", "opinion", "remembered", "intended", "merged", "act_refused",
+                           "program_refused"})
 # Events only the entity they target (its mind) and authors ever see.
-_PRIVATE_KINDS = frozenset({"remembered", "intended", "act_refused"})
+_PRIVATE_KINDS = frozenset({"remembered", "intended", "act_refused", "program_refused"})
 # Events only the hosts (owner, author, observers) see, not even the body they are about: an act the world refused.
-_HOST_KINDS = frozenset({"act_refused", "regrouped"})
+_HOST_KINDS = frozenset({"act_refused", "program_refused", "regrouped"})
 # State keys no other body reads, whatever the entity's own `secret` list says.
 ALWAYS_SECRET = frozenset({"memory", "brief", "goals", "policy", "cooldowns", "idle_orders"})
 

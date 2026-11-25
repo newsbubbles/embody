@@ -117,3 +117,12 @@ def test_missing_name_error_points_forward():
         run("def main():\n    return ctx")
     assert "not defined" in e.value.reason
     assert e.value.hint
+
+
+def test_a_call_on_a_dicts_method_name_is_the_method_even_with_a_key_of_that_name():
+    # a phrase table whose keys came from players held the key "get", and table.get(k) called the entry
+    src = """
+def main(t):
+    return [t.get('hello', 'none'), t.get('nope', 'none'), t.get, len(t.keys()), t.height]
+"""
+    assert run(src, "main", {"get": "a word", "hello": "hi", "height": 3}) == ["hi", "none", "a word", 3, 3]

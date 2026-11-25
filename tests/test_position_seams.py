@@ -57,3 +57,30 @@ def _laid_with_template(tmp, template):
     w = eng.world("ferry-at-dusk")
     gm.patch(w.root_id, {"templates": {"villager": template}})
     return eng, gm
+
+
+def test_an_arrival_by_a_way_with_no_route_lands_by_the_door_or_near_the_centre(tmp_path):
+    # a world builder, 2026-11-24: every body that walked in by an undrawn way stood nowhere, and verify flagged it
+    eng, gm = _laid(tmp_path)
+    w = eng.world("ferry-at-dusk")
+    root = w.root_id
+    gm.spawn("place", root, "Back Lane")
+    gm.spawn("place", root, "Loft")
+    gm.connect("Pell's Mill", "Back Lane")
+    gm.connect("Pell's Mill", "Loft")
+    gm.layout(placements=[
+        {"entity": "Back Lane", "at": [100, 60, 0], "radius": 15,
+         "landmarks": {"the mill gate": {"at": [100, 50, 0], "radius": 2}, "Pell's Mill": {"at": [95, 48, 0], "radius": 2}}},
+        {"entity": "Loft", "at": [140, 0, 0], "radius": 10}])
+    for name in ("Crate", "Sack"):
+        gm.spawn("thing", "Pell's Mill", name)
+    gm.move("Crate", "Back Lane")
+    assert ground(gm.measure("Crate")["a"]["at"], [95, 48, 0]) <= 2.5  # the landmark named for where it came from
+    gm.move("Sack", "Loft")
+    assert ground(gm.measure("Sack")["a"]["at"], [140, 0, 0]) <= 3  # no landmark: near the centre
+    assert not [p for p in gm.verify(limit=500)["page"] if p["name"] in ("Crate", "Sack")]
+    gm.spawn("place", root, "Nowhere")  # a place with no spot of its own: nothing to stand by
+    gm.connect("Pell's Mill", "Nowhere")
+    gm.spawn("thing", "Pell's Mill", "Barrel")
+    gm.move("Barrel", "Nowhere")
+    assert "at" not in (w.need(w.find(name="Barrel")[0]["id"])["state"].get("layout") or {})

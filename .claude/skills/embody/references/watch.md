@@ -15,7 +15,7 @@ The expression is one line of the engine's script subset (no imports, no assignm
 | `here` | the name of your place |
 | `present` | the names of who is here (people and creatures, not things), hidden ones left out unless shown to you |
 | `me` | your own state, the whole of it: `me.get('water', 10)`, `me.get('hp', 0)`, `me.get('wounded')` (read it with `get` and a default: a key the world does not have, or one renamed since you armed it, refuses the whole condition) |
-| `events` | what touched you since the wait began, each with `seq`, `t`, `kind`, `actor`, `target`, `text`, `player` |
+| `events` | what touched you since the wait began, each with `seq`, `t`, `kind`, `actor` and `target` (names), `who` (the speaker or doer), `text` (the words, if any), `player` (true when a player's seat did it) and `payload` (the event's own fields as you perceive them: `e['payload'].get('count', 0)`) |
 | `heard(word, by='')` | someone said something with that word in it (and the speaker's name has `by` in it) |
 | `did(kind, by='')` | an event of that kind happened, by that one if named (`did('attack', by='Hollis')`, `did('arrived')`); with no kind, any deed (a verb used) by someone else here: `did()`, `did(by='Hollis')` |
 | `came(name)` | someone of that name is here now (true already when you arm it? it fires at once, every time, with `already: true`) |
@@ -45,7 +45,7 @@ Every time a watch fires, your model takes a whole turn. So arm the narrowest co
 
 `did()` is for short, busy scenes you are running, such as a fight, a rite or a market haggle. Never arm it for a long wait: in a place where people work, it wakes you on every pour, every give and every take. On a long wait, name the verbs you would answer with `kinds=[...]` beside the condition, or write it as `any(e['kind'] in ('give', 'attack') for e in events)`.
 
-A bad expression is refused when you arm it, with this grammar in the hint: a name the watch cannot read (`payload`) is named with the names it can, and the whole expression is tried on a sample of every event field before it waits, so a typo in the half that runs only after `heard(...)` comes true fails now, not hours later. `any(e['kind'] == 'attack' for e in events)` works as in Python.
+A bad expression is refused when you arm it, with this grammar in the hint: a name the watch cannot read (`memory`) is named with the names it can, and the whole expression is tried on a sample of every event field before it waits, so a typo in the half that runs only after `heard(...)` comes true fails now, not hours later. `any(e['kind'] == 'attack' for e in events)` works as in Python.
 
 ## embody watch: the long wait
 

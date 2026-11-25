@@ -2240,10 +2240,12 @@ class Session:
             if re.search(r"^\s*(\d+|a few|some|all|several)\s|\sto\s", ref, re.I):
                 raise Rejected(f"nothing called {ref!r}",
                                hint="a target is one thing's id or name: a count goes in params (take <id> with count=N), "
-                                    "and give takes the person as the target (give <who> with item=<id>, count=N)")
-            raise Rejected(f"nothing called {ref!r}", hint="use an id from perceive or find(name=...)")
+                                    "and give takes the person as the target (give <who> with item=<id>, count=N)",
+                               layer="target", code="no_target")
+            raise Rejected(f"nothing called {ref!r}", hint="use an id from perceive or find(name=...)",
+                           layer="target", code="no_target")
         raise Rejected(f"{len(hits)} entities are called {ref!r}: " + ", ".join(h["id"] for h in hits),
-                       hint="use the id")
+                       hint="use the id", layer="target", code="ambiguous_target", accepts=[h["id"] for h in hits])
 
     def _resolve_for(self, me: str, ref: str, verb: str, params: dict[str, Any] | None) -> str:
         """A target for a deed: an id, a unique name, or, when several share the name (stacks of coins, two
@@ -3759,7 +3761,8 @@ class Session:
         takes = ", ".join(declared) or "no params"
         raise Rejected(f"{verb} takes {takes}, not {', '.join(stray)}",
                        hint="; ".join(f"{k}: {d}" for k, d in declared.items()) + ". Say it again with those names"
-                       if declared else f"act({verb!r}, target) without params")
+                       if declared else f"act({verb!r}, target) without params",
+                       layer="call", code="unknown_param", param=stray[0], accepts=list(declared))
 
     def _refused(self, me: str, verb: str, asked: str | None, tid: str | None, params: dict[str, Any] | None,
                  why: Rejected) -> None:
@@ -4815,7 +4818,9 @@ class Session:
         evs = [{"seq": e["seq"], "t": e["t"], "kind": e["kind"], "actor": nm(e["actor"]), "target": nm(e["target"]),
                 "who": nm((e.get("payload") or {}).get("who")) or nm(e["actor"]),
                 "text": str((e.get("payload") or {}).get("text") or (e.get("payload") or {}).get("about") or ""),
-                "player": bool(e.get("by_player"))} for e in seen]
+                "player": bool(e.get("by_player")),
+                # as the waiter perceived it (a keeper of a world, 2026-11-24: a watch on a pour could not read how much)
+                "payload": e.get("payload") if isinstance(e.get("payload"), dict) else {}} for e in seen]
         cards = {c["name"]: self._visible_state(c, full=False) for c in near}
         if ent:
             cards.update({c["name"]: self._visible_state(c, full=False) for c in w.children(me)})
@@ -5138,6 +5143,40 @@ class Session:
         sealed). The owner and author program anything; frame=... holds their code to that frame. `targets` (a
         type, or "any"; the owner's and author's only) lets a body's own verb reach others: act(verb, target) finds it
         on the actor, and ctx.target is whom it is done to."""
+        try:
+            return self._program(thing, verb, source, doc=doc, params=params, frame=frame, targets=targets)
+        except Rejected as why:
+            with contextlib.suppress(Rejected):  # the trace never stands in for the refusal it records
+                self._program_refused(thing, verb, frame, why)
+            raise
+
+    def _program_refused(self, thing: str, verb: str, frame: str | None, why: Rejected) -> None:
+        """A refused program() goes in the log for the hosts, as a refused act does (a world's keeper, 2026-11-24: a
+        maker whose code was refused left no trace, so nobody saw what it had tried): a `program_refused` event, reach
+        0, on the thing it named (else the root), read through history(kinds=["program_refused"]). Nobody else sees it,
+        it is never news, and the same refusal again is logged once; at most `refused_per_hour` per seat per world
+        hour (meta, default 20; 0 logs none). The source is not kept, only its length."""
+        w = self.world
+        cap = int(w.meta().get("refused_per_hour", 20) or 0)
+        if cap <= 0 or not self.world_id:
+            return
+        target = thing if w.get(thing) else next((e["id"] for e in w.find(name=thing, limit=1)
+                                                  if e["name"].lower() == str(thing).lower()), w.root_id)
+        rows = [r for r in w.store.query("event", "world_id=? AND kind='program_refused' AND t>?", (w.id, w.t - 3600),
+                                         order="seq DESC", limit=500) if (r["payload"] or {}).get("by") == self.pid]
+        pay: dict[str, Any] = {"by": self.pid, "thing": str(thing)[:80], "verb": str(verb)[:40], "frame": frame,
+                               "reason": str(why.reason)[:300], "hint": str(why.hint)[:200] if why.hint else None,
+                               "code": why.code or "refused"}
+        if len(rows) >= cap or (rows and all((rows[0]["payload"] or {}).get(k) == pay[k]
+                                             for k in ("thing", "verb", "reason"))):
+            return
+        if len(rows) == cap - 1:
+            pay["capped"] = True
+        p = w.principal(self.pid)
+        w.emit("program_refused", actor=(p or {}).get("entity_id"), target=target, reach=0, payload=pay)
+
+    def _program(self, thing: str, verb: str, source: str, doc: str = "", params: dict[str, Any] | None = None,
+                 frame: str | None = None, targets: str | None = None) -> dict[str, Any]:
         self._tick()
         w = self.world
         f = self._frame_for(frame)
@@ -5766,19 +5805,20 @@ def call(session: Session, op: str, **kw: Any) -> Any:
     """Dispatch by name, with the error shape every harness gets."""
     fn = getattr(session, op, None)
     if fn is None or op.startswith("_"):
-        return Rejected(f"no op {op!r}", hint="ops: " + ", ".join(OPS)).to_dict()
+        return Rejected(f"no op {op!r}", hint="ops: " + ", ".join(OPS), layer="call", code="unknown_op").to_dict()
     try:
         return fn(**kw)
     except Rejected as r:
         return r.to_dict()
     except TypeError as e:
-        return Rejected(f"{op}: {e}", hint=f"see help for {op}").to_dict()
+        return Rejected(f"{op}: {e}", hint=f"see help for {op}", layer="call", code="bad_args").to_dict()
 
 
 UNTIL_DOC = ("until is one Python expression (the embody script subset: no imports, no lambdas) over what you may "
              "know: t (world seconds), ambient (dict: time_of_day, light, ...), here (your place's name), present "
              "(names of who is here), me (your own state: water, hp, wounded, ...), events (since the wait began: "
-             "seq, t, kind, actor, target, text, player), and helpers heard(word, by=''), did(kind, by='') (with no kind: any "
+             "seq, t, kind, actor, target, who, text, player, and payload: the event's own fields as you perceive "
+             "them, read with .get), and helpers heard(word, by=''), did(kind, by='') (with no kind: any "
              "deed by someone else here; it wakes you on every one, so name the verb or use to_me() when you can), "
              "came(name) (is here now), arrived(name) (walked in since the wait began; '' for anyone but you), to_me() "
              "(said to you, or with your name as its address: the default for a mind or a player owed nothing in "
@@ -5790,7 +5830,8 @@ UNTIL_DOC = ("until is one Python expression (the embody script subset: no impor
 
 _WATCH_HELPERS = ("heard", "did", "came", "arrived", "to_me", "named")
 _WATCH_NAMES = frozenset({"t", "ambient", "here", "present", "me", "events", "state", *_WATCH_HELPERS})
-_WATCH_EVENT = {"seq": 0, "t": 0.0, "kind": "", "actor": "", "target": "", "who": "", "text": "", "player": False}
+_WATCH_EVENT = {"seq": 0, "t": 0.0, "kind": "", "actor": "", "target": "", "who": "", "text": "", "player": False,
+                "payload": {}}
 
 
 def _until_script(until: str) -> Script:

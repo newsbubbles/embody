@@ -120,3 +120,20 @@ def test_what_stands_out_shows_though_its_container_is_in_sight():
     gm.clock(step=3601)
     s = sight(nate)
     assert s["Varn Spire"]["line"] == "a needle of glass" and "Varn" in s and "_out" not in s["Varn Spire"]
+
+
+def test_a_sound_carries_from_a_place_within_the_listeners_own_even_indoors():
+    # a world owner, 2026-11-24: a sound on a balcony laid out beyond a room's window never carried into the room
+    eng, w, gm, nate = skyline()
+    balcony = gm.spawn("place", "Cell", name="Balcony")["id"]
+    gm.spawn("thing", balcony, name="Grinder", state={"carries": {"sound": {"text": "a grindstone's slow rasp", "range_m": 40}}})
+    gm.spawn("thing", "Cell", name="Clock", state={"carries": {"sound": {"text": "a tock", "range_m": 40}}})
+    gm.layout(placements=[{"entity": balcony, "at": [8, 0, 0], "radius": 2}, {"entity": "Grinder", "at": [8, 0, 0]},
+                          {"entity": "Clock", "at": [2, 0, 0]}])
+    gm.clock(step=3601)
+    heard = [h["text"] for h in nate.perceive(far=True).get("heard", [])]
+    assert heard == ["a grindstone's slow rasp"]  # the clock in the cell itself is ordinary perceive, not far
+    gm.patch("Cell", {"indoors": True})
+    gm.clock(step=3601)
+    b = nate.perceive(far=True)
+    assert b["in_sight"] == [] and "indoors" in b["note"] and [h["text"] for h in b["heard"]] == ["a grindstone's slow rasp"]

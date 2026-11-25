@@ -422,8 +422,10 @@ def spot_words(w: "World", place: str | None, at: list[float] | None) -> str | N
 def arrival(w: "World", e: dict[str, Any], old: str | None, new: str) -> list[float] | None:
     """Where a thing that changes container lands, when it lands directly in a place: where the one who put it down
     stands (the old container's own spot, if that lies in the new place), else where the way from the old place comes
-    in (the end of the drawn route). A place that moves (a vehicle rolling on) takes only the way's end. None when
-    neither is known."""
+    in (the end of the drawn route), else, come by a way, by the landmark named for the way's door or the place it
+    came from, else near the new place's centre (a world builder, 2026-11-24: every body that walked in unplaced was a verify problem
+    the owner fixed by hand). A place that moves (a vehicle rolling on) takes only the way's end. None when none of
+    these is known, or the new place is not laid out itself."""
     np_ = w.get(new)
     if np_ is None or not is_place(w, np_) or not old:
         return None
@@ -432,11 +434,27 @@ def arrival(w: "World", e: dict[str, Any], old: str | None, new: str) -> list[fl
     if not is_place(w, e) and src["how"] in ("own", "grid") and src["at"] and not is_place(w, w.get(old) or {}) and \
             (not nl.get("at") or geo.contains(nl, src["at"]) is not False):
         return find_spot(w, new, src["at"], within=2.0, skip=e["id"])
-    for ed in w.edges(old, "connects_to", "out"):
-        if ed["target"] == new and ed["data"].get("route"):
+    ways = [ed for ed in w.edges(old, "connects_to", "out") if ed["target"] == new]
+    for ed in ways:
+        if ed["data"].get("route"):
             end = list(ed["data"]["route"][-1])
             return find_spot(w, new, end if len(end) == 3 else end + [0.0], within=4.0, skip=e["id"])
-    return None
+    if not ways or is_place(w, e) or not on_map(w, np_):
+        return None  # boarding a cart or put in by a hand is no walk through a way: it rides along, as before
+    marks = landmarks(w, new)
+    names = [(w.get(ed["data"]["via"]) or {}).get("name") for ed in ways if ed["data"].get("via")]
+    names.append((w.get(old) or {}).get("name"))
+    for name in filter(None, names):
+        lm = next((v for k, v in marks.items() if _norm(k) == _norm(name)), None)
+        if isinstance(lm, dict) and lm.get("at"):
+            at = [float(x) for x in lm["at"]][:3]
+            return find_spot(w, new, at + [0.0] * (3 - len(at)), within=max(2.0, float(lm.get("radius") or 0)),
+                             skip=e["id"])
+    framed = starts_frame(w, np_)
+    centre = None if framed else resolve(w, new)["at"]
+    if centre is None and not (framed or is_tier(w, np_)):
+        return None  # the place has no spot of its own: verify asks to lay it out first
+    return find_spot(w, new, list(centre or [0.0, 0.0, 0.0]), skip=e["id"])
 
 
 def problems(w: "World", e: dict[str, Any], reserved: dict[str, list[list[float]]] | None = None) -> list[dict[str, Any]]:

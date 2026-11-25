@@ -217,15 +217,18 @@ def in_sight(w: "World", place: str, body: str | None) -> dict[str, Any]:
     here = w.get(place)
     if here is None:
         return {"in_sight": [], "note": "nowhere to look from"}
-    if here["state"].get("indoors"):
-        return {"in_sight": [], "note": "you are indoors: no far view from here"}
+    indoors = {"in_sight": [], "note": "you are indoors: no far view from here"}
     frame = posn.frame_of(w, place)
     unit = UNITS.get(str(posn.frame_def(w, frame).get("units") or "m"))
     spot = posn.resolve(w, place)
     if unit is None or spot["at"] is None:
-        return {"in_sight": [], "note": "this place has no spot in a frame of metres or km to look from"}
+        return indoors if here["state"].get("indoors") else \
+            {"in_sight": [], "note": "this place has no spot in a frame of metres or km to look from"}
     lay_here = here["state"].get("layout") if isinstance(here["state"].get("layout"), dict) else {}
     at = list(spot["at"]) + [0.0] * (3 - len(spot["at"]))
+    if here["state"].get("indoors"):  # no far view, but what carries from the places within this one is heard
+        return {**indoors, **carried(w, place, body, at, unit, ruler(w, frame), {place, *w.ancestors(place)},
+                                     ambient(w, place), inner_only=True)}
     zr = geo.z_range(lay_here)
     eye = (zr[0] if zr is not None else at[2]) * unit + EYE_M
     stand = _viewpoint(w, place, body)
@@ -314,14 +317,26 @@ def in_sight(w: "World", place: str, body: str | None) -> dict[str, Any]:
     return res
 
 
+def _within(w: "World", place: str, eid: str) -> bool:
+    """Whether an entity lies in a place nested inside `place` (a balcony laid out beyond a room's window), not in
+    `place` itself: what is in `place` is ordinary perceive, what is in a place within it is heard from afar."""
+    near = posn._places_up(w, eid)
+    return bool(near) and near[0] != place and place in w.ancestors(near[0])
+
+
 def carried(w: "World", place: str, body: str | None, at: list[float], unit: float, frames: set[str],
-            skip: set[str], amb: dict[str, Any]) -> dict[str, Any]:
-    """What a body hears and smells from afar (`carries` on a thing or a place): {heard, smelled}, nearest first."""
+            skip: set[str], amb: dict[str, Any], inner_only: bool = False) -> dict[str, Any]:
+    """What a body hears and smells from afar (`carries` on a thing or a place): {heard, smelled}, nearest first.
+    From places nested inside its own too, by the same distance (a world owner, 2026-11-24: a sound on a balcony beyond
+    the room's window never carried into the room). `inner_only`: only those (an indoors listener)."""
     wind = wind_from(amb)
     heard, smelled = [], []
     for e in w.store.query("entity", "world_id=? AND state LIKE ?", (w.id, '%"carries"%')):
         c = e["state"].get("carries")
-        if not isinstance(c, dict) or e["id"] in skip or place in w.ancestors(e["id"]):
+        if not isinstance(c, dict) or e["id"] in skip:
+            continue
+        inner = _within(w, place, e["id"])
+        if (place in w.ancestors(e["id"]) and not inner) or (inner_only and not inner):
             continue
         own_frame = posn.frame_of(w, e["id"])
         if own_frame not in frames:
