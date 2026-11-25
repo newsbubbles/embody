@@ -2,7 +2,9 @@
 deploy/world from the stage, else the only folder under worlds/) and stops with a clear line when there is none, and
 tools/stage_deploy.py ships a world that lives only on disk under worlds/ (git ignores it) or a sample by its path."""
 
+import hashlib
 import importlib.util
+import json
 import os
 import shutil
 import sqlite3
@@ -250,3 +252,17 @@ def test_two_worlds_still_make_a_hub(stage):
     assert mod.main(["--world", "one", "--world", "two", "--out", str(out)]) == 0
     assert (out / "deploy" / "worlds").read_text(encoding="utf-8") == "one,two\n"
     assert not (out / "deploy" / "world").exists()
+    man = json.loads((out / "deploy" / "manifest.json").read_text(encoding="utf-8"))
+    assert set(man["worlds"]) == {"one", "two"} and man["engine"] and man["staged_at"]
+
+
+def test_health_names_the_stage_it_runs(tmp_path, monkeypatch):
+    from embody import hub
+    (tmp_path / "deploy").mkdir()
+    (tmp_path / "deploy" / "manifest.json").write_text('{"staged_at": 1}', encoding="utf-8")
+    monkeypatch.setenv("EMBODY_WORKSPACE", str(tmp_path))
+    hub.stage_id.cache_clear()
+    try:
+        assert hub.stage_id() == hashlib.sha256(b'{"staged_at": 1}').hexdigest()[:12]
+    finally:
+        hub.stage_id.cache_clear()

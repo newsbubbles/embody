@@ -21,11 +21,13 @@ in SKIP (notes, sources, local tools). A world shipped from disk leaves its dot-
 
 import argparse
 import io
+import json
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,6 +98,24 @@ def stage_world(out: Path, wid: str, site: Path | None) -> str:
     return what
 
 
+def manifest(out: Path, engine: str, worlds: list[tuple[str, Path | None]], domains: list[str],
+             remotes: list[str]) -> dict:
+    """deploy/manifest.json: what the stage holds, for tools/deploy_check.py to compare one stage with the last."""
+    shipped = {}
+    for wid, _ in worlds:
+        src = ROOT / "worlds" / wid
+        top = _git(src, "rev-parse", "--show-toplevel") if "/" not in wid and src.is_dir() else ""
+        own = bool(top) and Path(top).resolve() != ROOT.resolve()
+        site = out / wid / "site" if "/" in wid else out / "worlds" / wid / "site"
+        files = [p for p in site.rglob("*") if p.is_file()] if site.is_dir() else []
+        shipped[wid] = {"commit": _git(Path(top), "rev-parse", "--short", "HEAD") if own else None,
+                        "from": "its own repository" if own else "the engine's tree or disk",
+                        "site_files": len(files), "site_bytes": sum(p.stat().st_size for p in files)}
+    return {"engine": _git(ROOT, "rev-parse", "--short", engine), "staged_at": int(time.time()), "worlds": shipped,
+            "domains": dict(d.partition("=")[::2] for d in domains),
+            "remotes": dict(r.partition("=")[::2] for r in remotes)}
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--world", action="append", required=True,
@@ -143,6 +163,8 @@ def main(argv: list[str] | None = None) -> int:
             (out / "deploy" / "remotes").write_text(",".join(a.remote) + "\n", encoding="utf-8", newline="\n")
     else:
         (out / "deploy" / "world").write_text(worlds[0][0] + "\n", encoding="utf-8", newline="\n")
+    (out / "deploy" / "manifest.json").write_text(json.dumps(manifest(out, a.engine, worlds, a.domain, a.remote),
+                                                             indent=1) + "\n", encoding="utf-8", newline="\n")
     print(f"staged {out}: the engine's {a.engine} ({_git(ROOT, 'rev-parse', '--short', a.engine)})")
     for line in lines:
         print("  " + line)
@@ -151,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
               + (f"; remote {', '.join(a.remote)}" if a.remote else ""))
     print(f"build: docker build -t <name> \"{out}\"  (any Docker host: docs/HOST_YOUR_WORLD.md; a VPS or home box: docs/platforms/vps.md)")
     print(f"railway: railway up \"{out}\" --path-as-root --no-gitignore --ci  (docs/platforms/railway.md)")
+    print(f"check: tools/deploy_check.py pre \"{out}\" before it goes up, and post after (docs/HOSTING.md, \"Deploy checks\")")
     return 0
 
 

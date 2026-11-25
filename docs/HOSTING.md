@@ -79,10 +79,18 @@ The repository is one container: `Dockerfile` (the package, the packs, the sampl
 1. Stage: `uv run python tools/stage_deploy.py --world <id>`. git ignores `worlds/`, so a build or upload that follows `.gitignore` leaves the world behind; the stage carries it (from its own repository when it has one, else from its folder on disk). It prints the stage's path and how to build or upload it.
 2. Build and run the stage with a volume on `/data`. The first boot prints `building <id> (<id>) into /data/embody.db`, later boots `renewing ...`.
 3. Give it its public address: `EMBODY_URL=https://<your.domain>/mcp`. No host name is written into a stored invite: a link's page names the host the agent reached it on, and an invite minted over the door uses the host it was minted on. With no request (the CLI), the server uses `EMBODY_URL`, else a platform's own domain variable it knows (docs/platforms/). Links already out keep working when the domain changes.
-4. `curl https://<domain>/health` answers `{"ok": true, "embody": "up"}`.
+4. `curl https://<domain>/health` answers `{"ok": true, "embody": "up", "stage": "<id>"}`: the stage is a short hash of the stage's `deploy/manifest.json`, so you can tell the new container from the old one.
 5. Make your own owner grant from inside the container, so it lands in the live database: `docker exec <container> embody --author --world <id> invite owner --label "<you>"`, or the platform's own way in. It prints the paste with the token; the token is shown once and is never in the image, the logs or this repository. Add that paste to your agent. Every later invite is a sentence to your agent, which calls `invite("player", entity="<body>", label="Sam Pike")` on the server and hands you the paste to send; `grants()` lists them, `revoke(id)` ends one, `seats()` shows what is open. The same commands work inside the container when you would rather not go through an agent.
 
 Environment the image sets: `EMBODY_DB=/data/embody.db`, `EMBODY_WORKSPACE=/app` (the folder with `worlds/` and `packs/`, since the database is not beside them), `EMBODY_AS=host`, `PORT=8900` (a platform that sets its own `PORT` wins; the server listens on whatever it is given). The world: `EMBODY_WORLD` when set (a folder name under `worlds/`, or a path such as `examples/ferry-at-dusk`), else the one the stage wrote into `deploy/world`, else the only folder under `worlds/` with a `build.py`. With none, or several and no choice, the boot stops with a line saying what to set.
+
+### Deploy checks
+
+Run a checklist around every deploy to a host that serves anyone. `tools/deploy_check.py` prints each item the moment it passes or fails, and exits 1 on any failure:
+
+- Before the upload: `uv run python tools/deploy_check.py pre <stage> --url https://<host> --service <name>`. It compares the stage with the last stage that passed `post` for that service (or `--last <stage>`), and with the host's live `/health`. It fails when the stage would drop a world the host serves, a domain, a remote, or a site the last stage shipped, or when a world has no build.py. It notes what changed: new worlds, commits, the engine.
+- After the upload: `uv run python tools/deploy_check.py post <stage> --url https://<host> --service <name> [--door <world>=<token file>]`. It waits (up to `--wait`, 600 s) until `/health` names this stage and every world is `up` and every remote `remote`, one item each as it comes up. Then it checks each domain's `/` and `/now.json`, each remote's own `/health`, and for each `--door`, that the token's `worlds()` names that world. It reads the token from the file (a paste's `Bearer <token>`) and never prints it.
+- When `post` passes, it marks the stage as the service's last good one (`.last-good-<service>` beside the stage), and the next `pre` compares with it.
 
 ## Many worlds on one server
 

@@ -1094,7 +1094,8 @@ class Bearer:
 
     async def _route(self, scope: dict[str, Any], receive: Any, send: Any, path: str) -> None:
         if path == "/health" and scope.get("method") == "GET":
-            await _reply(send, 200, {"ok": True, "embody": "up"})  # no world data, no grant
+            from .hub import stage_id
+            await _reply(send, 200, {"ok": True, "embody": "up", "stage": stage_id()})  # no world data, no grant
             return
         if path == "/watch" or path.startswith("/watch/"):
             await self._watch(scope, path[len("/watch"):], send)

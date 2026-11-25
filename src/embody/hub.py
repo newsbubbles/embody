@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import functools
+import hashlib
 import json
 import os
 import shutil
@@ -66,6 +68,18 @@ class World:
         if maint is not None:
             return {"world": self.id, "state": "maintenance", "since": self.since, "message": maint or "resting for upkeep"}
         return {"world": self.id, "state": self.state, "since": self.since, "message": self.message}
+
+
+@functools.lru_cache(maxsize=1)
+def stage_id() -> str | None:
+    """Which deploy this is, for /health: a short hash of the stage's deploy/manifest.json (tools/stage_deploy.py
+    writes it, with the time it was staged), so a check after a deploy can tell the new container from the old one
+    still answering. None when the workspace is not a stage."""
+    p = Path(os.environ.get("EMBODY_WORKSPACE") or ".") / "deploy" / "manifest.json"
+    try:
+        return hashlib.sha256(p.read_bytes()).hexdigest()[:12]
+    except OSError:
+        return None
 
 
 class Hub:
@@ -340,7 +354,7 @@ class Router:
         headers = dict(scope.get("headers") or [])
         hub = self.hub
         if path == "/health" and method == "GET":
-            await _reply(send, 200, {"ok": True, "embody": "up",
+            await _reply(send, 200, {"ok": True, "embody": "up", "stage": stage_id(),
                                      "worlds": {**{w.id: w.status(hub.maintenance(w.id))["state"] for w in hub.worlds.values()},
                                                 **{r: "remote" for r in hub.remotes}}})
             return
