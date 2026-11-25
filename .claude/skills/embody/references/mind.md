@@ -72,6 +72,8 @@ Pick the model for a mind (a subagent's `model`, a session's model in its harnes
 
 Every playing tool takes `principal=<name>`. The main principal (the one the server was started as) stays who it is; `join(world, "Mara", principal="mara")` embodies Mara as a second principal over the same MCP connection, with no author rights. `principals()` lists them. That is how a subagent inside your session becomes a mind without a server of its own.
 
+A hosted mind grant that names several bodies (a captain and the riders, `invite("mind", entity=..., scope=[...])`) runs one sub-principal per body the same way: `join(entity="Rider", principal="rider")` gives the rider its own seat, event cursor and idle time, and it sits only in bodies the grant names. Over plain HTTPS, send the header `x-embody-principal: rider` with `POST /op/<name>`. A mind grant that names one body is one principal.
+
 Go by what your harness can do, not by its name; the names are examples.
 
 | your harness can | how a mind runs | who sees it |

@@ -228,3 +228,25 @@ def test_a_long_wait_reads_in_minutes_and_hours_and_a_heavy_check_may_ask_for_fu
             pytest.skip("this machine cannot make a directory link")
     assert Workspace(tmp_path / "ws").git_init(link) == f"inside {repo.resolve()}"
     assert not (repo / "world" / ".git").exists()
+
+
+def test_the_grants_tool_filters_by_active_and_role_over_the_mcp_door():
+    """grants(active=True) over MCP came back with revoked grants: the tool took no arguments (the Host, 2026-11-25)."""
+    import asyncio
+    from embody.mcp_server import build_server
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    b, inv = builder(eng, gm)
+    gm.invite("player", label="Sam")
+    gm.revoke(inv["id"])
+    srv = build_server(gm, None, eng)
+
+    def ids(args):
+        r = asyncio.run(srv.call_tool("grants", args))
+        return {g["id"]: g for g in r.structured_content["result"]}
+    every = ids({})
+    assert inv["id"] in every and every[inv["id"]]["active"] is False
+    live = ids({"active": True})
+    assert inv["id"] not in live and live and all(g["active"] for g in live.values())
+    assert set(ids({"active": False})) == {inv["id"]}
+    assert all(g["role"] == "builder" for g in ids({"role": "builder"}).values())

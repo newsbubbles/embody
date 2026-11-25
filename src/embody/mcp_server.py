@@ -128,13 +128,19 @@ class Hub:
         if cur is not None:
             if not principal or principal == cur.pid:
                 return cur
-            if cur.role not in (OWNER, AUTHOR_ROLE, NARRATOR):
-                raise Rejected(f"a {cur.role} grant is one principal", hint="drop principal=; you are " + cur.pid)
+            crew = cur.role == MIND and len(cur.scope) > 1
+            if cur.role not in (OWNER, AUTHOR_ROLE, NARRATOR) and not crew:
+                raise Rejected(f"a {cur.role} grant is one principal", hint="drop principal=; you are " + cur.pid
+                               + (" (a mind grant that names several bodies runs one sub-principal per body)"
+                                  if cur.role == MIND else ""))
             key = f"{cur.pid}:{principal}"
             s = self.extra.get(key)
             if s is None:
-                # a narrator's subagent playing an NPC: a mind under the narrator's grant, any free body
-                s = self.engine.session(key, world_id=cur.world_id, name=principal, role=MIND, scope=[], grant=cur.grant)
+                # a narrator's subagent playing an NPC: a mind under the narrator's grant, any free body. A crew mind (a
+                # mind grant naming several bodies): one more hand of the same grant, its own seat, cursor and idle
+                # time, held to the bodies the grant names (the Host, 2026-11-25: a captain and five riders)
+                s = self.engine.session(key, world_id=cur.world_id, name=principal, role=MIND,
+                                        scope=list(cur.scope) if crew else [], grant=cur.grant)
                 self.extra[key] = s
             return s
         if self.http_only:
@@ -293,9 +299,12 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
 
     @tool()
     @_wrap
-    def grants() -> list[dict[str, Any]]:
-        """(owner) Every grant on this world, without the tokens: who, which role, which seat, active or not."""
-        return S(None).grants()
+    def grants(role: str | None = None, active: bool | None = None, limit: int | None = None,
+               offset: int = 0) -> list[dict[str, Any]]:
+        """(owner) Every grant on this world, without the tokens: who, which role, which seat, active or not, oldest
+        first. `role` (player, mind, owner, ...) and `active` (true: not revoked and not expired) filter it, before the
+        page: `limit` (1 to 500; omit for all) and `offset`."""
+        return S(None).grants(limit=limit, offset=offset, role=role, active=active)
 
     @tool()
     @_wrap
@@ -1151,7 +1160,8 @@ class Bearer:
     async def _op(self, scope: dict[str, Any], receive: Any, sess: Session, op: str, send: Any) -> None:
         """The door as plain HTTPS, for an agent whose harness has not loaded the MCP server yet (most load one only
         when they start): POST /op/<name> with a JSON object of the arguments, the same bearer, the same role check
-        and refusal shape as the tools. GET /op lists the ops this grant may call. wait is capped at wait_max()."""
+        and refusal shape as the tools. GET /op lists the ops this grant may call. wait is capped at wait_max().
+        `x-embody-principal: <name>` speaks as a sub-principal of the grant, as principal= does on the tools."""
         from .ops import LAYERS, OPS, call
         if not op:
             mine = sorted([o for o in OPS if sess.may(o)] + ["principals"])
@@ -1187,6 +1197,16 @@ class Bearer:
             await _reply(send, 400, {"ok": False, "reason": "the body is not a JSON object", "hint": "send {} for no arguments"})
             return
         kw = op_args(op, kw)
+        sub = dict(scope.get("headers") or []).get(b"x-embody-principal", b"").decode("latin-1").strip()
+        if sub:  # a sub-principal of this grant, as principal= on the MCP tools
+            tok = _current.set(sess)
+            try:
+                sess = self.hub.session(sub)
+            except Rejected as r:
+                await _reply(send, 200, r.to_dict())
+                return
+            finally:
+                _current.reset(tok)
         eng = self.hub.engine
         if op == "wait":
             kw["timeout"] = min(float(kw.get("timeout", 30.0)), wait_max())

@@ -895,3 +895,65 @@ def test_one_invite_makes_one_character_while_it_stands():
     assert p.join(template="newcomer", name="QC-2")["you"]["name"] == "QC-2"
     # the owner's own hand makes as many as it likes
     gm.join(template="newcomer", name="Extra")
+
+
+def test_a_crew_mind_runs_one_sub_principal_per_body_it_names_on_both_doors():
+    """A mind grant naming a captain and a rider could speak for the rider only by moving its one seat there (the Host,
+    2026-11-25). Each body now gets its own hand of the same grant: its own seat and cursor, held to the bodies the
+    grant names. A mind grant naming one body is still one principal."""
+    uvicorn = pytest.importorskip("uvicorn")
+    from embody.mcp_server import Hub, _current, build_server, http_app
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    cap = w.spawn("person", i["Hall"], name="Captain")
+    rider = w.spawn("person", i["Hall"], name="Rider")
+    stray = w.spawn("person", i["Hall"], name="Stray")
+    crew = gm.invite("mind", entity=cap, scope=[rider], label="crew")
+    lone = gm.invite("mind", entity=stray, label="lone")
+    hub = Hub(eng, gm, http_only=True)
+    s = hub.for_token(crew["token"])
+    tok = _current.set(s)
+    try:
+        s.join(entity="Captain")
+        r = hub.session("rider")
+        assert r.pid == f"{s.pid}:rider" and r.join(entity="Rider")["you"]["name"] == "Rider"
+        assert w.principal(s.pid)["entity_id"] == cap and w.principal(r.pid)["entity_id"] == rider
+        with pytest.raises(Rejected, match="does not name Stray"):
+            hub.session("third").join(entity="Stray")
+    finally:
+        _current.reset(tok)
+    tok = _current.set(hub.for_token(lone["token"]))
+    try:
+        with pytest.raises(Rejected, match="one principal"):
+            hub.session("rider")
+    finally:
+        _current.reset(tok)
+
+    # the plain door: x-embody-principal is principal= for /op
+    port = _free_port()
+    srv = build_server(gm, None, eng, http_only=True)
+    server = uvicorn.Server(uvicorn.Config(http_app(srv), host="127.0.0.1", port=port, log_level="error"))
+    t = threading.Thread(target=server.run, daemon=True)
+    t.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    base = f"http://127.0.0.1:{port}"
+
+    def post(op, body, token, sub=""):
+        req = urllib.request.Request(f"{base}/op/{op}", data=json.dumps(body).encode(), method="POST",
+                                     headers={"content-type": "application/json", "authorization": f"Bearer {token}",
+                                              **({"x-embody-principal": sub} if sub else {})})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read() or b"{}")
+    try:
+        assert post("join", {"entity": "Captain"}, crew["token"])["you"]["name"] == "Captain"
+        assert post("join", {"entity": "Rider"}, crew["token"], sub="rider")["you"]["name"] == "Rider"
+        said = post("say", {"text": "Mount up."}, crew["token"], sub="rider")
+        assert said.get("ok") is not False
+        assert post("join", {"entity": "Stray"}, lone["token"])["you"]["name"] == "Stray"
+        assert "one principal" in post("perceive", {}, lone["token"], sub="x")["reason"]
+    finally:
+        server.should_exit = True
+        t.join(timeout=5)
