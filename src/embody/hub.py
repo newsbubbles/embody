@@ -11,6 +11,9 @@ Routing, in order:
 - A request with a bearer token goes to the world that minted the token, on any domain.
 - GET /i/<code> goes to the world that minted the invite.
 - Everything else goes by host: the domain map (hub.json, $EMBODY_DOMAINS), else the first world.
+- A world in the domain map may run elsewhere ($EMBODY_REMOTES, world=https://its-server): its requests stream there
+  unchanged, so a world that moved to its own server keeps every address its guests already use. The hub holds none
+  of its tokens, so a remote world is reached by its domain, never by a token on another world's domain.
 
 Files under --data: worlds/<id>.db, one database per world; hub.json, the domain map ({"domains": {"host": id}});
 maintenance/<id>, a flag whose text is the message while a world is down for upkeep on purpose. A first boot finds
@@ -68,13 +71,15 @@ class World:
 class Hub:
     """The worlds, the token index and the domain map. No world's data passes through here but its tokens' hashes."""
 
-    def __init__(self, worlds: list[str], data: Path, base_port: int = 9100, domains: dict[str, str] | None = None):
+    def __init__(self, worlds: list[str], data: Path, base_port: int = 9100, domains: dict[str, str] | None = None,
+                 remotes: dict[str, str] | None = None):
         if not worlds:
             raise SystemExit("no worlds: set EMBODY_WORLDS or pass --worlds")
         self.data = data
         (data / "worlds").mkdir(parents=True, exist_ok=True)
         self.worlds = {w: World(w, data / "worlds" / f"{w}.db", base_port + i) for i, w in enumerate(worlds)}
         self.first = worlds[0]
+        self.remotes = {k: v.rstrip("/") for k, v in (remotes or {}).items() if k not in self.worlds}
         self.domains = {**self._domain_file(), **(domains or {})}
         self.tokens: dict[str, str] = {}
         self._missed: dict[str, float] = {}
@@ -99,9 +104,10 @@ class Hub:
 
     def world_for_host(self, host: str) -> str:
         h = host.split(",")[0].strip().lower().rsplit(":", 1)[0] if host else ""
-        if h in self.domains and self.domains[h] in self.worlds:
+        known = set(self.worlds) | set(self.remotes)
+        if h in self.domains and self.domains[h] in known:
             return self.domains[h]
-        if h.startswith("www.") and self.domains.get(h[4:]) in self.worlds:
+        if h.startswith("www.") and self.domains.get(h[4:]) in known:
             return self.domains[h[4:]]
         return self.first
 
@@ -335,9 +341,13 @@ class Router:
         hub = self.hub
         if path == "/health" and method == "GET":
             await _reply(send, 200, {"ok": True, "embody": "up",
-                                     "worlds": {w.id: w.status(hub.maintenance(w.id))["state"] for w in hub.worlds.values()}})
+                                     "worlds": {**{w.id: w.status(hub.maintenance(w.id))["state"] for w in hub.worlds.values()},
+                                                **{r: "remote" for r in hub.remotes}}})
             return
         wid = hub.route(path, headers)
+        if wid in hub.remotes:  # its own server answers everything, /status and its offline page included
+            await self._proxy(scope, receive, send, wid, headers, hub.remotes[wid])
+            return
         w = hub.worlds[wid]
         maint = hub.maintenance(wid)
         if path == "/status":
@@ -355,9 +365,10 @@ class Router:
                                          "hint": "GET /status says when it is back; try again then"},
                              extra=((b"retry-after", b"30"),))
             return
-        await self._proxy(scope, receive, send, w, headers)
+        await self._proxy(scope, receive, send, wid, headers, f"http://127.0.0.1:{w.port}")
 
-    async def _proxy(self, scope: dict[str, Any], receive: Any, send: Any, w: World, headers: dict[bytes, bytes]) -> None:
+    async def _proxy(self, scope: dict[str, Any], receive: Any, send: Any, wid: str, headers: dict[bytes, bytes],
+                     base: str) -> None:
         body = b""
         while True:
             msg = await receive()
@@ -371,10 +382,11 @@ class Router:
         if b"x-forwarded-proto" not in headers:
             out.append((b"x-forwarded-proto", (scope.get("scheme") or "http").encode()))
         qs = scope.get("query_string") or b""
-        url = f"http://127.0.0.1:{w.port}{scope.get('raw_path', b'').decode('latin-1') or scope['path']}"
+        path = scope.get("raw_path", b"").decode("latin-1") or scope["path"]
+        url = base + path
         if qs and "?" not in url:
             url += "?" + qs.decode("latin-1")
-        work = asyncio.ensure_future(self._forward(scope.get("method") or "GET", url, out, body, send, w))
+        work = asyncio.ensure_future(self._forward(scope.get("method") or "GET", url, out, body, send, wid, path))
         gone = asyncio.ensure_future(_disconnected(receive))
         await asyncio.wait({work, gone}, return_when=asyncio.FIRST_COMPLETED)
         for t in (work, gone):  # a client that went away cancels its call, and the connection goes back to the pool
@@ -383,19 +395,19 @@ class Router:
             work.result()
 
     async def _forward(self, method: str, url: str, headers: list[tuple[bytes, bytes]], body: bytes, send: Any,
-                       w: World) -> None:
+                       wid: str, path: str) -> None:
         import httpx2
         client = self.client()
         try:
             req = client.build_request(method, url, headers=headers, content=body)
             resp = await client.send(req, stream=True)
         except httpx2.PoolTimeout:
-            await _reply(send, 503, {"ok": False, "reason": f"the world {w.id} has {_CONNECTIONS} calls open; this one "
+            await _reply(send, 503, {"ok": False, "reason": f"the world {wid} has {_CONNECTIONS} calls open; this one "
                                                             "waited its turn and gave up",
                                      "hint": "try again in a few seconds"}, extra=((b"retry-after", b"5"),))
             return
         except Exception as e:  # the world's process died between the check and the call, or never answered
-            await _reply(send, 502, {"ok": False, "reason": f"the world {w.id} did not answer ({type(e).__name__})",
+            await _reply(send, 502, {"ok": False, "reason": f"the world {wid} did not answer ({type(e).__name__})",
                                      "hint": "GET /status, then try again"})
             return
         try:
@@ -405,7 +417,7 @@ class Router:
                 await send({"type": "http.response.body", "body": chunk, "more_body": True})
             await send({"type": "http.response.body", "body": b""})
         except Exception as e:  # cut off midway: the reply is left unfinished, so the client sees it broke
-            print(f"hub: {w.id} {method} {url.split('?')[0].split(str(w.port), 1)[-1]}: reply cut off "
+            print(f"hub: {wid} {method} {path.split('?')[0]}: reply cut off "
                   f"({type(e).__name__})", flush=True)
         finally:
             await resp.aclose()
@@ -418,7 +430,7 @@ async def _disconnected(receive: Any) -> None:
 
 
 def parse_domains(text: str | None) -> dict[str, str]:
-    """`host=world,host=world` (from $EMBODY_DOMAINS) as a map."""
+    """`host=world,host=world` (from $EMBODY_DOMAINS) as a map; `world=url,...` ($EMBODY_REMOTES) reads the same."""
     out: dict[str, str] = {}
     for part in (text or "").split(","):
         if "=" in part:
@@ -432,14 +444,15 @@ def main(args: argparse.Namespace) -> int:
     import uvicorn
     worlds = [w.strip() for w in (args.worlds or os.environ.get("EMBODY_WORLDS") or "").split(",") if w.strip()]
     data = Path(args.data or os.environ.get("EMBODY_DATA") or Path(os.environ.get("EMBODY_DB", "/data/embody.db")).parent)
-    hub = Hub(worlds, data, base_port=int(args.base_port), domains=parse_domains(args.domains or os.environ.get("EMBODY_DOMAINS")))
+    hub = Hub(worlds, data, base_port=int(args.base_port), domains=parse_domains(args.domains or os.environ.get("EMBODY_DOMAINS")),
+              remotes=parse_domains(getattr(args, "remotes", None) or os.environ.get("EMBODY_REMOTES")))
     legacy = Path(args.legacy) if args.legacy else data / "embody.db"
     hub.boot(legacy)
     stop = threading.Event()
     threading.Thread(target=hub.watch, args=(stop,), name="embody-hub-watch", daemon=True).start()
     port = int(args.port or os.environ.get("PORT") or 8900)
-    print(f"[hub] {', '.join(hub.worlds)} behind 0.0.0.0:{port}; domains {hub.domains or '(none: all to ' + hub.first + ')'}",
-          flush=True)
+    print(f"[hub] {', '.join(hub.worlds)} behind 0.0.0.0:{port}; domains {hub.domains or '(none: all to ' + hub.first + ')'}"
+          + (f"; remote {hub.remotes}" if hub.remotes else ""), flush=True)
     try:
         uvicorn.run(Router(hub), host=args.host, port=port, log_level=args.log_level or "warning", proxy_headers=False)
     finally:

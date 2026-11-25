@@ -36,6 +36,8 @@ To change the world later: edit `worlds/my-world/`, stage again, `railway up` th
 
 Stage them together (`tools/stage_deploy.py --world one --world two --domain one.example=one`) and `railway up` the stage as above: the container runs the hub (docs/HOSTING.md, "Many worlds on one server"). Add each domain to the same service with `railway domain <domain>`.
 
+A world that should keep its own engine version and its own restarts gets its own service: `railway add --service <world>`, a volume at `/data` on it, `railway up <its stage> --service <world> --path-as-root --no-gitignore --ci`, and `railway domain --service <world>`. The hub's stage then names it with `--remote <world>=https://<its domain>` (docs/HOSTING.md, "A world on its own server").
+
 ## Quirks
 
 - **No Docker `VOLUME` line.** Railway refuses an image that declares one, so the Dockerfile only makes `/data`, and the volume is Railway's: `railway volume add -m /data`.

@@ -94,6 +94,15 @@ One container can host several worlds, each with its own database file and its o
 - The hub cancels a call when its client goes away, cuts off a reply that is silent for 180 s (a `wait` answers within 120 s), and answers 503 with `retry-after: 5` when all of its 1000 connections to a world have been busy for 10 s. A hung call therefore costs one connection for at most three minutes, and the other calls keep going.
 - A world that fails to load stays down until the next deploy, and its requests answer 503 with a short offline page or refusal. A world whose server stops is restarted after 2 s, 4 s, 8 s and so on, up to 5 minutes. The other worlds keep serving either way.
 
+### A world on its own server
+
+On one hub, every world runs the same engine and restarts with every deploy. A world that needs its own pace of engine changes moves to its own server (its own container, volume and engine version) and keeps its addresses:
+
+- Stage it alone at the engine version it pins: `tools/stage_deploy.py --world my-world --engine <commit or tag>`. Its server runs that world by itself.
+- Copy its database file (`/data/worlds/<world>.db`, with SQLite's backup while the world rests in maintenance) to `/data/worlds/<world>.db` on the new server's volume, then restart it: it renews the world from that file, grants and all.
+- Restage the hub without it and with `--remote <world>=https://<its server>`. The hub streams every request on that world's domains to its server unchanged, so guests keep the address they have. The hub holds none of a remote world's tokens: a remote world is reached by its own domains, and a token for it sent on another world's domain is refused there.
+- Each world's `--engine` is its own: a world moves to a newer engine when its own tests pass, and a deploy of one world never restarts another.
+
 The first boot of the hub copies the old single database (`/data/embody.db`) into the file of the world it holds (the first of the hub's worlds with rows in it) with SQLite's backup; a file that holds none of them is left alone. It checks that the world's entities, grants and events count the same on both sides, and keeps the old file as the backup. The files kept beside the database (`seat-requests.jsonl`, `flaw-reports.jsonl`, `asks.jsonl`) are copied to `/data/worlds/` with it, where the world reads and writes them from then on; the old ones stay. After that, `embody --world <world> ...` run inside the container writes into that world's own file: the CLI prefers `/data/worlds/<world>.db` when it exists. A world's clock does not catch up the time the server was down: it resumes where it stopped.
 
 ## Crossing between worlds

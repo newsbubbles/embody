@@ -178,3 +178,50 @@ def test_the_cli_writes_into_a_hub_worlds_own_file(tmp_path, monkeypatch):
     assert db_path(ns(world="two-rooms")) == tmp_path / "worlds" / "two-rooms.db"  # railway ssh -- embody --world ...
     assert db_path(ns(world="other")) == tmp_path / "embody.db"  # no file of its own: as before
     assert db_path(ns(world="two-rooms", db=str(tmp_path / "x.db"))) == tmp_path / "x.db"  # --db always wins
+
+
+def test_a_world_on_its_own_server_is_forwarded_by_its_domain_and_the_others_stay_local(tmp_path, monkeypatch):
+    """A world that moved to its own server (its own service, its own engine version) keeps every address its guests
+    already use: the hub streams its domain's requests there unchanged (2026-11-24, a world left a shared hub for its own server)."""
+    uvicorn = pytest.importorskip("uvicorn")
+    _, rooms = built(tmp_path, "two-rooms")
+    _, ferry = built(tmp_path, "ferry-at-dusk")
+    monkeypatch.setenv("EMBODY_WORKSPACE", str(tmp_path / "ws"))
+    monkeypatch.delenv("EMBODY_URL", raising=False)
+    servers, hubs, stop = [], [], threading.Event()
+
+    def run(hub: Hub) -> str:
+        hub.boot()
+        threading.Thread(target=hub.watch, args=(stop, 0.2), daemon=True).start()
+        port = _port()
+        server = uvicorn.Server(uvicorn.Config(Router(hub), host="127.0.0.1", port=port, log_level="error"))
+        threading.Thread(target=server.run, daemon=True).start()
+        servers.append(server)
+        hubs.append(hub)
+        for _ in range(200):
+            if server.started and all(w.state == "up" for w in hub.worlds.values()):
+                break
+            time.sleep(0.1)
+        assert all(w.state == "up" for w in hub.worlds.values()), {w.id: (w.state, w.message) for w in hub.worlds.values()}
+        return f"http://127.0.0.1:{port}"
+
+    try:
+        away = run(Hub(["ferry-at-dusk"], tmp_path / "data", base_port=_port()))  # the world's own server
+        base = run(Hub(["two-rooms"], tmp_path / "data", base_port=_port(),
+                       domains=parse_domains("ferry.example=ferry-at-dusk"),
+                       remotes=parse_domains(f"ferry-at-dusk={away}/")))
+        s, _, b = _get(base + "/status", "ferry.example")
+        assert s == 200 and json.loads(b)["world"] == "ferry-at-dusk" and json.loads(b)["state"] == "up"
+        s, _, b = _get(base + "/op/worlds", "ferry.example", token=ferry, body={})
+        assert s == 200 and [w["id"] for w in json.loads(b)] == ["ferry-at-dusk"]
+        s, _, b = _get(base + "/op/worlds", "ferry.example", token=rooms, body={})
+        assert s == 200 and [w["id"] for w in json.loads(b)] == ["two-rooms"]  # a local world's token stays local
+        s, _, b = _get(base + "/op/worlds", "rooms.example", token=ferry, body={})
+        assert s == 401  # the hub holds none of a remote world's tokens: it is reached by its domain
+        assert json.loads(_get(base + "/health", "x")[2])["worlds"] == {"two-rooms": "up", "ferry-at-dusk": "remote"}
+    finally:
+        for server in servers:
+            server.should_exit = True
+        stop.set()
+        for hub in hubs:
+            hub.stop()

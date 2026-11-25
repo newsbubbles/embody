@@ -20,22 +20,27 @@ set -eu
 # Many worlds (EMBODY_WORLDS=my-world,other-world): `embody hub` runs one server per world, each on its own
 # database file under /data/worlds/, behind this one port. It moves the old /data/embody.db into the first world's
 # file on its first boot (the old file stays) and builds or renews each world as below; a world that fails stays
-# down and the others serve. src/embody/hub.py has the routing; EMBODY_DOMAINS (host=world,...) maps domains.
+# down and the others serve. src/embody/hub.py has the routing; EMBODY_DOMAINS (host=world,...) maps domains, and
+# EMBODY_REMOTES (world=https://its-server,...) forwards a world that moved to its own server.
 # tools/stage_deploy.py writes deploy/worlds (and deploy/domains) when it stages more than one world.
 if [ -z "${EMBODY_WORLDS:-}" ] && [ -s deploy/worlds ]; then
-    EMBODY_WORLDS=$(cat deploy/worlds)
+    EMBODY_WORLDS=$(tr -d '\r' < deploy/worlds)
     export EMBODY_WORLDS
 fi
 if [ -z "${EMBODY_DOMAINS:-}" ] && [ -s deploy/domains ]; then
-    EMBODY_DOMAINS=$(cat deploy/domains)
+    EMBODY_DOMAINS=$(tr -d '\r' < deploy/domains)
     export EMBODY_DOMAINS
+fi
+if [ -z "${EMBODY_REMOTES:-}" ] && [ -s deploy/remotes ]; then
+    EMBODY_REMOTES=$(tr -d '\r' < deploy/remotes)
+    export EMBODY_REMOTES
 fi
 if [ -n "${EMBODY_WORLDS:-}" ]; then
     exec embody hub --port "$PORT" --log-level info
 fi
 
 if [ -z "${EMBODY_WORLD:-}" ] && [ -s deploy/world ]; then
-    EMBODY_WORLD=$(cat deploy/world)
+    EMBODY_WORLD=$(tr -d '\r' < deploy/world)
 fi
 if [ -z "${EMBODY_WORLD:-}" ]; then
     found=""

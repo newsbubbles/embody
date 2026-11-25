@@ -527,6 +527,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--worlds", help="the worlds, comma-separated, the first the default (default $EMBODY_WORLDS)")
     c.add_argument("--data", help="the folder for worlds/<id>.db, hub.json and maintenance/ (default the folder of $EMBODY_DB)")
     c.add_argument("--domains", help="host=world,host=world (default $EMBODY_DOMAINS, then hub.json)")
+    c.add_argument("--remotes", help="world=https://its-server,... for worlds that run elsewhere (default $EMBODY_REMOTES)")
     c.add_argument("--legacy", help="the old single database to move into the first world's file (default <data>/embody.db)")
     c.add_argument("--host", default="0.0.0.0")
     c.add_argument("--port", type=int, default=None, help="default $PORT, else 8900")

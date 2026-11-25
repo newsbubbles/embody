@@ -103,13 +103,18 @@ def main(argv: list[str] | None = None) -> int:
                          "repeat for more (the first is the default)")
     ap.add_argument("--site", help="the site folder, for a single --world given without one")
     ap.add_argument("--domain", action="append", default=[], help="HOST=WORLD for the hub's domain map; repeat")
+    ap.add_argument("--remote", action="append", default=[],
+                    help="WORLD=URL: a world on its own server that the hub forwards its domains to; repeat")
+    ap.add_argument("--engine", default="HEAD",
+                    help="the engine's commit or tag to ship (default HEAD): a world pins its engine version here")
     ap.add_argument("--out", help="where to stage (default: a fresh temporary folder)")
     a = ap.parse_args(argv)
     worlds: list[tuple[str, Path | None]] = []
     for w in a.world:
         wid, _, site = w.partition("=")
         worlds.append((wid.strip().replace("\\", "/").strip("/"), Path(site).resolve() if site else None))
-    if (len(worlds) > 1 or a.domain) and any("/" in w for w, _ in worlds):
+    hub = len(worlds) > 1 or bool(a.domain) or bool(a.remote)
+    if hub and any("/" in w for w, _ in worlds):
         print("a path (examples/...) ships one world alone; for the hub, put each world in worlds/<id>/", file=sys.stderr)
         return 2
     if a.site:
@@ -117,26 +122,33 @@ def main(argv: list[str] | None = None) -> int:
             print("--site goes with one --world given without a site (or write --world ID=SITE)", file=sys.stderr)
             return 2
         worlds[0] = (worlds[0][0], Path(a.site).resolve())
+    if not _git(ROOT, "rev-parse", "--verify", "-q", f"{a.engine}^{{commit}}"):
+        print(f"no engine version {a.engine}: name a commit or tag of this repository", file=sys.stderr)
+        return 2
     dirty = _git(ROOT, "status", "--porcelain", "--untracked-files=no")
-    if dirty:
+    if dirty and a.engine == "HEAD":
         print("note: uncommitted changes stay behind; the stage is HEAD:\n" + dirty, file=sys.stderr)
     out = Path(a.out) if a.out else Path(tempfile.mkdtemp(prefix="embody-stage-"))
     if out.exists() and any(out.iterdir()):
         print(f"{out} is not empty", file=sys.stderr)
         return 2
     out.mkdir(parents=True, exist_ok=True)
-    _untar(subprocess.run(["git", "archive", "--format=tar", "HEAD"], cwd=ROOT, capture_output=True, check=True).stdout, out)
+    _untar(subprocess.run(["git", "archive", "--format=tar", a.engine], cwd=ROOT, capture_output=True, check=True).stdout,
+           out)
     lines = [stage_world(out, wid, site) for wid, site in worlds]
-    if len(worlds) > 1 or a.domain:
-        (out / "deploy" / "worlds").write_text(",".join(w for w, _ in worlds) + "\n", encoding="utf-8")
-        (out / "deploy" / "domains").write_text(",".join(a.domain) + "\n", encoding="utf-8")
+    if hub:
+        (out / "deploy" / "worlds").write_text(",".join(w for w, _ in worlds) + "\n", encoding="utf-8", newline="\n")
+        (out / "deploy" / "domains").write_text(",".join(a.domain) + "\n", encoding="utf-8", newline="\n")
+        if a.remote:
+            (out / "deploy" / "remotes").write_text(",".join(a.remote) + "\n", encoding="utf-8", newline="\n")
     else:
-        (out / "deploy" / "world").write_text(worlds[0][0] + "\n", encoding="utf-8")
-    print(f"staged {out}: the engine's HEAD ({_git(ROOT, 'rev-parse', '--short', 'HEAD')})")
+        (out / "deploy" / "world").write_text(worlds[0][0] + "\n", encoding="utf-8", newline="\n")
+    print(f"staged {out}: the engine's {a.engine} ({_git(ROOT, 'rev-parse', '--short', a.engine)})")
     for line in lines:
         print("  " + line)
-    if len(worlds) > 1 or a.domain:
-        print(f"  hub: {', '.join(w for w, _ in worlds)}; domains {', '.join(a.domain) or '(none)'}")
+    if hub:
+        print(f"  hub: {', '.join(w for w, _ in worlds)}; domains {', '.join(a.domain) or '(none)'}"
+              + (f"; remote {', '.join(a.remote)}" if a.remote else ""))
     print(f"build: docker build -t <name> \"{out}\"  (any Docker host: docs/HOST_YOUR_WORLD.md; a VPS or home box: docs/platforms/vps.md)")
     print(f"railway: railway up \"{out}\" --path-as-root --no-gitignore --ci  (docs/platforms/railway.md)")
     return 0
