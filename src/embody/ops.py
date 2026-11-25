@@ -3688,6 +3688,7 @@ class Session:
         except Rejected as why:
             self._refused(me, verb, said[0], tid, said[1], why)
             raise
+        r = self._paged(r)
         if read:
             r["read_as"] = {"target": target, "params": params}
         r = self._turn(r)
@@ -3820,6 +3821,73 @@ class Session:
             except Rejected as r:
                 return {"ok": False, "done": done, "failed_at": i, "step": s, **r.to_dict()}
         return {"ok": True, "done": done}
+
+    def _paged(self, r: dict[str, Any]) -> dict[str, Any]:
+        """A verb's answer held to its page (page_window): what is cut is kept for this seat, and `more` says where."""
+        cfg = page_config(r.pop("page", None))
+        if "result" not in r:
+            return r
+        shown, cuts = page_window(r["result"], cfg)
+        if not cuts:
+            return r
+        handle = self._keep_page(r["result"], cfg)
+        r["result"] = shown
+        r["more"] = {"handle": handle, "cuts": cuts[:PAGE_CUTS_SHOWN],
+                     **({"cuts_not_shown": len(cuts) - PAGE_CUTS_SHOWN} if len(cuts) > PAGE_CUTS_SHOWN else {}),
+                     "how": f"more('{handle}', path, offset) reads on from a cut without doing the verb again"}
+        return r
+
+    def _keep_page(self, whole: Any, cfg: dict[str, int]) -> str:
+        pages = self.engine.__dict__.setdefault("_pages", {})  # (world, principal) -> handle -> a whole answer
+        now = time.monotonic()
+        for key in [k for k, kept in pages.items() if all(now - p["at"] >= PAGE_TTL for p in kept.values())]:
+            del pages[key]
+        key = (self.world.id, self.pid)
+        mine = {h: p for h, p in pages.get(key, {}).items() if now - p["at"] < PAGE_TTL}
+        handle = "pg" + secrets.token_hex(4)
+        mine[handle] = {"at": now, "whole": json.loads(json.dumps(whole, ensure_ascii=False, default=str)), "cfg": cfg}
+        pages[key] = dict(list(mine.items())[-PAGE_KEEP:])
+        return handle
+
+    def more(self, handle: str, path: str | list[str] | None = None, offset: int = 0) -> dict[str, Any]:
+        """Read on in a verb's answer that came back cut (its `more`), without doing the verb again. path: the cut, as
+        more.cuts lists it ("books.3.text"; none: the answer from its top). offset: where to start; the answer's `next`
+        is the next page's. A list or map shows `items` at a time, a string `chars`, each part cut again if it is
+        big. Your last 8 answers are kept for 10 minutes."""
+        w = self.world
+        p = self.engine.__dict__.get("_pages", {}).get((w.id, self.pid), {}).get(handle)
+        if not p or time.monotonic() - p["at"] >= PAGE_TTL:
+            raise Rejected(f"no answer is kept under {handle!r}: each seat keeps its last {PAGE_KEEP} for "
+                           f"{int(PAGE_TTL // 60)} minutes", hint="do the verb again: a cut answer comes with a new handle")
+        offset = int(offset or 0)
+        if offset < 0:
+            raise Rejected(f"offset {offset} is before the start", hint="offset 0 is the first item")
+        steps, v = _page_steps(path), p["whole"]
+        for i, k in enumerate(steps):
+            if isinstance(v, list) and k.isdigit() and int(k) < len(v):
+                v = v[int(k)]
+            elif isinstance(v, dict) and k in v:
+                v = v[k]
+            else:
+                raise Rejected(f"nothing at {'.'.join(steps[:i + 1])} in that answer",
+                               hint="name a path from its more.cuts, or none for the top")
+        cfg = p["cfg"]
+        if isinstance(v, (str, list, dict)):
+            n, total = (cfg["chars"] if isinstance(v, str) else cfg["items"]), len(v)
+            part = v[offset:offset + n] if not isinstance(v, dict) else dict(list(v.items())[offset:offset + n])
+        else:
+            n, total, part = 1, 1, v
+        if offset and offset >= total:
+            raise Rejected(f"offset {offset} is past the end: {total} in all", hint=f"offset 0 to {max(0, total - 1)}")
+        base = ".".join(steps)
+        shown, cuts = page_window(part, cfg, base, offset if isinstance(v, list) else 0)
+        n = len(part) if isinstance(v, (str, list, dict)) else 1
+        top = next((c for c in cuts if c["path"] == base), None)
+        if top:  # still over the budget: this page is shorter, and `next` goes on from where it stops
+            n, cuts = top["shown"], [c for c in cuts if c is not top]
+        nxt = offset + n if isinstance(v, (str, list, dict)) and offset + n < total else None
+        return {"ok": True, "handle": handle, "path": base or None, "offset": offset, "shown": n, "total": total,
+                "value": shown, "next": nxt, **({"cuts": cuts[:PAGE_CUTS_SHOWN]} if cuts else {})}
 
     def reclaim(self, thing: str) -> dict[str, Any]:
         """Take back from an idle body where you stand what is yours (it was taken from you, or its `owner` is you)
@@ -5617,7 +5685,7 @@ class Session:
         self._tick()
         eid = self._resolve(entity)
         self._not_a_players(eid, "act")
-        return self.world.act(eid, verb, self._resolve(target) if target else None, params)
+        return self._paged(self.world.act(eid, verb, self._resolve(target) if target else None, params))
 
     def _not_a_players(self, eid: str, what: str) -> None:
         """A body a guest holds (a player seat from an invite) is theirs: no hand of the host's acts or speaks for it
@@ -5848,7 +5916,7 @@ INTRODUCE_HOW = {
 OPS = [
     "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats", "claim_seat",
     "invite", "grants", "revoke", "evict", "hold_seat", "requests", "minds", "chronicle", "chronicle_arc",
-    "publish_chronicle", "perceive", "inspect", "find", "history", "act", "act_many", "say", "gesture", "cross", "remember", "intend", "recall", "wait",
+    "publish_chronicle", "perceive", "inspect", "find", "history", "act", "act_many", "more", "say", "gesture", "cross", "remember", "intend", "recall", "wait",
     "step", "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
@@ -5862,7 +5930,7 @@ OPS = [
 # people who keep the world (Nate 2026-11-17). A test checks each op in OPS sits in exactly one.
 LAYERS: dict[str, tuple[str, list[str]]] = {
     "in the world": ("Your character's eyes, hands, voice and notes, inside the story.", [
-        "perceive", "inspect", "find", "history", "map", "measure", "looks", "timers", "clock", "act", "act_many", "say", "gesture", "cross",
+        "perceive", "inspect", "find", "history", "map", "measure", "looks", "timers", "clock", "act", "act_many", "more", "say", "gesture", "cross",
         "wait", "step", "remember", "intend", "recall", "away", "reclaim", "program", "unprogram", "programs"]),
     "your seat": ("Which world and which body: coming in, going out, the seats open, the guide.", [
         "worlds", "use", "summary", "guide", "handbook", "join", "leave", "seats", "claim_seat"]),
@@ -6019,6 +6087,76 @@ def _trimmed(params: dict[str, Any] | None, n: int = 160) -> dict[str, Any]:
         j = json.dumps(v, ensure_ascii=False, default=str)
         out[str(k)[:40]] = v if len(j) <= n else j[:n - 3] + "..."
     return out
+
+
+# A verb's answer as the agent gets it (Nate 2026-11-24: a verb is a tool, and a tool never floods the context). Past
+# `budget` (tokens, about 4 characters each) every list and map is cut to its first `items` and every string to `chars`,
+# halved again while it is still over; more() reads on from a cut. An action's `page: {items, chars, budget}` sets its
+# own, each held between its floor and ceiling. ctx.act in a script always gets the whole answer.
+PAGE_DEFAULT = {"items": 20, "chars": 2000, "budget": 2000}
+PAGE_LIMITS = {"items": (5, 200), "chars": (200, 20_000), "budget": (500, 8_000)}
+PAGE_KEEP = 8  # whole answers kept per seat for more()
+PAGE_TTL = 600.0  # real seconds
+PAGE_CUTS_SHOWN = 20
+
+
+def page_config(page: Any) -> dict[str, int]:
+    """An action's `page` held to the limits; what it leaves out is the default."""
+    cfg = dict(PAGE_DEFAULT)
+    if isinstance(page, dict):
+        for k, (lo, hi) in PAGE_LIMITS.items():
+            v = page.get(k)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                cfg[k] = max(lo, min(hi, int(v)))
+    cfg["chars"] = min(cfg["chars"], cfg["budget"] * 4)  # one string's page fits the budget
+    return cfg
+
+
+def _json_size(v: Any) -> int:
+    return len(json.dumps(v, ensure_ascii=False, default=str))
+
+
+def _cut(v: Any, items: int, chars: int, path: str, cuts: list[dict[str, Any]], offset: int = 0) -> Any:
+    """v with every list and map past `items` cut to its first ones and every string past `chars` cut short, each cut
+    noted in `cuts` as {path, shown, total}. `offset`: where a top list already starts (a page more() reads)."""
+    at = (lambda k: f"{path}.{k}" if path else str(k))
+    if isinstance(v, str):
+        if len(v) > chars:
+            cuts.append({"path": path, "shown": chars, "total": len(v)})
+            return v[:chars]
+        return v
+    if isinstance(v, list):
+        if len(v) > items:
+            cuts.append({"path": path, "shown": items, "total": len(v)})
+        return [_cut(x, items, chars, at(offset + i), cuts) for i, x in enumerate(v[:items])]
+    if isinstance(v, dict):
+        if len(v) > items:
+            cuts.append({"path": path, "shown": items, "total": len(v)})
+        return {k: _cut(x, items, chars, at(k), cuts) for k, x in list(v.items())[:items]}
+    return v
+
+
+def page_window(v: Any, cfg: dict[str, int], path: str = "", offset: int = 0) -> tuple[Any, list[dict[str, Any]]]:
+    """(what shows, the cuts). An answer within the budget shows whole, with no cuts."""
+    budget = cfg["budget"] * 4
+    if _json_size(v) <= budget:
+        return v, []
+    items, chars = cfg["items"], cfg["chars"]
+    (lo_items, _), (lo_chars, _) = PAGE_LIMITS["items"], PAGE_LIMITS["chars"]
+    while True:
+        cuts: list[dict[str, Any]] = []
+        out = _cut(v, items, chars, path, cuts, offset)
+        if _json_size(out) <= budget or (items <= lo_items and chars <= lo_chars):
+            return out, cuts
+        items, chars = min(items, max(lo_items, items // 2)), min(chars, max(lo_chars, chars // 2))
+
+
+def _page_steps(path: Any) -> list[str]:
+    if path is None or path == "":
+        return []
+    if isinstance(path, list):
+        return [str(p) for p in path]
+    return str(path).split(".")
 
 
 _CHRONICLE_QUIET = frozenset({"spawned", "patched", "linked", "unlinked", "related", "unrelated", "laid_out", "moved",

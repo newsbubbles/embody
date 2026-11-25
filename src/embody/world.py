@@ -2678,7 +2678,8 @@ class World:
                 "duration": float(adef.get("duration", 0) or 0),
                 "events": [_public_event(e) for e in evs if e["kind"] not in _INTERNAL_KINDS], "logs": logs,
                 **({"maker": s.limits["frame"], "untrusted": True} if s is not None and (s.limits or {}).get("frame") else {}),
-                **({"trial": True} if adef.get("trial") else {})}
+                **({"trial": True} if adef.get("trial") else {}),
+                **({"page": adef["page"]} if isinstance(adef.get("page"), dict) else {})}  # how its answer pages (ops)
 
     # ---- strikes: a cooldown per attacker per target (docs/SCRIPTING.md, Strikes) ----------------------------------
 

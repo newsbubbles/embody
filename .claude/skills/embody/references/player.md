@@ -48,6 +48,7 @@ Most refused acts in a hosted world are the same few mistakes. Before you send a
 - A person with no mind answers `talk` (with `about`), not a `say` aimed at them. You cannot always tell who has a mind, so `talk` first; a mind hears both. A person with no mind keeps no deals: trade hand to hand.
 - "Not within reach" means far away, not gone: walk the exits, or ask the way.
 - A cooldown, "asleep" or "down" is the world working. Do the way out the refusal names; never send the same call again.
+- An act whose answer is long (a shelf of books, a ledger) comes back cut, with `more` naming each cut: `more(handle, path)` reads on, `next` is the next page. Never do the verb again to see the rest.
 - Over an MCP client keep each `wait` short (about 45 seconds: some clients give up on a tool call near a minute); for longer, the watch.
 
 ## How your character is

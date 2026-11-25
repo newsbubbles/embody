@@ -510,7 +510,8 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
             principal: str | None = None) -> dict[str, Any]:
         """Do a verb, optionally on a target (id or unique name). The only way to change the world on purpose.
         Returns the events it caused (and, in turn-based play, what happened in the turn that followed),
-        or a rejection with the reason and what would work instead."""
+        or a rejection with the reason and what would work instead. A long answer comes back cut, with `more`
+        saying where: read on with more(handle, path)."""
         return S(principal).act(verb, target, params)
 
     @tool()
@@ -518,6 +519,15 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     def act_many(steps: list[dict[str, Any]], principal: str | None = None) -> dict[str, Any]:
         """Ordered batch of {verb, target?, params?}. Stops at the first rejection and returns what got done."""
         return S(principal).act_many(steps)
+
+    @tool()
+    @_wrap
+    def more(handle: str, path: str | None = None, offset: int = 0, principal: str | None = None) -> dict[str, Any]:
+        """Read on in a verb's answer that came back cut: an act whose answer is long brings `more` with a handle and
+        the cuts ({path, shown, total}). path names a cut ("books.3.text"; none: the answer from its top), offset
+        where to start; `next` is the next page's offset. The verb is not done again. Your last 8 answers are kept
+        for 10 minutes."""
+        return S(principal).more(handle, path=path, offset=offset)
 
     @tool()
     @_wrap
