@@ -3000,7 +3000,7 @@ class Session:
         if e["state"].get("holds") is not None:
             card["holding"] = [_brief(c) for c in seen]  # what lies on the rack is in plain sight
         elif w.is_a(e["type"], "creature"):
-            bears = [_brief(c) for c in seen if c["state"].get("weapon")]
+            bears = [_brief(c) for c in seen if c["state"].get("weapon") and not c["state"].get("concealed")]
             if bears:
                 card["bears"] = bears  # a blade at the hip shows, whatever the description still says
         return card

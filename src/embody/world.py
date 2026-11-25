@@ -182,7 +182,9 @@ RULES_ONLY = frozenset({"sheet", "skills", "xp", "attributes"})
 BODY_RULES_ONLY = frozenset({"progress", "body", "wits", "will", "hp", "max_hp", "carry", "looks", "verbs_only",
                              "understands", "understands_until", "beast",
                              # a body's gifts (packs/gifts) and their uses: code that could write them could mint itself one
-                             "gift_book", "gift_uses"})
+                             "gift_book", "gift_uses",
+                             # what a body wears (packs/clothing): the line others read on its card, kept by the pack's rules
+                             "attire"})
 
 # What a body is made of, never a frame's code to write on the one who chose its verb (with the keys its schema gives it,
 # and the ones its world's packs declare: d20's water and faction, say)
