@@ -3574,29 +3574,7 @@ class Session:
         """Whether a chronicle row was in the open when it happened: no place it stood in, and no body in it, was
         hidden then (a place revealed later still hides what happened before; one hidden since still shows it). Only
         what is somewhere counts (a place, a thing, a creature): a faction or a ledger hides no line."""
-        w = self.world
-        marks: dict[str, tuple[list[tuple[float, bool]], bool] | None] = {}
-
-        def hidden_then(eid: str, t: float) -> bool:
-            if eid not in marks:
-                e = w.get(eid)
-                if e is None or not any(w.is_a(e["type"], k) for k in ("place", "thing", "creature")):
-                    marks[eid] = None
-                else:
-                    turns = []
-                    for x in w.store.query("event", "world_id=? AND kind='patched' AND target_id=? AND payload LIKE ?",
-                                           (w.id, eid, '%"hidden"%'), order="seq"):
-                        p = x["payload"] or {}
-                        if "hidden" in (p.get("changes") or {}):
-                            turns.append((float(x["t"]), bool((p.get("before") or {}).get("hidden"))))
-                    marks[eid] = (turns, bool(e["state"].get("hidden")))
-            m = marks[eid]
-            if m is None:
-                return False
-            for at, before in m[0]:
-                if at > t:
-                    return before  # the first change after it says what it was then
-            return m[1]
+        hidden_then = hidden_when(self.world)
 
         def seen(row: dict[str, Any]) -> bool:
             at = row.get("_at")
@@ -6071,6 +6049,35 @@ def _clean_parts(parts: Any) -> list[str]:
     if len(set(out)) > _MAX_PARTS:
         raise Rejected(f"a grant plays at most {_MAX_PARTS} parts", hint="name fewer")
     return list(dict.fromkeys(out))
+
+
+def hidden_when(w: Any) -> Callable[[str, float], bool]:
+    """`hidden_then(eid, t)`: whether the entity was hidden at world time t, from its `hidden` patches (the first change
+    after t says what it was then; none after, its state now). Only what is somewhere counts (a place, a thing, a
+    creature): a faction or a ledger is never hidden. One lookup per entity, kept."""
+    marks: dict[str, tuple[list[tuple[float, bool]], bool] | None] = {}
+
+    def hidden_then(eid: str, t: float) -> bool:
+        if eid not in marks:
+            e = w.get(eid)
+            if e is None or not any(w.is_a(e["type"], k) for k in ("place", "thing", "creature")):
+                marks[eid] = None
+            else:
+                turns = []
+                for x in w.store.query("event", "world_id=? AND kind='patched' AND target_id=? AND payload LIKE ?",
+                                       (w.id, eid, '%"hidden"%'), order="seq"):
+                    p = x["payload"] or {}
+                    if "hidden" in (p.get("changes") or {}):
+                        turns.append((float(x["t"]), bool((p.get("before") or {}).get("hidden"))))
+                marks[eid] = (turns, bool(e["state"].get("hidden")))
+        m = marks[eid]
+        if m is None:
+            return False
+        for at, before in m[0]:
+            if at > t:
+                return before
+        return m[1]
+    return hidden_then
 
 
 def _when(r: dict[str, Any], by: Any = None) -> dict[str, Any]:

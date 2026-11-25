@@ -1,8 +1,8 @@
 """The public face of a hosted world, for anyone, with no grant: a landing page served from a folder at `/`, and three
 answers built on the server from the world as it is.
 
-  GET /chronicle.json    the world's own prose (scene events by default), oldest first, and the days the owner published
-                         with publish_chronicle: no player's words unless the owner put them there
+  GET /chronicle.json    the world's own prose (scene events by default) told in the open, oldest first, and the days
+                         the owner published with publish_chronicle: no player's words unless the owner put them there
   GET /now.json          the clock, the day's phases, and counts (bodies held, people, open seats): no names, no places
                          (/reach.json is the same feed by its first world's name, kept for pages already out)
   POST /seat-request     someone asking for a seat; kept in a file beside the database for the owner's `requests()`
@@ -193,7 +193,7 @@ class Site:
 
     def chronicle(self) -> dict[str, Any] | None:
         """The world's own prose, oldest first: the kinds its meta lists as `public_chronicle` (default: scene), each
-        text once."""
+        text once, and only what was told in the open (`_open`)."""
         w = self._world()
         if w is None:
             return None
@@ -201,11 +201,13 @@ class Site:
         day = float(meta.get("day_seconds") or 86400)
         kinds = [str(k) for k in (meta.get("public_chronicle") or ["scene"])]
         marks = ",".join("?" * len(kinds))
-        rows = w.store.query("event", f"world_id=? AND kind IN ({marks})", [w.id, *kinds], order="seq DESC", limit=400)
+        rows = w.store.query("event", f"world_id=? AND kind IN ({marks}) AND reach != 0", [w.id, *kinds],
+                             order="seq DESC", limit=400)
+        is_open = self._open(w, meta)
         entries, told = [], set()
         for r in reversed(rows):
             text = str((r.get("payload") or {}).get("text") or "").strip()
-            if text and text not in told:  # a line the world says every day is told once
+            if text and text not in told and is_open(r):  # a line the world says every day is told once
                 told.add(text)
                 entries.append({"day": int(float(r["t"]) // day) + 1, "kind": r["kind"], "text": text, "t": round(float(r["t"]))})
         phases = self._phases(w, day)
@@ -219,6 +221,36 @@ class Site:
                 days.pop(d, None)  # withdrawn
         return {"now": {"day": int(w.t // day) + 1, "phase": self._phase_now(phases, w.t, day)}, "entries": entries,
                 "days": [days[d] for d in sorted(days)]}
+
+    @staticmethod
+    def _open(w: Any, meta: dict[str, Any]) -> Any:
+        """Whether a scene was told in the open, for anyone to read: not to one body (reach 0, kept out by the query),
+        not veiled (`seen_by`), not a dream, and no place or body in it (its path then, its actor, and its target's
+        places now) hidden then or now, or one of the world's own fences (meta `public_exclude`: ids of places, whose
+        insides stay off the feed too)."""
+        from .ops import hidden_when
+        hidden_then = hidden_when(w)
+        fence = {str(x) for x in (meta.get("public_exclude") or []) if x}
+        up: dict[str, list[str]] = {}
+
+        def hidden(eid: str, t: float) -> bool:
+            e = w.get(eid)
+            return eid in fence or bool(e and e["state"].get("hidden")) or hidden_then(eid, t)
+
+        def is_open(r: dict[str, Any]) -> bool:
+            p = r.get("payload") or {}
+            if p.get("seen_by") is not None or p.get("dream"):
+                return False
+            ids = list(r.get("path") or [])
+            if r.get("actor_id"):
+                ids.append(r["actor_id"])  # a hidden body's deed is not the open's either
+            tgt = r.get("target_id")
+            if tgt:
+                if tgt not in up:
+                    up[tgt] = w.ancestors(tgt) if w.get(tgt) else []
+                ids += [tgt, *up[tgt]]
+            return not any(hidden(i, float(r["t"])) for i in dict.fromkeys(ids))
+        return is_open
 
     def reach(self) -> dict[str, Any] | None:
         """The world right now, for anyone: the clock and counts, nothing anyone could be found by."""

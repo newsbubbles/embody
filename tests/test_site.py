@@ -160,3 +160,28 @@ def test_a_published_day_is_on_the_chronicle_feed_once_in_its_last_telling(tmp_p
     finally:
         server.should_exit = True
         t.join(timeout=5)
+
+
+def test_the_chronicle_feed_tells_only_what_happened_in_the_open():
+    # the host of a hosted world, 2026-11-25: the feed showed every scene, a hidden place's and one told to one body too
+    from embody.site import Site
+    eng, w, i = engine_with_two_rooms()
+    w.set_meta({"public_feed": True})
+    vault = w.spawn("place", parent=i["Hall"], name="Vault", state={"hidden": True})
+    inner = w.spawn("place", parent=vault, name="Inner Vault")
+    w.emit("scene", target=i["Cell"], payload={"text": "Rain on the cell's one window."})
+    w.emit("scene", target=i["Prisoner"], reach=0, payload={"text": "A memory comes back, whole."})
+    w.emit("scene", target=inner, payload={"text": "Deep in the vault a lamp is lit."})
+    w.emit("scene", target=i["Hall"], payload={"text": "You dream of the sea.", "dream": True})
+    w.emit("scene", target=i["Hall"], payload={"text": "Only the guard sees it.", "seen_by": [i["Guard"]]})
+    w.emit("scene", target=i["Hall"], payload={"text": "The hall's torches gutter."})
+    site = Site(eng, w.id)
+    assert [e["text"] for e in site.chronicle()["entries"]] == ["Rain on the cell's one window.", "The hall's torches gutter."]
+    w.set_meta({"public_exclude": [i["Hall"]]})  # the world fences a region off: the hall and what is in it
+    assert [e["text"] for e in site.chronicle()["entries"]] == ["Rain on the cell's one window."]
+    w.set_meta({"public_exclude": []})
+    w.step(60)
+    w.patch(vault, {"hidden": False})  # revealed later: what happened in it while hidden stays off the feed
+    w.emit("scene", target=inner, payload={"text": "The vault stands open to the hall."})
+    assert "Deep in the vault a lamp is lit." not in [e["text"] for e in site.chronicle()["entries"]]
+    assert "The vault stands open to the hall." in [e["text"] for e in site.chronicle()["entries"]]
