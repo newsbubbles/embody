@@ -23,10 +23,10 @@ ROLES = (OWNER, AUTHOR_ROLE, BUILDER, NARRATOR, PLAYER, MIND, OBSERVER_ROLE, ORA
 
 # Ops by what they are for. A role is a union of these.
 _ANYONE = {"worlds", "use", "summary", "seats", "leave", "clock", "guide", "handbook", "report_flaw", "ask_owner", "asks_to_owner", "answer_ask", "ask_reply"}
-_PLAY = {"join", "perceive", "inspect", "find", "history", "act", "act_many", "more", "say", "gesture", "remember", "intend", "recall", "wait",
+_PLAY = {"join", "perceive", "inspect", "find", "history", "history_count", "act", "act_many", "more", "say", "gesture", "remember", "intend", "recall", "wait",
          "step", "timers", "reclaim", "away", "program", "unprogram", "programs", "claim_seat", "looks",
          "relate", "unrelate", "cross"}  # relate for a seat: its own bonds, of the kinds the world's root lists
-_WATCH = {"perceive", "inspect", "find", "history", "recall", "timers", "schemas", "scripts", "script_source", "wait",
+_WATCH = {"perceive", "inspect", "find", "history", "history_count", "recall", "timers", "schemas", "scripts", "script_source", "wait",
           "map", "measure", "verify", "looks"}
 _NARRATE = {"act_as", "say_as", "minds", "timers", "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "layout",
             "relate", "unrelate", "schedule", "unschedule", "remember", "intend", "recall", "chmod", "chown"}

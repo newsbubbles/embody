@@ -318,7 +318,7 @@ class Store:
         self.conn.execute(f"UPDATE {table} SET {sets} WHERE world_id=? AND id=?", [*enc.values(), world_id, id])
 
     def query(self, table: str, where: str = "", params: Iterable[Any] = (), order: str = "",
-              limit: int | None = None) -> list[dict[str, Any]]:
+              limit: int | None = None, offset: int = 0) -> list[dict[str, Any]]:
         sql = f"SELECT * FROM {table}"
         if where:
             sql += " WHERE " + where
@@ -326,6 +326,8 @@ class Store:
             sql += " ORDER BY " + order
         if limit is not None:
             sql += f" LIMIT {int(limit)}"
+            if offset:
+                sql += f" OFFSET {int(offset)}"
         cur = self.conn.execute(sql, list(params))
         return [self._decode(table, r) for r in cur.fetchall()]
 

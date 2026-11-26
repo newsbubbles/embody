@@ -480,11 +480,25 @@ def build_server(session: Session, db: Path, engine: Engine | None = None, http_
     @tool()
     @_wrap
     def history(since: int = 0, until: int | None = None, kinds: list[str] | None = None,
-                touching: str | None = None, limit: int = 50, newest: bool = False,
+                touching: str | None = None, limit: int = 50, newest: bool = False, between: str | None = None,
+                actor: str | None = None, text: str | None = None, offset: int = 0, seq: int | None = None,
                 principal: str | None = None) -> list[dict[str, Any]]:
         """Paged event log, oldest first: `limit` events after seq `since`, or with newest=true the last `limit`.
-        Embodied principals see events that touched them."""
-        return S(principal).history(since=since, until=until, kinds=kinds, touching=touching, limit=limit, newest=newest)
+        Embodied principals see events that touched them. Narrow it: `between` (an entity: it did it or it was done
+        to it), `actor` (done by it), `text` (words said or written, any case); `offset` pages on, and
+        history_count says how many there are in all. `seq`: that one event, with its `causes` and `effects`."""
+        return S(principal).history(since=since, until=until, kinds=kinds, touching=touching, limit=limit, newest=newest,
+                                    between=between, actor=actor, text=text, offset=offset, seq=seq)
+
+    @tool()
+    @_wrap
+    def history_count(since: int = 0, until: int | None = None, kinds: list[str] | None = None,
+                      touching: str | None = None, between: str | None = None, actor: str | None = None,
+                      text: str | None = None, principal: str | None = None) -> dict[str, Any]:
+        """How many events history pages through with these filters, and the first and last seq: say "12 of 140",
+        and know an absence is one you read the whole of."""
+        return S(principal).history_count(since=since, until=until, kinds=kinds, touching=touching, between=between,
+                                          actor=actor, text=text)
 
     @tool()
     @_wrap

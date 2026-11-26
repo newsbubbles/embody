@@ -2209,9 +2209,27 @@ class World:
 
     def events(self, since: int = 0, until: int | None = None, kinds: list[str] | None = None,
                touching: str | None = None, limit: int = 100, skip: Iterable[str] | None = None,
-               newest: bool = False) -> list[dict[str, Any]]:
+               newest: bool = False, actor: str | None = None, between: str | None = None, text: str | None = None,
+               offset: int = 0) -> list[dict[str, Any]]:
         """Events after `since`, oldest first. `touching`: only events whose path includes this id or its parent.
-        `kinds` and `skip` filter before the limit counts; `newest`: the last `limit` of them, not the first."""
+        `kinds`, `skip`, `actor` (done by it), `between` (it is the actor or the target) and `text` (in the payload,
+        any case) filter before the limit counts; `newest`: the last `limit` of them, not the first. `offset` skips
+        that many first (from the newest end with `newest`)."""
+        where, params = self._event_where(since, until, kinds, skip, actor, between, text)
+        offset = max(0, int(offset or 0))
+        if touching:
+            rows = self._located(touching, self.store.query("event", where, params, order="seq"))
+            if newest:
+                rows = rows[:len(rows) - offset] if offset else rows
+                return rows[-limit:]
+            return rows[offset:offset + limit]
+        if newest:
+            return list(reversed(self.store.query("event", where, params, order="seq DESC", limit=limit, offset=offset)))
+        return self.store.query("event", where, params, order="seq", limit=limit, offset=offset)
+
+    def _event_where(self, since: int = 0, until: int | None = None, kinds: list[str] | None = None,
+                     skip: Iterable[str] | None = None, actor: str | None = None, between: str | None = None,
+                     text: str | None = None) -> tuple[str, list[Any]]:
         where = "world_id=? AND seq>?"
         params: list[Any] = [self.id, since]
         if until is not None:
@@ -2224,12 +2242,16 @@ class World:
         if skip:
             where += f" AND kind NOT IN ({','.join('?' * len(skip))})"
             params.extend(skip)
-        if touching:
-            rows = self._located(touching, self.store.query("event", where, params, order="seq"))
-            return rows[-limit:] if newest else rows[:limit]
-        if newest:
-            return list(reversed(self.store.query("event", where, params, order="seq DESC", limit=limit)))
-        return self.store.query("event", where, params, order="seq", limit=limit)
+        if actor:
+            where += " AND actor_id=?"
+            params.append(actor)
+        if between:
+            where += " AND (actor_id=? OR target_id=?)"
+            params.extend([between, between])
+        if text:
+            where += " AND payload LIKE ? ESCAPE '!'"  # a prefilter: the reader's view checks the words again
+            params.append("%" + re.sub(r"([%_!])", r"!\1", str(text)) + "%")
+        return where, params
 
     def _located(self, who: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Keep the events `who` could have witnessed: its own, those on its path, and those in the place it

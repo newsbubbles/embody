@@ -3261,10 +3261,45 @@ class Session:
         return [self._card(r) for r in rows[offset:offset + limit]]
 
     def history(self, since: int = 0, until: int | None = None, kinds: list[str] | None = None,
-                touching: str | None = None, limit: int = 50, newest: bool = False) -> list[dict[str, Any]]:
+                touching: str | None = None, limit: int = 50, newest: bool = False, between: str | None = None,
+                actor: str | None = None, text: str | None = None, offset: int = 0,
+                seq: int | None = None) -> list[dict[str, Any]]:
         """The event log, oldest first, `limit` events after `since` (`newest`: the last `limit`). The kinds the
-        engine keeps to itself (ticks, before_act, definitions) never count against the limit."""
+        engine keeps to itself (ticks, before_act, definitions) never count against the limit. Narrow it with
+        `between` (an entity: it did it or it was done to it), `actor` (done by that entity), `text` (words in what
+        was said or written, any case); `offset` pages past the first ones (from the newest end with `newest`), and
+        history_count gives the total. `seq`: that one event, with its `causes` (the chain it came from) and its
+        `effects` (what it set off)."""
         self._tick()
+        me, touching = self._history_reader(touching)
+        if seq is not None:
+            return [self._event_whole(me, touching, int(seq))]
+        w = self.world
+        limit = max(1, min(int(limit), 500))
+        f = self._history_filter(between, actor, text)
+        if not text:
+            return self._events_for(me, w.events(since=since, until=until, kinds=kinds, touching=touching, limit=limit,
+                                                 skip=_INTERNAL_KINDS, newest=newest, offset=offset, **f))
+        seen = self._history_view(me, touching, since, until, kinds, f, text)
+        offset = max(0, int(offset or 0))
+        if newest:
+            seen = seen[:len(seen) - offset] if offset else seen
+            return seen[-limit:]
+        return seen[offset:offset + limit]
+
+    def history_count(self, since: int = 0, until: int | None = None, kinds: list[str] | None = None,
+                      touching: str | None = None, between: str | None = None, actor: str | None = None,
+                      text: str | None = None) -> dict[str, Any]:
+        """How many events history would page through with these filters, and the first and last of them by seq:
+        a cut list can say "12 of 140", and an absence is one you read the whole of."""
+        self._tick()
+        me, touching = self._history_reader(touching)
+        seen = self._history_view(me, touching, since, until, kinds, self._history_filter(between, actor, text), text)
+        return {"ok": True, "total": len(seen), "first": seen[0]["seq"] if seen else None,
+                "last": seen[-1]["seq"] if seen else None}
+
+    def _history_reader(self, touching: str | None) -> tuple[str | None, str | None]:
+        """Whose log this is: a seat without the author's or observer's hand reads its own body's, and nothing else."""
         w = self.world
         if AUTHOR not in self.capabilities and OBSERVER not in self.capabilities:
             p = w.principal(self.pid) if self.world_id else None
@@ -3275,9 +3310,52 @@ class Session:
             touching = self._me()
         elif touching:
             touching = self._resolve(touching)
-        me = touching if not self._privileged() else None
-        return self._events_for(me, w.events(since=since, until=until, kinds=kinds, touching=touching,
-                                             limit=max(1, min(int(limit), 500)), skip=_INTERNAL_KINDS, newest=newest))
+        return (touching if not self._privileged() else None), touching
+
+    def _history_filter(self, between: str | None, actor: str | None, text: str | None) -> dict[str, Any]:
+        if text is not None and not str(text).strip():
+            raise Rejected("text is the words to look for; this one is empty", hint="history(text='the job')",
+                           code="empty_text", param="text")
+        return {"between": self._resolve(between) if between else None, "actor": self._resolve(actor) if actor else None,
+                "text": str(text).strip() if text else None}
+
+    def _history_view(self, me: str | None, touching: str | None, since: int, until: int | None,
+                      kinds: list[str] | None, f: dict[str, Any], text: str | None) -> list[dict[str, Any]]:
+        """Every event this reader may read under these filters, as it reads them: the words are checked again on
+        what it was shown (a line too far off to catch does not match its words)."""
+        seen = self._events_for(me, self.world.events(since=since, until=until, kinds=kinds, touching=touching,
+                                                      limit=10 ** 9, skip=_INTERNAL_KINDS, **f))
+        if not f.get("text"):
+            return seen
+        want = f["text"].lower()
+        return [e for e in seen if any(want in s.lower() for s in _strings(e.get("payload")))]
+
+    def _event_whole(self, me: str | None, touching: str | None, seq: int) -> dict[str, Any]:
+        """One event by its number, as this reader may read it, with the chain it came from and what it set off."""
+        w = self.world
+
+        def view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            rows = [r for r in rows if r["kind"] not in _INTERNAL_KINDS]
+            if touching:
+                rows = [r for r in rows if w._located(touching, [r])]
+            return self._events_for(me, rows)
+
+        rows = w.store.query("event", "world_id=? AND seq=?", (w.id, seq), limit=1)
+        got = view(rows)
+        if not got:
+            raise Rejected(f"event {seq} is not in what you can read", hint="history() lists the ones you can",
+                           code="no_event", param="seq")
+        out = dict(got[0])
+        causes, at = [], rows[0]["caused_by"]
+        while at is not None and len(causes) < 10:
+            r = w.store.query("event", "world_id=? AND seq=?", (w.id, at), limit=1)
+            if not r:
+                break
+            causes += view(r)
+            at = r[0]["caused_by"]
+        out["causes"] = causes
+        out["effects"] = view(w.store.query("event", "world_id=? AND caused_by=?", (w.id, seq), order="seq", limit=50))
+        return out
 
     # ---- the chronicle --------------------------------------------------------------------------------------------
 
@@ -5814,6 +5892,17 @@ def _unworded(p: dict[str, Any]) -> dict[str, Any]:
     return {"to": p.get("to"), "tone": p.get("tone") or "calm", "heard": False}
 
 
+def _strings(x: Any) -> list[str]:
+    """Every string in a payload, nested ones too: what history(text=) looks through."""
+    if isinstance(x, str):
+        return [x]
+    if isinstance(x, dict):
+        return [s for v in x.values() for s in _strings(v)]
+    if isinstance(x, (list, tuple)):
+        return [s for v in x for s in _strings(v)]
+    return []
+
+
 def _brief_layout(lay: dict[str, Any]) -> dict[str, Any]:
     """A layout with its terrain's heights left out (geo.terrain_summary)."""
     if not lay or not isinstance(lay.get("terrain"), dict):
@@ -6015,7 +6104,7 @@ INTRODUCE_HOW = {
 OPS = [
     "worlds", "use", "create_world", "fork_world", "save", "restore", "join", "leave", "seats", "claim_seat",
     "invite", "grants", "revoke", "evict", "hold_seat", "requests", "minds", "chronicle", "chronicle_arc",
-    "publish_chronicle", "perceive", "inspect", "find", "history", "act", "act_many", "more", "say", "gesture", "cross", "remember", "intend", "recall", "wait",
+    "publish_chronicle", "perceive", "inspect", "find", "history", "history_count", "act", "act_many", "more", "say", "gesture", "cross", "remember", "intend", "recall", "wait",
     "step", "reclaim", "away",
     "define_schema", "define_script", "schemas", "scripts", "script_source",
     "spawn", "introduce", "patch", "rename", "move", "destroy", "link", "connect", "unlink", "relate", "unrelate", "layout", "map",
@@ -6029,7 +6118,7 @@ OPS = [
 # people who keep the world (Nate 2026-11-17). A test checks each op in OPS sits in exactly one.
 LAYERS: dict[str, tuple[str, list[str]]] = {
     "in the world": ("Your character's eyes, hands, voice and notes, inside the story.", [
-        "perceive", "inspect", "find", "history", "map", "measure", "looks", "timers", "clock", "act", "act_many", "more", "say", "gesture", "cross",
+        "perceive", "inspect", "find", "history", "history_count", "map", "measure", "looks", "timers", "clock", "act", "act_many", "more", "say", "gesture", "cross",
         "wait", "step", "remember", "intend", "recall", "away", "reclaim", "program", "unprogram", "programs"]),
     "your seat": ("Which world and which body: coming in, going out, the seats open, the guide.", [
         "worlds", "use", "summary", "guide", "handbook", "join", "leave", "seats", "claim_seat"]),
@@ -6300,7 +6389,7 @@ _CHRONICLE_QUIET = frozenset({"spawned", "patched", "linked", "unlinked", "relat
 _WAYS_OUT = {"hurt": "rest mends it", "down (wounds)": "rest, or someone tends you"}
 
 
-_PLAY_OR_WATCH = frozenset({"worlds", "use", "summary", "seats", "join", "leave", "perceive", "inspect", "find", "history",
+_PLAY_OR_WATCH = frozenset({"worlds", "use", "summary", "seats", "join", "leave", "perceive", "inspect", "find", "history", "history_count",
                             "act", "say", "wait", "recall", "clock"})
 
 

@@ -299,3 +299,37 @@ def test_params_that_are_not_an_object_are_refused_not_a_crash():
         w.act(i["Prisoner"], "take", i["Rusty key"], "yes")  # act_as and a script's ctx.act
     assert w.check_action(i["Prisoner"], "take", i["Rusty key"], "yes")[0] is False
     assert s.act("take", "Rusty key")["ok"] is not False
+
+
+def test_history_reads_a_bodys_own_log_by_whom_by_words_by_page_and_one_event_whole():
+    eng, w, i = engine_with_two_rooms()
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    gm.use("two-rooms")
+    p = eng.session("p")
+    p.join("two-rooms", "Prisoner")
+    p.say("Guard, the job at the cistern is yours for one shard")
+    for n in range(6):
+        p.say(f"small talk {n}")
+    p.act("take", "Rusty key")
+    gm.say_as("Guard", "far off, the Guard mutters about the cistern")  # in the Hall: the Prisoner hears none of it
+    got = p.history(text="CISTERN")
+    assert [e["payload"]["text"] for e in got] == ["Guard, the job at the cistern is yours for one shard"]
+    mine = p.history(actor=i["Prisoner"], kinds=["say"])
+    assert len(mine) == 7 and all(e["actor"] == i["Prisoner"] for e in mine)
+    assert p.history_count(actor=i["Prisoner"], kinds=["say"])["total"] == 7
+    page = p.history(actor="Prisoner", kinds=["say"], limit=3, offset=3)
+    assert [e["payload"]["text"] for e in page] == ["small talk 2", "small talk 3", "small talk 4"]
+    tail = p.history(actor="Prisoner", kinds=["say"], limit=2, offset=1, newest=True)
+    assert [e["payload"]["text"] for e in tail] == ["small talk 3", "small talk 4"]  # the newest one skipped
+    took = next(e for e in p.history(between="Rusty key") if e["kind"] == "act")
+    whole = p.history(seq=took["seq"])[0]
+    assert whole["seq"] == took["seq"] and whole["effects"] and whole["causes"] == []
+    assert all(x["caused_by"] == took["seq"] for x in whole["effects"])
+    c = p.history_count(text="cistern")
+    assert c["total"] == 1 and c["first"] == c["last"] == got[0]["seq"]
+    muttered = gm.history(text="mutters")[0]["seq"]
+    with pytest.raises(Rejected) as e:
+        p.history(seq=muttered)  # not in what the Prisoner's body could witness
+    assert e.value.code == "no_event"
+    with pytest.raises(Rejected, match="empty"):
+        p.history(text="  ")
