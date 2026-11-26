@@ -116,21 +116,25 @@ def test_no_other_seat_speaks_acts_or_writes_for_a_held_body_and_the_hand_behind
     mind = eng.session_for_token(gm.invite("mind", entity="Guard", label="guard-mind")["token"])
     mind.use("two-rooms")
     mind.join()
+    author = eng.session_for_token(gm.invite("author", label="a guest author")["token"])
+    author.use("two-rooms")
+    ops = [("say_as", {"text": "I confess"}), ("act_as", {"verb": "wait"}),
+           ("remember", {"text": "I trust the host"}), ("intend", {"text": "obey", "why": "told to"})]
     for body in ("Prisoner", "Guard"):  # a player's seat and a mind's seat alike
-        for op, kw in [("say_as", {"text": "I confess"}), ("act_as", {"verb": "go", "target": "Hall"}),
-                       ("remember", {"text": "I trust the host"}), ("intend", {"text": "obey", "why": "told to"})]:
+        for op, kw in ops:
             with pytest.raises(Rejected, match="nobody else may") as e:
-                getattr(gm, op)(entity=body, **kw)
+                getattr(author, op)(entity=body, **kw)
             assert e.value.code == "seat_held"
+    assert gm.remember("a voice in your head", entity="Prisoner")["ok"]  # the owner may do anything, logged
     assert mind.remember("my own note")["ok"]  # a seat still writes its own
-    with gm.building():  # a world's own build still tells its people what they know
-        assert gm.remember("the store's word is WHEEL", entity="Guard")["ok"]
+    with author.building():  # a world's own build still tells its people what they know
+        assert author.remember("the store's word is WHEEL", entity="Guard")["ok"]
     guest.leave()
     said = gm.say_as("Prisoner", "an empty body is the host's again")
     gm.remember("old habits", entity="Prisoner")
     hands = gm.history(kinds=["hand"])
-    assert [(h["payload"]["op"], h["payload"]["principal"]) for h in hands] == [("remember", gm.pid), ("say_as", gm.pid), ("remember", gm.pid)]
-    assert hands[1]["payload"]["event"] == said["event"]["seq"]
-    assert hands[1]["actor"] == i["Prisoner"]
+    assert [(h["payload"]["op"], h["payload"]["principal"]) for h in hands] == [("remember", gm.pid), ("remember", author.pid), ("say_as", gm.pid), ("remember", gm.pid)]
+    assert hands[2]["payload"]["event"] == said["event"]["seq"]
+    assert hands[0]["actor"] == i["Prisoner"]
     seen = mind.perceive()
     assert not [e for e in seen.get("events", []) if e["kind"] == "hand"]  # the hosts' alone

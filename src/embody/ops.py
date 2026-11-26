@@ -5772,8 +5772,11 @@ class Session:
 
     def _not_anothers(self, eid: str, what: str) -> None:
         """A body a guest's seat holds (a player's or a mind's, from an invite or a grant) is theirs: no other seat's
-        hand acts, speaks or writes notes and goals for it while they hold it. A crew's own hands are one seat. A seat
-        with no grant (a local game, a test) is the host's own to drive."""
+        hand (an author's, a narrator's, a builder's) acts, speaks or writes notes and goals for it while they hold it.
+        The world's owner may do anything, and the `hand` event says so. A crew's own hands are one seat. A seat with no
+        grant (a local game, a test) is the host's own to drive."""
+        if self.role == OWNER:
+            return
         p = self.world.embodied(eid)
         if p and p.get("grant_id") and p["id"].partition(":")[0] != self.pid.partition(":")[0]:
             raise Rejected(f"{self.world.need(eid)['name']} is held by a seat ({p['id']}): nobody else may {what} for "
