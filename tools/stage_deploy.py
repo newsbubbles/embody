@@ -50,9 +50,9 @@ def _local(d: str, names: list[str]) -> list[str]:
     return [n for n in names if n.startswith(".") or n in LOCAL_SKIP or n.endswith(LOCAL_SKIP_SUFFIXES)]
 
 
-def stage_world(out: Path, wid: str, site: Path | None) -> str:
-    """worlds/<wid> into the stage: from its own repository when it has one, else from the engine's tree when it is
-    committed there, else from its folder on disk. A path (examples/ferry-at-dusk) must be in the engine's tree.
+def stage_world(out: Path, wid: str, site: Path | None, rev: str = "HEAD") -> str:
+    """worlds/<wid> into the stage: from its own repository when it has one (at `rev`, its HEAD unless pinned), else
+    from the engine's tree when it is committed there, else from its folder on disk. A path (examples/ferry-at-dusk) must be in the engine's tree.
     Returns a line on what it shipped."""
     if "/" in wid:
         if not (out / wid / "build.py").is_file():
@@ -64,18 +64,20 @@ def stage_world(out: Path, wid: str, site: Path | None) -> str:
     top = _git(src, "rev-parse", "--show-toplevel") if src.is_dir() else ""
     own = bool(top) and Path(top).resolve() != ROOT.resolve()
     if own:
-        if not _git(src, "rev-parse", "--verify", "-q", "HEAD"):
-            raise SystemExit(f"{wid}: its repository ({top}) has no commits yet; commit the world, then stage")
+        if not _git(src, "rev-parse", "--verify", "-q", f"{rev}^{{commit}}"):
+            raise SystemExit(f"{wid}: its repository ({top}) has no commit {rev}" if rev != "HEAD"
+                             else f"{wid}: its repository ({top}) has no commits yet; commit the world, then stage")
         dirty = _git(src, "status", "--porcelain", "--untracked-files=no")
-        if dirty:
+        if dirty and rev == "HEAD":
             print(f"note: {wid}: uncommitted changes stay behind; the stage is its HEAD:\n{dirty}", file=sys.stderr)
         sub = Path(src.resolve()).relative_to(Path(top).resolve()).as_posix()
-        tree = f"HEAD:{sub}" if sub != "." else "HEAD"
+        tree = f"{rev}:{sub}" if sub != "." else rev
         shutil.rmtree(dest, ignore_errors=True)
         dest.mkdir(parents=True)
         _untar(subprocess.run(["git", "archive", "--format=tar", tree], cwd=top, capture_output=True, check=True).stdout,
                dest)
-        what = f"{wid}: {_git(Path(top), 'rev-parse', '--short', 'HEAD')} from its own repository"
+        what = f"{wid}: {_git(Path(top), 'rev-parse', '--short', rev)} from its own repository" + (
+            f" (pinned; its HEAD is {_git(Path(top), 'rev-parse', '--short', 'HEAD')})" if rev != "HEAD" else "")
     elif (dest / "build.py").is_file():
         what = f"{wid}: from the engine's tree"
     elif (src / "build.py").is_file():
@@ -99,7 +101,7 @@ def stage_world(out: Path, wid: str, site: Path | None) -> str:
 
 
 def manifest(out: Path, engine: str, worlds: list[tuple[str, Path | None]], domains: list[str],
-             remotes: list[str]) -> dict:
+             remotes: list[str], revs: dict[str, str] | None = None) -> dict:
     """deploy/manifest.json: what the stage holds, for tools/deploy_check.py to compare one stage with the last."""
     shipped = {}
     for wid, _ in worlds:
@@ -108,7 +110,7 @@ def manifest(out: Path, engine: str, worlds: list[tuple[str, Path | None]], doma
         own = bool(top) and Path(top).resolve() != ROOT.resolve()
         site = out / wid / "site" if "/" in wid else out / "worlds" / wid / "site"
         files = [p for p in site.rglob("*") if p.is_file()] if site.is_dir() else []
-        shipped[wid] = {"commit": _git(Path(top), "rev-parse", "--short", "HEAD") if own else None,
+        shipped[wid] = {"commit": _git(Path(top), "rev-parse", "--short", (revs or {}).get(wid, "HEAD")) if own else None,
                         "from": "its own repository" if own else "the engine's tree or disk",
                         "site_files": len(files), "site_bytes": sum(p.stat().st_size for p in files)}
     return {"engine": _git(ROOT, "rev-parse", "--short", engine), "staged_at": int(time.time()), "worlds": shipped,
@@ -120,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--world", action="append", required=True,
                     help="a world to host, as ID or ID=SITE_FOLDER, or a sample's path (examples/ferry-at-dusk); "
-                         "repeat for more (the first is the default)")
+                         "ID@COMMIT ships that commit of its own repository, not its HEAD (work not yet picked "
+                         "for live stays behind); repeat for more (the first is the default)")
     ap.add_argument("--site", help="the site folder, for a single --world given without one")
     ap.add_argument("--domain", action="append", default=[], help="HOST=WORLD for the hub's domain map; repeat")
     ap.add_argument("--remote", action="append", default=[],
@@ -130,9 +133,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", help="where to stage (default: a fresh temporary folder)")
     a = ap.parse_args(argv)
     worlds: list[tuple[str, Path | None]] = []
+    revs: dict[str, str] = {}
     for w in a.world:
         wid, _, site = w.partition("=")
-        worlds.append((wid.strip().replace("\\", "/").strip("/"), Path(site).resolve() if site else None))
+        wid, _, rev = wid.strip().partition("@")
+        wid = wid.replace("\\", "/").strip("/")
+        if rev:
+            revs[wid] = rev.strip()
+        worlds.append((wid, Path(site).resolve() if site else None))
     hub = len(worlds) > 1 or bool(a.domain) or bool(a.remote)
     if hub and any("/" in w for w, _ in worlds):
         print("a path (examples/...) ships one world alone; for the hub, put each world in worlds/<id>/", file=sys.stderr)
@@ -155,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     _untar(subprocess.run(["git", "archive", "--format=tar", a.engine], cwd=ROOT, capture_output=True, check=True).stdout,
            out)
-    lines = [stage_world(out, wid, site) for wid, site in worlds]
+    lines = [stage_world(out, wid, site, revs.get(wid, "HEAD")) for wid, site in worlds]
     if hub:
         (out / "deploy" / "worlds").write_text(",".join(w for w, _ in worlds) + "\n", encoding="utf-8", newline="\n")
         (out / "deploy" / "domains").write_text(",".join(a.domain) + "\n", encoding="utf-8", newline="\n")
@@ -163,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
             (out / "deploy" / "remotes").write_text(",".join(a.remote) + "\n", encoding="utf-8", newline="\n")
     else:
         (out / "deploy" / "world").write_text(worlds[0][0] + "\n", encoding="utf-8", newline="\n")
-    (out / "deploy" / "manifest.json").write_text(json.dumps(manifest(out, a.engine, worlds, a.domain, a.remote),
+    (out / "deploy" / "manifest.json").write_text(json.dumps(manifest(out, a.engine, worlds, a.domain, a.remote, revs),
                                                              indent=1) + "\n", encoding="utf-8", newline="\n")
     print(f"staged {out}: the engine's {a.engine} ({_git(ROOT, 'rev-parse', '--short', a.engine)})")
     for line in lines:

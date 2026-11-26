@@ -245,6 +245,30 @@ def test_a_world_that_is_nowhere_is_refused(stage):
     assert mod.main(["--world", "examples/sample", "--world", "mine", "--out", str(tmp.with_name("s3"))]) == 2
 
 
+def test_a_world_with_its_own_repository_ships_its_head_or_the_commit_it_is_pinned_to(stage):
+    mod, root, out = stage
+    w = root / "worlds" / "own"
+    git = ["git", "-c", "user.email=test@example.com", "-c", "user.name=test", "-c", "commit.gpgsign=false"]
+    _write(w / "build.py", BUILD.format(id="own"))
+    subprocess.run(["git", "init", "-q"], cwd=w, check=True)
+    subprocess.run(["git", "add", "."], cwd=w, check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "live"], cwd=w, check=True)
+    live = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=w, capture_output=True, text=True).stdout.strip()
+    _write(w / "scripts" / "proposal.py", "# not picked for live yet\n")
+    subprocess.run(["git", "add", "."], cwd=w, check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "a proposal"], cwd=w, check=True)
+    assert mod.main(["--world", "own", "--out", str(out)]) == 0
+    assert (out / "worlds" / "own" / "scripts" / "proposal.py").is_file()
+    pinned = out.with_name("pinned")
+    assert mod.main(["--world", f"own@{live}", "--out", str(pinned)]) == 0
+    assert (pinned / "worlds" / "own" / "build.py").is_file()
+    assert not (pinned / "worlds" / "own" / "scripts" / "proposal.py").exists()
+    man = json.loads((pinned / "deploy" / "manifest.json").read_text(encoding="utf-8"))
+    assert man["worlds"]["own"]["commit"] == live and (pinned / "deploy" / "world").read_text(encoding="utf-8") == "own\n"
+    with pytest.raises(SystemExit, match="has no commit nope"):
+        mod.main(["--world", "own@nope", "--out", str(out.with_name("bad"))])
+
+
 def test_two_worlds_still_make_a_hub(stage):
     mod, root, out = stage
     for w in ("one", "two"):
