@@ -4513,8 +4513,9 @@ class Session:
         if not str(text or "").strip():
             return {"ok": True, "event": None, "note": "an empty line says nothing: nothing was said"}
         eid = self._resolve(entity)
-        self._not_a_players(eid, "speak")
+        self._not_anothers(eid, "speak")
         ev = self.world.say(eid, text, reach=reach, to=self._resolve(to) if to else None)
+        self._hand(eid, "say_as", ev)
         return {"ok": True, "event": _public_event(ev)}
 
     def remember(self, text: str, entity: str | None = None) -> dict[str, Any]:
@@ -4524,6 +4525,8 @@ class Session:
         if entity is not None:
             self._need(AUTHOR)
             eid = self._resolve(entity)
+            if not self._building:  # a world's own build (its folder, its rules) still tells its people what they know
+                self._not_anothers(eid, "write notes or goals")
         else:
             eid = self._me()
         if not self._privileged() and len(text) > _NOTE_MAX:
@@ -4532,6 +4535,8 @@ class Session:
         note = self.world.remember(eid, text, actor=eid)
         if entity is None:
             self.world._bump_cursor(self.pid)
+        else:
+            self._hand(eid, "remember")
         return {"ok": True, "entity": eid, "note": note, "memory_size": len(self.world.need(eid)["state"].get("memory", []))}
 
     def intend(self, text: str | None = None, why: str | None = None, id: str | None = None,
@@ -4543,11 +4548,15 @@ class Session:
         if entity is not None:
             self._need(AUTHOR)
             eid = self._resolve(entity)
+            if not self._building:  # a world's own build (its folder, its rules) still tells its people what they know
+                self._not_anothers(eid, "write notes or goals")
         else:
             eid = self._me()
         g = self.world.intend(eid, text=text, why=why, id=id, status=status, priority=priority, actor=eid)
         if entity is None:
             self.world._bump_cursor(self.pid)
+        else:
+            self._hand(eid, "intend")
         goals = self.world.need(eid)["state"].get("goals") or []
         return {"ok": True, "entity": eid, "goal": g,
                 "goals": [x for x in goals if x.get("status", "active") == "active"]}
@@ -5756,17 +5765,30 @@ class Session:
         self._need(AUTHOR)
         self._tick()
         eid = self._resolve(entity)
-        self._not_a_players(eid, "act")
-        return self._paged(self.world.act(eid, verb, self._resolve(target) if target else None, params))
+        self._not_anothers(eid, "act")
+        out = self.world.act(eid, verb, self._resolve(target) if target else None, params)
+        self._hand(eid, "act_as", next((e["seq"] for e in out.get("events") or [] if e.get("kind") == "act"), None))
+        return self._paged(out)
 
-    def _not_a_players(self, eid: str, what: str) -> None:
-        """A body a guest holds (a player seat from an invite) is theirs: no hand of the host's acts or speaks for it
-        while they hold it. A seat with no invite (a local game, a test) is the host's own to drive."""
+    def _not_anothers(self, eid: str, what: str) -> None:
+        """A body a guest's seat holds (a player's or a mind's, from an invite or a grant) is theirs: no other seat's
+        hand acts, speaks or writes notes and goals for it while they hold it. A crew's own hands are one seat. A seat
+        with no grant (a local game, a test) is the host's own to drive."""
         p = self.world.embodied(eid)
-        if p and p.get("role") == PLAYER and p.get("grant_id") and p["id"] != self.pid:
-            raise Rejected(f"{self.world.need(eid)['name']} is a guest's ({p['id']}): nobody may {what} for them while "
-                           f"they hold it", hint="speak to them in the world, or out of it; evict(principal) first "
-                                                 "if the seat must change hands")
+        if p and p.get("grant_id") and p["id"].partition(":")[0] != self.pid.partition(":")[0]:
+            raise Rejected(f"{self.world.need(eid)['name']} is held by a seat ({p['id']}): nobody else may {what} for "
+                           f"them while they hold it", hint="speak to them in the world, or out of it; evict(principal) "
+                                                            "first if the seat must change hands", code="seat_held")
+
+    def _hand(self, eid: str, op: str, ev: Any = None) -> None:
+        """Who moved a body that was not their own: a `hand` event on it, reach 0, for the hosts alone (like
+        act_refused). The deed itself names the body as its actor, as the room saw it; this names the seat behind it."""
+        mine = self.world.principal(self.pid)
+        if mine and mine.get("entity_id") == eid:
+            return
+        seq = ev.get("seq") if isinstance(ev, dict) else ev
+        self.world.emit("hand", actor=eid, target=eid, reach=0,
+                        payload={"principal": self.pid, "op": op, **({"event": seq} if seq is not None else {})})
 
     def _actor_or_none(self) -> str | None:
         """Author ops (spawn, patch, move, destroy) are the narrator's hand, not the character's. An entity actor
