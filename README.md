@@ -138,6 +138,7 @@ Players make their own. [embody-viewer](https://github.com/LK-Studios/embody-vie
 
 - embody (this repo): the world engine. Worlds, their rules and their history live here.
 - [body-harness](https://github.com/newsbubbles/body-harness): a mind for one body in an embody world. Give `bh` a seat invite and a model behind any OpenAI-compatible API, and it plays that character for days, waking only when what it waits for happens.
+- [body-telemetry](https://github.com/newsbubbles/body-telemetry): a server and dashboard you run yourself, for what your body-harness seats spend and do. It keeps counts only unless you ask for more.
 
 ## Where it is going
 
