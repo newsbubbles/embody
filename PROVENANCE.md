@@ -2,7 +2,7 @@
 
 Where embody came from: the projects before it, the session that built it, who built it, and the reading we found along the way. The engine keeps a record of who did what and who knew what in every world. This file keeps the same record for embody itself.
 
-The history is Nate's account (Nate Gibson, newsbubbles on GitHub), given on 2026-11-26. Quotes are from his first brief for embody.
+The history is Nate's account (Nate Gibson, newsbubbles on GitHub), given on 2026-11-26 and written here in prose.
 
 ## Before embody
 
@@ -33,12 +33,12 @@ The original goal was a world built out at runtime by an agent acting in it, lik
 
 ## The first session (2026-11-08)
 
-embody began on 2026-11-08 in a Claude Code session with Claude Opus 5.5. The brief brought together Adventure Mode 2, Hypermemory's graph model, and a ChatGPT conversation of Nate's titled "Persistent Game World". From that first brief:
-- "a game engine which is generalizable and doesn't assume an interface";
-- "agents also embody entities, and the player does too";
-- "I was essentially recreating the DOM in the browser";
-- "to me the interface is the actual thing that determines the rules to which one must abide";
-- "some mix of digital twins".
+embody began on 2026-11-08 in a Claude Code session with Claude Opus 5.5. The brief brought together Adventure Mode 2, Hypermemory's graph model, and a ChatGPT conversation of Nate's titled "Persistent Game World". The brief asked for:
+- a game engine that generalizes and assumes no interface;
+- agents that embody entities, the same way the player does;
+- the DOM of the earlier work, rebuilt on purpose this time;
+- an interface understood as the thing that sets the rules one must follow;
+- something of a mix of digital twins.
 
 That day's design note was titled "a world model that is a DOM for agents". What Nate had learned in the three years before went into his first prompts and his corrections. Perception, actions, and several people in the same place were exactly the parts the earlier projects never reached, and this time they came out right.
 
