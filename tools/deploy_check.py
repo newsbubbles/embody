@@ -154,8 +154,11 @@ def watch_health(url: str, new: dict[str, Any], c: Checklist, get: Get, wait: fl
                 said.add("stage")
                 c.item(True if new.get("id") else None, f"/health answers from this stage ({new.get('id')})" if new.get("id")
                        else "this stage has no manifest: /health cannot say it is the new container")
+            # a single world's own server (no hub) says only that embody is up: that is its one world's state
+            worlds = health.get("worlds") or ({w: "up" for w in want} if len(want) == 1 and health.get("embody") == "up"
+                                              else {})
             for w, state in want.items():
-                if w not in said and (health.get("worlds") or {}).get(w) == state:
+                if w not in said and worlds.get(w) == state:
                     said.add(w)
                     c.item(True, f"world {w}: {state} after {time.monotonic() - start:.0f} s")
             if all(w in said for w in want):

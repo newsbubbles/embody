@@ -104,6 +104,16 @@ def test_post_waits_for_the_new_container_then_checks_pages_remotes_and_doors(dc
     assert (tmp_path / ".last-good-hub").read_text(encoding="utf-8").strip() == str(stage)
 
 
+def test_post_reads_a_lone_worlds_own_server_whose_health_names_no_worlds(dc, tmp_path):
+    stage = _stage(tmp_path / "stage", {"alpha": 0}, {})
+    sid = dc.read_stage(stage)["id"]
+    host = Host({"ok": True, "embody": "up", "stage": sid})
+    code, out = run(dc, ["post", str(stage), "--url", "https://hub", "--service", "solo", "--wait", "0",
+                         "--every", "0"], host)
+    assert code == 0, out
+    assert "[  ok] world alpha: up after" in out
+
+
 def test_post_fails_when_the_old_container_keeps_answering(dc, tmp_path):
     stage = _stage(tmp_path / "stage", {"alpha": 0}, {})
     host = Host({"stage": "old", "worlds": {"alpha": "up"}})
