@@ -2528,6 +2528,9 @@ class World:
 
     def _prepare(self, actor_id: str, verb: str, target_id: str | None, params: dict[str, Any] | None,
                  dry: bool) -> tuple[dict[str, Any], str, Script]:
+        if params is not None and not isinstance(params, dict):  # check_action's dry run comes here without act
+            raise Rejected(f"params must be an object of name: value, not {type(params).__name__}",
+                           hint=f"{verb}'s params as {{name: value}}", layer="call", code="params_not_object")
         if self.need(actor_id)["state"].get("dead") and not self._dead_ok(actor_id, verb):
             # first, before any other reason: a mind that hears "the door is shut" never learns it has died
             left = [v for v, a in self.schema_actions(self.need(actor_id)["type"]).items()
@@ -2627,6 +2630,9 @@ class World:
             principal_id: str | None = None, caused_by: int | None = None, by: str | None = None) -> dict[str, Any]:
         """The only way state changes on purpose. Returns {ok, events, logs} or raises Rejected. `by` and `caused_by`:
         the script and event that made this act (ctx.act), when a rule or timer made it, not the body's holder."""
+        if params is not None and not isinstance(params, dict):  # act_as and a script's ctx.act come here too
+            raise Rejected(f"params must be an object of name: value, not {type(params).__name__}",
+                           hint=f"{verb}'s params as {{name: value}}", layer="call", code="params_not_object")
         params = dict(params or {})
         self.need(actor_id)
         self.store.begin()
@@ -3330,7 +3336,12 @@ class World:
             return {"cause": "grant_ended"}  # the seat is not its to keep (a guest back on a new grant)
         if p.get("last_seen") is None:
             return None
-        quiet = now - float(p["last_seen"])
+        seen = float(p["last_seen"])
+        if ":" in p["id"]:  # a crew's hand (mind:body) holds while the crew's mind is about, used or not
+            head = self.store.get("principal", self.id, p["id"].partition(":")[0])
+            if head and head.get("last_seen") is not None:
+                seen = max(seen, float(head["last_seen"]))
+        quiet = now - seen
         body = self.get(p["entity_id"]) if p.get("entity_id") else None
         asleep = bool(body and body["state"].get("asleep"))
         if quiet <= (max(self.sleep_lapse(), self.seat_lapse(p)) if asleep else self.seat_lapse(p)):

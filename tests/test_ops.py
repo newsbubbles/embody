@@ -278,3 +278,24 @@ def test_an_empty_line_says_nothing():
         assert r["event"] is None and "empty" in r["note"]
     assert w.store.next_seq(w.id) == seq
     assert s.say("Hm.")["event"]["payload"]["text"] == "Hm."
+
+
+def test_params_that_are_not_an_object_are_refused_not_a_crash():
+    """A mind sent params as a string of JSON and the op door answered 500 (a world's builders, 2026-11-25): the
+    refusal's log line read the string's characters as keys. It is a refusal that says so, on every way in."""
+    from embody.ops import call
+    eng, w, i = engine_with_two_rooms()
+    s = eng.session("nate")
+    s.join("two-rooms", "Prisoner")
+    with pytest.raises(Rejected) as r:
+        s.act("take", "Rusty key", params='{"count": 1}')
+    assert r.value.code == "params_not_object" and "of JSON" in r.value.reason
+    assert "not a string of it" in r.value.hint and r.value.layer == "call"
+    with pytest.raises(Rejected, match="not a list"):
+        s.act("take", "Rusty key", params=["count", 1])
+    out = call(s, "act", verb="take", target="Rusty key", params="yes")  # the door's path: an answer, no 500
+    assert out["ok"] is False and out["code"] == "params_not_object"
+    with pytest.raises(Rejected, match="params must be an object"):
+        w.act(i["Prisoner"], "take", i["Rusty key"], "yes")  # act_as and a script's ctx.act
+    assert w.check_action(i["Prisoner"], "take", i["Rusty key"], "yes")[0] is False
+    assert s.act("take", "Rusty key")["ok"] is not False

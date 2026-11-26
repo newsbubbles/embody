@@ -897,6 +897,50 @@ def test_one_invite_makes_one_character_while_it_stands():
     gm.join(template="newcomer", name="Extra")
 
 
+def test_a_crews_hand_holds_while_its_mind_is_about_and_a_released_seat_says_why():
+    """A Reach crew's hands lapsed after an hour unused while the crew's mind waited, and every call after came back
+    "you are not in this world", which the harness did not take for a lapse (26 Nov). A hand now holds while its mind
+    is about, and the refusal says the seat was released, why, and to join again."""
+    from embody.mcp_server import Hub, _current
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    wall = [1000.0]
+    eng.wall = lambda: wall[0]
+    cap = w.spawn("person", i["Hall"], name="Captain")
+    rider = w.spawn("person", i["Hall"], name="Rider")
+    crew = gm.invite("mind", entity=cap, scope=[rider], label="crew")
+    hub = Hub(eng, gm, http_only=True)
+    s = hub.for_token(crew["token"])
+    tok = _current.set(s)
+    try:
+        s.join(entity="Captain")
+        hand = hub.session("rider")
+        hand.join(entity="Rider")
+        for _ in range(4):  # the mind waits on, its hand unused
+            wall[0] += w.claim_lapse() / 2
+            s.perceive()
+            assert eng.tick_all()["released"] == {}
+        wall[0] += w.claim_lapse() + 60  # the mind itself goes quiet: both go
+        assert sorted(eng.tick_all()["released"]["two-rooms"]) == sorted([s.pid, hand.pid])
+        with pytest.raises(Rejected) as e:
+            hand.perceive()
+        d = e.value.to_dict()
+        assert d["code"] == "seat_released" and "join" in d["reason"] and "(Rider)" in d["reason"]
+        assert "min with no call from you" in d["reason"] and set(d) >= {"ok", "reason", "hint", "alternatives", "layer"}
+        assert hand.join(entity="Rider")["you"]["name"] == "Rider"
+    finally:
+        _current.reset(tok)
+    fresh = eng.session_for_token(gm.invite("player", entity="Guard", label="new")["token"])
+    fresh.world_id = w.id
+    with pytest.raises(Rejected) as e:
+        fresh.perceive()
+    assert e.value.code == "not_joined" and "join" in e.value.reason
+    fresh.join()
+    gm.evict(fresh.pid)
+    with pytest.raises(Rejected, match=r"seat \(Guard\) was released by the world's owner; join\(\) to sit again"):
+        fresh.perceive()
+
+
 def test_a_crew_mind_runs_one_sub_principal_per_body_it_names_on_both_doors():
     """A mind grant naming a captain and a rider could speak for the rider only by moving its one seat there (the Host,
     2026-11-25). Each body now gets its own hand of the same grant: its own seat and cursor, held to the bodies the

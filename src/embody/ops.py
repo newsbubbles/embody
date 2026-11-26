@@ -392,8 +392,37 @@ class Session:
     def _principal(self) -> dict[str, Any]:
         p = self.world.principal(self.pid)
         if p is None:
-            raise Rejected("you are not in this world", hint="join(world, entity) first")
+            raise self._not_seated()
         return p
+
+    _RELEASED = {"quiet": "after {m} min with no call from you", "left": "when you left it",
+                 "host": "by the world's owner", "held": "when the world moved you", "revoked": "when your grant was revoked",
+                 "grant_ended": "when your grant ran out"}
+
+    def _not_seated(self) -> Rejected:
+        """No seat in this world: say whether one was released and why, with join in the reason, so a harness that
+        reads only the reason (or the code) knows to join again (a Reach crew's hands stayed empty all night, 26 Nov)."""
+        w = self.world
+        g = w.store.get("grants", w.id, self.grant["id"]) if self.grant else None
+        held = (g or {}).get("held") or {}
+        seats = [held.get("body"), *(self.scope or [])[:20], (g or {}).get("entity_id"), (g or {}).get("made")]
+        last = None
+        for eid in dict.fromkeys(s for s in seats if s):
+            for r in w.store.query("event", "world_id=? AND actor_id=? AND kind='released'", (w.id, eid),
+                                   order="seq DESC", limit=5):
+                if (r["payload"] or {}).get("principal") == self.pid and (last is None or r["seq"] > last["seq"]):
+                    last = r
+                    break
+        hint = "join() with no entity takes the seat your grant names; join(world, entity) names one"
+        if last is None:
+            return Rejected("you are not in this world: you have not joined it yet; join() takes your seat", hint=hint,
+                            code="not_joined")
+        pay = last["payload"] or {}
+        body = w.get(last["actor_id"])
+        how = self._RELEASED.get(pay.get("cause") or "", "({cause})").format(
+            m=round(float(pay.get("quiet_s") or 0) / 60), cause=pay.get("cause") or "released")
+        return Rejected(f"you are not in this world: your seat ({body['name'] if body else last['actor_id']}) was "
+                        f"released {how}; join() to sit again", hint=hint, code="seat_released")
 
     def _me(self) -> str:
         p = self._principal()
@@ -3661,6 +3690,7 @@ class Session:
         tid = None
         said = (target, params)
         try:
+            self._params_object(me, verb, target, params)
             target, params, read = self._read_words(me, verb, target, params)
             tid = self._resolve_for(me, target, verb, params) if target else None
             self._stray_params(me, verb, tid, params)
@@ -3716,6 +3746,31 @@ class Session:
                 p["count"] = int(n.group(1))
                 return n.group(2).strip(), p, True
         return target, params, False
+
+    def _params_object(self, me: str, verb: str, target: str | None, params: Any) -> None:
+        """params is an object of name: value. A mind that sent it as a string of JSON got a 500 (a world's builders,
+        2026-11-25); it gets a refusal that says so and names what the verb takes."""
+        if params is None or isinstance(params, dict):
+            return
+        declared: dict[str, Any] = {}
+        try:
+            tid = self.world.get(target)["id"] if target and self.world.get(target) else None
+            declared = self.world.resolve_action(me, verb, tid)[0].get("params") or {}
+        except Rejected:
+            pass
+        kind = {str: "a string", list: "a list", bool: "true or false"}.get(type(params), f"a {type(params).__name__}")
+        quoted = False
+        if isinstance(params, str):
+            try:
+                quoted = isinstance(json.loads(params), dict)
+            except ValueError:
+                pass
+        takes = ", ".join(declared) or "no params"
+        raise Rejected(f"params must be an object of name: value, not {kind}" + (" of JSON" if quoted else ""),
+                       hint=("send the object itself, not a string of it: " if quoted else "")
+                       + f"{verb} takes {takes}" + (" (" + "; ".join(f"{k}: {d}" for k, d in declared.items()) + ")"
+                                                   if declared else ""),
+                       layer="call", code="params_not_object", accepts=list(declared))
 
     def _stray_params(self, me: str, verb: str, tid: str | None, params: dict[str, Any] | None) -> None:
         """A param nothing reads is dropped without a word and the deed goes out empty (talk with `topic` for `about`
@@ -6131,6 +6186,9 @@ def _read_keys(s: Any) -> set[str]:
 def _trimmed(params: dict[str, Any] | None, n: int = 160) -> dict[str, Any]:
     """An act's params for the log: at most 8 keys, each value cut to n characters of its JSON."""
     out: dict[str, Any] = {}
+    if params is not None and not isinstance(params, dict):  # refused as not an object; the log keeps what was sent
+        j = json.dumps(params, ensure_ascii=False, default=str)
+        return {"(not an object)": j if len(j) <= n else j[:n - 3] + "..."}
     for k, v in list((params or {}).items())[:8]:
         j = json.dumps(v, ensure_ascii=False, default=str)
         out[str(k)[:40]] = v if len(j) <= n else j[:n - 3] + "..."
