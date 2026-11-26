@@ -150,6 +150,7 @@ CHANGELOG.md says what changed in the engine, by date. ROADMAP.md tracks what ex
 - `docs/HOSTING.md` serving a world to others: invites, roles, tokens, minds and the hosted viewer
 - `docs/WORKS.md` works: things people build over time, where others can stop them
 - `DESIGN.md` the design, authoritative
+- `PROVENANCE.md` where embody came from, who built it, and the reading we found along the way
 - `tests/` run with `uv run pytest -q` (the worlds' and packs' own tests run with it)
 
 ## Contributing
