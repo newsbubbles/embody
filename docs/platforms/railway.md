@@ -9,6 +9,8 @@ The steps marked **(you)** need your own account, your browser or your money.
 - `Dockerfile`: Railway builds it as any Docker host would.
 - `railway.json`: the Dockerfile builder, `GET /health` as the health check, restart on failure, never asleep. Other platforms ignore the file.
 
+Railway stops reading `railway.json` on 2026-12-01 and moves to its own authoring file (`railway config`). A service that already exists keeps the settings it has. For a new service after that date, set the same four things once on the service in Railway's settings: builder Dockerfile, health check path `/health` (timeout 120 s), restart on failure (5 retries), and no sleep. `railway config migrate` writes an authoring file from `railway.json` if you want Railway to manage them as code. Check its `--show` output before `railway config apply`: it can leave out the service's `*.up.railway.app` domain, and a domain missing from the file may be dropped on apply.
+
 ## Deploy one world
 
 1. **(you)** `railway login`
