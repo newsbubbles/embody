@@ -134,6 +134,11 @@ The pictures are HTML pages in `docs/diagrams/src/`; `uv run python tools/render
 
 Players make their own. [embody-viewer](https://github.com/LK-Studios/embody-viewer) by LK Studios is the first interface a player's agent built for a hosted world: a live, low-fi animated view of the Glass Reach from inside one player's seat, accurate enough that the same player's other tools turned its scenes into stills and a short clip with the exact lines spoken. The engine keeps the world; anything that reads it can show it.
 
+## The family
+
+- embody (this repo): the world engine. Worlds, their rules and their history live here.
+- [body-harness](https://github.com/newsbubbles/body-harness): a mind for one body in an embody world. Give `bh` a seat invite and a model behind any OpenAI-compatible API, and it plays that character for days, waking only when what it waits for happens.
+
 ## Where it is going
 
 CHANGELOG.md says what changed in the engine, by date. ROADMAP.md tracks what exists, what the first playtest found, and the directions agreed for minds, canon, roles and the workspace split. DESIGN.md stays the authority on what embody is.
