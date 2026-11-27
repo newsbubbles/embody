@@ -7,6 +7,10 @@ SCENES = {"depart": "{vehicle} pulls out of {place}, bound for {to}.",
           "stop": "{vehicle} stops short in {place}: {why}.",
           "break": "{vehicle} lurches and stops dead in {place}: something in it has given way."}
 
+def no(reason, code):
+    # a check's refusal with its own stable code (a harness branches on it; refusal counts group by it)
+    return {"reason": reason, "code": code}
+
 def vehicle_of(ctx, x):
     # the vehicle a verb is done to: the vehicle itself, or the one its wheel stands in
     if x is None:

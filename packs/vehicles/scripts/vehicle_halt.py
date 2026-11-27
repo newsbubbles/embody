@@ -6,18 +6,18 @@ def check(ctx):
     v = vehicle_of(ctx, ctx.target)
     me = ctx.actor
     if v is None:
-        return "that is not something that moves"
+        return no("that is not something that moves", "not_a_vehicle")
     if not v.state.moving:
-        return v.name + " is standing still already"
+        return no(v.name + " is standing still already", "not_moving")
     if me.state.down or me.state.dead or me.state.asleep:
-        return "you are in no state to stop anything"
+        return no("you are in no state to stop anything", "unfit")
     if aboard(ctx, v, me):
         tr = v.state.trip or {}
         if tr.get("by") != me.id:
-            return "you are not the one driving " + v.name
+            return no("you are not the one driving " + v.name, "not_driver")
         return True
     if not alongside(ctx, v, me):
-        return v.name + " is not here"
+        return no(v.name + " is not here", "not_here")
     return True
 
 def apply(ctx):

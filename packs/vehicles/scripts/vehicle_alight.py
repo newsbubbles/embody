@@ -5,11 +5,11 @@ def check(ctx):
     v = vehicle_of(ctx, ctx.target)
     me = ctx.actor
     if v is None:
-        return "that is not something you ride"
+        return no("that is not something you ride", "not_a_vehicle")
     if not aboard(ctx, v, me):
-        return "you are not aboard " + v.name
+        return no("you are not aboard " + v.name, "not_aboard")
     if me.state.dead:
-        return "you are dead"
+        return no("you are dead", "unfit")
     return True
 
 def apply(ctx):

@@ -6,13 +6,13 @@ def check(ctx):
     v = vehicle_of(ctx, ctx.target)
     me = ctx.actor
     if v is None:
-        return "that is not a vehicle"
+        return no("that is not a vehicle", "not_a_vehicle")
     if v.state.hull is None:
-        return v.name + " is too much for your hands to hurt"
+        return no(v.name + " is too much for your hands to hurt", "unhurtable")
     if not (aboard(ctx, v, me) or alongside(ctx, v, me)):
-        return v.name + " is not here"
+        return no(v.name + " is not here", "not_here")
     if me.state.down or me.state.dead or me.state.asleep:
-        return "you are in no state to strike anything"
+        return no("you are in no state to strike anything", "unfit")
     return True
 
 def apply(ctx):

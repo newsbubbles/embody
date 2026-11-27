@@ -6,13 +6,13 @@ def check(ctx):
     v = vehicle_of(ctx, ctx.target)
     me = ctx.actor
     if v is None:
-        return "that is not something you can mend"
+        return no("that is not something you can mend", "not_a_vehicle")
     if not v.state.broken:
-        return v.name + " runs as it is: nothing to mend"
+        return no(v.name + " runs as it is: nothing to mend", "not_broken")
     if not (aboard(ctx, v, me) or alongside(ctx, v, me)):
-        return v.name + " is not here"
+        return no(v.name + " is not here", "not_here")
     if me.state.down or me.state.asleep:
-        return "you are in no state to mend anything"
+        return no("you are in no state to mend anything", "unfit")
     return True
 
 def apply(ctx):

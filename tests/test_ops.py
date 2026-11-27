@@ -333,3 +333,29 @@ def test_history_reads_a_bodys_own_log_by_whom_by_words_by_page_and_one_event_wh
     assert e.value.code == "no_event"
     with pytest.raises(Rejected, match="empty"):
         p.history(text="  ")
+
+
+def test_a_scripts_refusal_names_its_own_code_and_a_bad_code_falls_back_to_refused():
+    eng = Engine()
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    gm.create_world("Pit", seed=1)
+    gm.define_script("lift", 'def check(ctx):\n'
+                     '    if ctx.params.get("bad"):\n'
+                     '        return {"reason": "too heavy", "code": "Not A Code"}\n'
+                     '    return {"reason": "too heavy to lift", "code": "too_heavy", "hint": "lighten it first"}\n'
+                     'def apply(ctx):\n    pass\n')
+    gm.define_script("guard", 'def on(ctx, event):\n'
+                     '    if event.payload["verb"] == "wave":\n'
+                     '        ctx.reject("no waving here", "go outside", code="no_waving")\n')
+    gm.define_script("wave", "def apply(ctx):\n    pass\n")
+    gm.define_schema("yard", extends="place", listeners=[{"script": "guard", "kinds": ["before_act"]}])
+    gm.define_schema("lifter", extends="creature", actions={"lift": {"script": "lift", "doc": "Lift"},
+                                                            "wave": {"script": "wave", "doc": "Wave"}})
+    yard = gm.spawn("yard", gm.world.root_id, "Yard")["id"]
+    a = gm.spawn("lifter", yard, "Ash")["id"]
+    ash = eng.session("ash")
+    ash.join("pit", a)
+    got = call(ash, "act", verb="lift")
+    assert (got["code"], got["reason"], got["hint"], got["layer"]) == ("too_heavy", "too heavy to lift", "lighten it first", "rule")
+    assert call(ash, "act", verb="lift", params={"bad": True})["code"] == "refused"
+    assert call(ash, "act", verb="wave")["code"] == "no_waving"

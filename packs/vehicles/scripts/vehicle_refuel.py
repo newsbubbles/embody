@@ -14,15 +14,15 @@ def check(ctx):
     v = vehicle_of(ctx, ctx.target)
     me = ctx.actor
     if v is None:
-        return "that is not a vehicle"
+        return no("that is not a vehicle", "not_a_vehicle")
     if not v.state.fuel_per_leg or not v.state.fuel_kind:
-        return v.name + " runs on nothing you can pour in"
+        return no(v.name + " runs on nothing you can pour in", "no_fuel_kind")
     if not (aboard(ctx, v, me) or alongside(ctx, v, me)):
-        return v.name + " is not here"
+        return no(v.name + " is not here", "not_here")
     if fuel_item(ctx, v) is None:
-        return "you hold no " + str(v.state.fuel_kind) + ": " + v.name + " runs on that"
+        return no("you hold no " + str(v.state.fuel_kind) + ": " + v.name + " runs on that", "no_fuel_held")
     if v.state.fuel_max is not None and float(v.state.fuel or 0) >= float(v.state.fuel_max):
-        return v.name + " is full"
+        return no(v.name + " is full", "full")
     return True
 
 def apply(ctx):

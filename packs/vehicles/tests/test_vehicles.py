@@ -112,8 +112,9 @@ def test_a_trip_has_a_middle_that_the_road_sees_and_can_stop(tmp_path):
     assert {"passing", "scene"} <= {e["kind"] for e in bf["events"]}
     card = next(c for c in bf["present"] if c["name"] == "Cart")
     assert card["state"]["trip"]["to"] == gm.inspect("Gate")["id"] and "fault" not in card["state"]  # no peeking at the dice
-    with pytest.raises(Rejected, match="already on the road"):
+    with pytest.raises(Rejected, match="already on the road") as e:
         ada.act("drive", "Cart", params={"to": "Yard"})
+    assert e.value.to_dict()["code"] == "already_moving"  # refusals group by case, not all as "refused"
     r = bel.act("halt", "Cart")  # someone in its road stops it
     assert cart(gm)["moving"] is False and cart(gm)["stopped"] == "halted"
     roll(w, 300)

@@ -136,9 +136,9 @@ Events and time:
 
 Control:
 
-- `ctx.reject(reason, hint=None)` in a `check` or a `before_act` listener: refuse, with a reason the agent reads
+- `ctx.reject(reason, hint=None, code=None)` in a `check` or a `before_act` listener: refuse, with a reason the agent reads
 - `ctx.stop()` in a listener: this event bubbles no further (a local rule overriding the world's)
-- in `check`, returning a string also rejects with that string; returning False rejects plainly
+- in `check`, returning a string also rejects with that string; returning False rejects plainly; returning `{"reason": ..., "code": ..., "hint": ...}` rejects with that code. A code is one short snake_case word for the case (`already_moving`, `no_fuel`): a harness branches on it and refusal counts group by it. Without one, or with one that is not such a word, the code is `refused`
 
 ## Events
 

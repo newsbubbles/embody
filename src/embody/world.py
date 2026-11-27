@@ -26,6 +26,12 @@ ROOT_TYPE = "world"
 BASE_TYPE = "entity"
 
 
+def _script_code(code: Any) -> str | None:
+    """A refusal code a script names: one short lowercase word (snake_case), else none (the default, `refused`)."""
+    c = str(code or "")
+    return c if re.fullmatch(r"[a-z][a-z0-9_]{0,39}", c) else None
+
+
 class Rejected(Exception):
     """An op could not be done. Says why, what is true instead, and what would work.
 
@@ -1175,8 +1181,8 @@ class Ctx(ScriptObject):
         if self._limits and not (pre and str(script).startswith(pre)):
             raise Rejected(f"this script sets rules from its own namespace only ({pre}...)", hint=f"a script named {pre}...")
 
-    def reject(self, reason: str, hint: str | None = None) -> None:
-        raise Rejected(str(reason), hint)
+    def reject(self, reason: str, hint: str | None = None, code: str | None = None) -> None:
+        raise Rejected(str(reason), hint, code=_script_code(code))
 
     def stop(self) -> None:
         """Stop this event from bubbling further (a local rule overriding the world's)."""
@@ -2646,6 +2652,10 @@ class World:
                 raise Rejected(f"{verb} is not possible right now")
             if isinstance(res, str) and res:
                 raise Rejected(res)
+            if isinstance(res, dict) and res.get("reason"):
+                # a refusal with its own stable code, so a harness can branch on it and refusals group by case
+                raise Rejected(str(res["reason"]), hint=str(res["hint"]) if res.get("hint") else None,
+                               code=_script_code(res.get("code")))
         return adef, owner, s
 
     def act(self, actor_id: str, verb: str, target_id: str | None = None, params: dict[str, Any] | None = None,

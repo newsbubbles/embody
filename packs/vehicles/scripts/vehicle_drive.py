@@ -6,31 +6,31 @@ def check(ctx):
     v = vehicle_of(ctx, ctx.target)
     me = ctx.actor
     if v is None:
-        return "that is not something you drive: stand aboard a vehicle and drive it, or its wheel"
+        return no("that is not something you drive: stand aboard a vehicle and drive it, or its wheel", "not_a_vehicle")
     if not aboard(ctx, v, me):
-        return "climb aboard " + v.name + " first (board it): it is driven from inside"
+        return no("climb aboard " + v.name + " first (board it): it is driven from inside", "not_aboard")
     if me.state.down or me.state.asleep:
-        return "you are in no state to drive"
+        return no("you are in no state to drive", "unfit")
     if v.state.moving:
         tr = v.state.trip or {}
-        return v.name + " is already on the road to " + name_of(ctx, tr.get("to")) + ": halt it, or wait until it pulls in"
+        return no(v.name + " is already on the road to " + name_of(ctx, tr.get("to")) + ": halt it, or wait until it pulls in", "already_moving")
     if v.state.broken:
-        return v.name + " is broken down: repair it first"
+        return no(v.name + " is broken down: repair it first", "broken")
     if v.state.hold:
-        return v.name + " is held: " + (v.state.hold if isinstance(v.state.hold, str) else "it is not to go anywhere now")
+        return no(v.name + " is held: " + (v.state.hold if isinstance(v.state.hold, str) else "it is not to go anywhere now"), "held")
     where = names(ctx, destinations(ctx, v))
     if not ctx.params or not ctx.params.get("to"):
-        return "say where: params {\"to\": one of " + ", ".join(where) + "}"
+        return no("say where: params {\"to\": one of " + ", ".join(where) + "}", "no_destination")
     dest = match_place(ctx, destinations(ctx, v), ctx.params.get("to"))
     if dest is None:
-        return v.name + " keeps to its road: drive it to one of " + ", ".join(where)
+        return no(v.name + " keeps to its road: drive it to one of " + ", ".join(where), "not_on_road")
     why = off_road_why(ctx, v, dest.id)
     if why:
-        return why
+        return no(why, "off_road")
     if v.state.cargo is not None and cargo_load(ctx, v) > float(v.state.cargo):
-        return v.name + " is overloaded (" + str(cargo_load(ctx, v)) + " of " + str(v.state.cargo) + "): unload something first"
+        return no(v.name + " is overloaded (" + str(cargo_load(ctx, v)) + " of " + str(v.state.cargo) + "): unload something first", "overloaded")
     if v.state.fuel_per_leg and float(v.state.fuel or 0) < float(v.state.fuel_per_leg):
-        return v.name + " has no fuel: refuel it first"
+        return no(v.name + " has no fuel: refuel it first", "no_fuel")
     return True
 
 def apply(ctx):
