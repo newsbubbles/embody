@@ -12,6 +12,7 @@ Clone it, open it with Claude Code (or any MCP-capable agent), and start buildin
 
 A world on embody is a place where things happen and get built on. What runs on top is up to the people in it:
 
+- **Multi-agent applications.** Build on a persistent, programmable, governed environment instead of writing the coordination layer yourself: who owns what, who may do what, what happened and who saw it. A product built on embody need not look like a world. A chat app, a marketplace or a work queue can run on places, rules and seats underneath, and its users never see them.
 - **Story worlds and world building.** Long-running worlds that grow where people play, with players, authors and NPC minds in the same place. One server can host many worlds, each with its own database, domain and invites. The Glass Reach (https://theglassreach.quest) is one such world.
 - **Worlds from an existing canon.** A creator's world held as places, people and rules, private to their team. Writers set a scene and the goals of the people in it, let agents play it out, then fork the world, change one rule and run it again. The record of who did what, and who knew what, can become the spine of a script, a game or a treatment. The canon's owner decides what becomes canon.
 - **Multiplayer, humans and agents together.** Every seat is a body in the world, held by a person, by someone's agent, or by the world's own routines. Each one perceives only what its body can perceive, and the world keeps a record of who saw what.
@@ -39,8 +40,23 @@ embody is the shared environment, not the intelligence controlling its inhabitan
 | [Evennia](https://www.evennia.com/) | Building persistent multiplayer text worlds | Similar territory for places, objects and players. embody is designed for agents to author and inhabit worlds through the same ops, with scoped perception and interchangeable human, agent and routine controllers. |
 | [LangGraph](https://github.com/langchain-ai/langgraph) and [AutoGen](https://github.com/microsoft/autogen) | Orchestrating agents, their workflows and interactions | Keep your existing harness. Its agents can use embody over MCP or HTTP; embody holds the world, its rules and its history independently of their sessions. |
 | [Godot](https://godotengine.org/) | Rendering and running interactive games | A Godot client can be a window into an embody world. embody does not provide graphics, physics or a frame loop. |
+| Discord or Slack, with bots | A channel where people and bots talk | An agent there can say it gave something away, and nothing has changed unless a system behind the chat makes it so. In embody the transfer is an act the world's rules check, and then it is true for everyone. |
+| Google Workspace | Shared documents with permissions, built for office work | The same idea of authoritative shared state, generalized: any domain's things, rules, permissions and clock, not documents alone. |
 
 These are architectural comparisons, not claims that the other projects cannot be extended to do similar things. The useful question is where the world's truth lives: in embody, it lives in the engine, not in an agent's conversation or a particular client.
+
+## A place to talk is not a shared reality
+
+| | A chat or work space | embody |
+| --- | --- | --- |
+| State | Messages and documents | An authoritative world state |
+| Identity | An account | A body, a role and its history |
+| Authority | The app's permissions | The world's rules and scoped grants |
+| Actions | API calls | Verbs the world checks before they happen |
+| Knowledge | Whatever you can open | What your body can perceive |
+| Time | Timestamps and cron jobs | A world clock with its own routines |
+
+Discord is somewhere agents can talk to each other. embody is somewhere their actions have consequences. If conversation is all you need, use a chat app.
 
 ## Try it
 
@@ -74,6 +90,10 @@ A world is a folder under `worlds/`: `build.py`, `scripts/`, notes, tests, and a
 **Your agent already knows how to live here.** A world is the same surface your agent uses for any task in its harness: tool calls, lists, plans, files. Workflows, subagents, memory, skills, scheduled jobs and any other tool you connect come along. Your agent walks a world the way it works through a codebase, and embody does not replace its harness; it gives the harness a world to operate in.
 
 **The world is the authority.** Its state does not depend on what any agent says is true. Agents decide what to do. The engine decides what actually happens, enforcing the world's rules, permissions and consequences.
+
+**Being persuaded is not being allowed.** embody does not stop prompt injection: agents still meet hostile words in what others say and write. It keeps what an agent believes apart from what it may do. An agent talked into an act still meets the world's rules and its grant, and the world refuses what the grant does not cover, whatever the agent thinks. The enforcement layer is tested too: guests report flaws from inside, and the seat and access rules are fixed when they do.
+
+**Agents from different owners meet without sharing anything else.** You do not run the other side's agent, read its memory or know its model. Each side keeps its own harness, and they agree only on the world they act in.
 
 **Truth, knowledge and belief are kept apart.** The engine holds the authoritative world state. Each inhabitant has its own limited knowledge and beliefs, which may be incomplete, outdated or wrong. That gap makes mystery, deception, conflicting accounts and real social interaction possible, and it matters for agent experiments. See the seventh picture below.
 
