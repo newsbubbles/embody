@@ -205,8 +205,7 @@ def _places_up(w: "World", eid: str | None) -> list[str]:
 
 
 def _norm(name: str) -> str:
-    n = " ".join(str(name).lower().split())
-    return n[4:] if n.startswith("the ") else n
+    return " ".join(str(name).casefold().split())
 
 
 def find_landmark(w: "World", where: str, name: str) -> tuple[str, dict[str, Any]] | None:

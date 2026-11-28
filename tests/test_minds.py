@@ -22,7 +22,7 @@ def test_fork_copies_state_and_history_but_not_principals():
     eng, gm = ferry()
     you = eng.session("you")
     you.join("ferry-at-dusk", "Traveler")
-    you.act("talk", "Mara", {"about": "the ferry"})
+    you.act("talk", "Mara", {"about": "ferry"})
     t_before = gm.world.t
     h_before = gm.world.state_hash()
     f = gm.fork_world("ferry-at-dusk", "ferry-2", "Second night")
@@ -91,8 +91,8 @@ def test_opinion_floor_builds_knows_edges_from_exchanges():
     eng, gm = ferry()
     you = eng.session("you")
     you.join("ferry-at-dusk", "Traveler")
-    you.act("talk", "Mara", {"about": "the ferry"})
-    you.act("talk", "Mara", {"about": "a light"})
+    you.act("talk", "Mara", {"about": "ferry"})
+    you.act("talk", "Mara", {"about": "light"})
     b = you.perceive()
     k = {x["name"]: x for x in b["knows"]}
     assert "Mara" in k and k["Mara"]["here"] is True and k["Mara"]["count"] >= 2
@@ -106,7 +106,7 @@ def test_opinion_floor_builds_knows_edges_from_exchanges():
     gm.world.set_meta({"opinion_floor": False})
     before = gm.world.find(name="Mara")[0]["id"]
     n = len(gm.world.edges(before, "knows", "out"))
-    you.act("talk", "Mara", {"about": "the fog"})
+    you.act("talk", "Mara", {"about": "fog"})
     assert len(gm.world.edges(before, "knows", "out")) == n
 
 
@@ -160,18 +160,18 @@ def test_turns_move_the_world_while_paused():
     assert "turn" not in r and gm.world.t == t1
 
 
-def test_dialog_matches_whole_words_aliases_and_state():
+def test_dialog_answers_a_name_of_its_entry_in_any_case_and_keeps_state():
     eng, gm = ferry()
     you = eng.session("you")
     you.join("ferry-at-dusk", "Traveler")
-    r = you.act("talk", "Mara", {"about": "a song of the pale moon"})   # no "ale" in there
+    r = you.act("talk", "Mara", {"about": "a song of the pale moon"})   # a sentence names no entry
     said = [e["payload"]["text"] for e in r["events"] if e["kind"] == "say"]
     assert any("Ask me something" in s for s in said)
-    r = you.act("talk", "Mara", {"about": "an ale, please"})
+    r = you.act("talk", "Mara", {"about": "Ale"})
     said = [e["payload"]["text"] for e in r["events"] if e["kind"] == "say"]
     assert any("One, mind" in s for s in said)
     assert any(h["name"] == "Dark ale" for h in you.perceive()["holding"])
-    r = you.act("talk", "Mara", {"about": "another beer"})
+    r = you.act("talk", "Mara", {"about": "beer"})
     said = [e["payload"]["text"] for e in r["events"] if e["kind"] == "say"]
     assert any("One was the deal" in s for s in said)
     assert sum(1 for h in you.perceive()["holding"] if h["name"] == "Dark ale") == 1
@@ -190,15 +190,15 @@ def test_mind_on_top_of_the_table():
     you.join("ferry-at-dusk", "Traveler")
     mind = eng.session("mara-mind")
     mind.join("ferry-at-dusk", "Mara")
-    r = you.act("talk", "Mara", {"about": "the ferry"})
+    r = you.act("talk", "Mara", {"about": "ferry"})
     # the table is quiet while a mind embodies her; the mind hears the question
     assert not any(e["kind"] == "say" for e in r["events"])
     heard = mind.perceive()["events"]
-    assert any(e["kind"] == "talked" and e["payload"]["about"] == "the ferry" for e in heard)
+    assert any(e["kind"] == "talked" and e["payload"]["about"] == "ferry" for e in heard)
     mind.say("Tam's gone up the mill. Ring for him.", to="Traveler")
     assert any(e["kind"] == "say" for e in you.perceive()["events"])
     mind.leave()
-    r = you.act("talk", "Mara", {"about": "the fog"})
+    r = you.act("talk", "Mara", {"about": "fog"})
     assert any(e["kind"] == "say" for e in r["events"])   # the table is back
 
 

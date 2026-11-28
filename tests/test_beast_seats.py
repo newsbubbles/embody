@@ -47,14 +47,16 @@ def test_a_goat_does_only_its_own_verbs_and_waits_out_a_bleat():
 def test_a_beast_hears_the_tone_not_the_words_until_it_understands():
     eng, w, i = engine_with_two_rooms()
     gm, sam, nate = pasture(eng)
+    # how far the line was sent, never its letters or its punctuation: a line is in any language
     assert [tone("Get out of the way, you goat"), tone("SHOO"), tone("Here, girl?"), tone("psst", 0),
-            tone("Out of the barley now!"), tone("hello", 2)] == ["calm", "shout", "sharp", "whisper", "shout", "shout"]
+            tone("Out of the barley now!"), tone("hello", 2), tone("走開!")] == [
+        "calm", "calm", "calm", "whisper", "calm", "shout", "calm"]
     nate.say("Get out of the way, you goat")
     heard = [e for e in sam.perceive()["events"] if e["kind"] == "say"]
     assert heard[-1]["payload"] == {"to": None, "tone": "calm", "heard": False}
     nate.say("Here, girl?", to="Nan")
     assert sam.recall(about="Guard")["exchanges"][-1] == {
-        "t": pytest.approx(w.t), "who": i["Guard"], "kind": "say", "tone": "sharp", "heard": False}
+        "t": pytest.approx(w.t), "who": i["Guard"], "kind": "say", "tone": "calm", "heard": False}
     assert nate.recall(about="Nan")["exchanges"][-1]["text"] == "Here, girl?"  # the speaker keeps his own words
     gm.patch("Nan", {"understands_until": w.t + 100})  # the rare herb: a while of words
     nate.say("The pass is that way")

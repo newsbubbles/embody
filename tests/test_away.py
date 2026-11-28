@@ -106,10 +106,10 @@ def test_arrived_with_no_name_wakes_on_others_not_on_your_own_steps():
 def test_a_mind_waiting_in_the_scene_keeps_its_stand_in_quiet():
     # 2026-11-22, a world build: a seated mind that only waited read as gone, and its away line answered before it did
     eng, w, i, gm, p, g = two_in_the_cell()
-    g.away(answer="Asleep at the inn.", dialog={"key": "Ask the warden."})
+    g.away(answer="Asleep at the inn.")
     gm.clock(step=120)
     g.wait(timeout=0, present=True)
-    assert w.present(i["Guard"]) and not w.own_lines(i["Guard"])
+    assert w.present(i["Guard"])
     before = len(w.events(kinds=["say"], limit=500))
     p.say("Guard?", to="Guard")
     assert [e["payload"].get("away") for e in w.events(kinds=["say"], limit=500)][before:] == [None]
@@ -118,8 +118,8 @@ def test_a_mind_waiting_in_the_scene_keeps_its_stand_in_quiet():
     p.say("Guard!", to="Guard")
     assert w.events(kinds=["say"], limit=500)[-1]["payload"]["text"] == "Asleep at the inn."
     g.wait(timeout=0, present=True)
-    g.wait(timeout=0)  # the watcher's wait gives the lines back at once
-    assert not w.present(i["Guard"]) and w.own_lines(i["Guard"])
+    g.wait(timeout=0)  # the watcher's wait gives the answer back at once
+    assert not w.present(i["Guard"])
 
 
 def test_a_player_reads_the_public_schedule_in_words():

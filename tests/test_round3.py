@@ -152,7 +152,7 @@ def test_recall_is_a_graph_query_within_the_minds_permissions():
     you = eng.session("you")
     you.join("ferry-at-dusk", "Traveler")
     you.say("Any way across tonight?", to="Mara")
-    you.act("talk", "Mara", {"about": "the ferry"})
+    you.act("talk", "Mara", {"about": "ferry"})
     you.remember("Mara knows more than she says about Tam.")
     you.intend("Get Mara to say where Tam is", why="Mara is the one who knows")
     mara = gm.world.find(name="Mara")[0]["id"]

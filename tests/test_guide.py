@@ -41,7 +41,7 @@ def test_the_briefing_teaches_a_condition_and_names_the_guide():
     assert "wait(until=" in how and "never loop on a bare wait()" in how and "guide(" in how
 
 
-def test_to_me_wakes_on_words_to_you_or_your_name():
+def test_to_me_wakes_on_a_line_said_to_you_and_named_on_your_name():
     eng, w, i = engine_with_two_rooms()
     gm = eng.session("gm", capabilities=[AUTHOR])
     gm.use("two-rooms")
@@ -51,8 +51,9 @@ def test_to_me_wakes_on_words_to_you_or_your_name():
     since = w.store.next_seq(w.id) - 1
     gm.say_as("Cellmate", "the bread is stale")
     assert not p.wait(until="to_me()", timeout=0, since=since).get("fired")
-    gm.say_as("Cellmate", "you there, prisoner, wake up")
-    assert p.wait(until="to_me()", timeout=0, since=since).get("fired")
+    gm.say_as("Cellmate", "you there, Prisoner, wake up")  # words are never read for an address, in any language
+    assert not p.wait(until="to_me()", timeout=0, since=since).get("fired")
+    assert p.wait(until="named()", timeout=0, since=since).get("fired")
     since = w.store.next_seq(w.id) - 1
     gm.say_as("Cellmate", "psst", to="Prisoner")
     assert p.wait(until="to_me()", timeout=0, since=since).get("fired")
@@ -62,6 +63,10 @@ def test_to_me_wakes_on_words_to_you_or_your_name():
     since = w.store.next_seq(w.id) - 1
     gm.say_as("Cellmate", "they say the prisoner will hang at dawn")  # your name in passing: named(), not to_me()
     assert not p.wait(until="to_me()", timeout=0, since=since).get("fired")
+    assert p.wait(until="named()", timeout=0, since=since).get("fired")
+    gm.rename("Prisoner", "李明")  # a name in any script, matched whole as the world spells it
+    since = w.store.next_seq(w.id) - 1
+    gm.say_as("Cellmate", "李明在哪里")
     assert p.wait(until="named()", timeout=0, since=since).get("fired")
 
 
@@ -99,8 +104,9 @@ def test_say_refuses_ids_and_tool_calls_and_notes_a_deed_that_did_not_happen():
         p.say(f"{i['Prisoner']} is mine")
     with pytest.raises(Rejected, match=r"perceive\(\.\.\.\) out loud"):
         p.say("perceive() says so")
-    assert "nothing moved: A thin blade is still yours" in p.say("I lay the thin blade on the sand")["note"]
-    assert "stage directions" in p.say("*bows*")["note"]
+    # the words are words: nothing is read out of them for a deed, in any language or punctuation
+    assert "note" not in p.say("I lay the thin blade on the sand")
+    assert "note" not in p.say("*bows*")
     assert "note" not in p.say("the blade is sharp")
     assert gm.say_as("Guard", f"{i['Guard']}")["ok"]  # an author's hand says what it likes for an NPC
     assert gm.say_as("Prisoner", "a local seat is the host's own to drive")["ok"]

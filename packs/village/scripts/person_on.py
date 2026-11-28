@@ -1,19 +1,10 @@
-def words(text):
-    # the topic as whole words: "ale" matches "an ale, please" and not "a tale"
-    t = str(text).lower()
-    for ch in [",", ".", "?", "!", ";", ":", "'", "\""]:
-        t = t.replace(ch, " ")
-    return t.split()
+def norm(text):
+    # a topic as written, in any language: case and surrounding spaces aside, nothing is read out of it
+    return " ".join(str(text).lower().split())
 
-def score(key, topic):
-    # a dialog key is one word or several joined with |: "ale|drink|beer". The score is how many aliases
-    # the topic contains plus a little for longer aliases, so "ferry crossing" prefers the ferry entry.
-    s = 0
-    for alias in key.split("|"):
-        a = alias.strip()
-        if a in topic:
-            s = s + 10 + len(a)
-    return s
+def names(key):
+    # a dialog key is one topic or several names for it joined with |: "ale|drink|beer"
+    return [norm(a) for a in str(key).split("|") if norm(a)]
 
 def pick(ctx, entry, given):
     # an entry is a line, or a dict: {"line", "after_gift", "if_state": {k: v}, "else"}
@@ -74,27 +65,25 @@ def speak(ctx, line, asker):
         i = i + 1
 
 def on(ctx, event):
-    # Someone talked to me. Answer from my dialog table with the best-matching entry; hand over anything I
-    # give for that topic. Skipped while an agent embodies me (unless_embodied): then the agent answers.
+    # Someone talked to me. Answer from my dialog table with the entry the topic names (one of its names, as the
+    # world wrote it); hand over anything I give for that topic. Skipped while an agent embodies me
+    # (unless_embodied): then the agent answers. Nothing is read out of the asker's words, in any language.
     if event.target != ctx.self.id:
         return
-    topic = words(event.payload.get("about", ""))
+    topic = norm(event.payload.get("about", ""))
     asker = event.payload.get("by")
     me = ctx.self.state
     dialog = dict(me.dialog or {})
-    own = (me.idle_orders or {}).get("dialog") or {}
-    for k in own:  # a mind's own lines while its seat is idle, over the author's
-        dialog[k] = own[k]
     gives = me.gives or {}
     best = None
-    best_s = 0
     for key in dialog:
-        s = score(key, topic)
-        if s > best_s:
+        if topic and topic in names(key):
             best = key
-            best_s = s
+            break
     if best is None:
-        speak(ctx, me.default_line or (me.standing_orders or {}).get("answer") or "Hm.", asker)
+        line = me.default_line or (me.standing_orders or {}).get("answer")
+        if line:  # the world's own words, or none: the pack says nothing of its own
+            speak(ctx, line, asker)
         return
     got = given_to(me, best)
     had = asker in got or "*" in got
@@ -104,7 +93,8 @@ def on(ctx, event):
     if best in gives and not had:
         g = gives[best]
         if hand_over(ctx, g, asker):
-            speak(ctx, g.get("line") or "Here, take the " + str(g.get("name") or g.get("item")).lower() + ".", asker)
+            if g.get("line"):
+                speak(ctx, g["line"], asker)
             ctx.patch(ctx.self, {"gave": {best: got + [asker]}})
-        else:
-            speak(ctx, g.get("gone_line") or "I had one of those somewhere. Gone now.", asker)
+        elif g.get("gone_line"):
+            speak(ctx, g["gone_line"], asker)

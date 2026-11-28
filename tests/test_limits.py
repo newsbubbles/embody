@@ -209,8 +209,8 @@ def test_a_long_wait_reads_in_minutes_and_hours_and_a_heavy_check_may_ask_for_fu
     assert r.value.code == "script_error"
     assert sam.act("lift")["ok"]
     assert w._wait_words(100) == "100 s" and w._wait_words(360) == "6 minutes" and w._wait_words(3 * 3600) == "3 hours"
-    # use(world=...) as well as use(world_id=...), and a bare use() names what it needs
-    assert eng.session("o", role="observer").use(world="two-rooms")["you"]
+    # one name per param: use(world_id=...); another name is refused naming it, and a bare use() names what it needs
+    assert eng.session("o", role="observer").use(world_id="two-rooms")["you"]
     with pytest.raises(Rejected, match="world's id"):
         eng.session("o2", role="observer").use()
     # git_init walks the real folder: a world folder linked in from its own repository makes no nested one

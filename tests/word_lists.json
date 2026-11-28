@@ -1,0 +1,1337 @@
+{
+  "src/embody/asks.py:82884caaf2": {
+    "kind": "contract",
+    "why": "the ask ledger's own fields, kinds, urgencies and states (ask_owner's contract)",
+    "sample": "capability, fix, flaw, help, other, proposal, quest, seat, testing"
+  },
+  "src/embody/asks.py:3b1e7aaec8": {
+    "kind": "contract",
+    "why": "the ask ledger's own fields, kinds, urgencies and states (ask_owner's contract)",
+    "sample": "what, why"
+  },
+  "src/embody/asks.py:2472b92ffe": {
+    "kind": "contract",
+    "why": "the ask ledger's own fields, kinds, urgencies and states (ask_owner's contract)",
+    "sample": "severity, what, why"
+  },
+  "src/embody/asks.py:5b48b06b2f": {
+    "kind": "contract",
+    "why": "the ask ledger's own fields, kinds, urgencies and states (ask_owner's contract)",
+    "sample": "concerns, credit, kind, severity, share, urgency, what, why"
+  },
+  "src/embody/asks.py:a64fb0b792": {
+    "kind": "contract",
+    "why": "the ask ledger's own fields, kinds, urgencies and states (ask_owner's contract)",
+    "sample": "high, low, normal"
+  },
+  "src/embody/asks.py:cac6f25a6d": {
+    "kind": "contract",
+    "why": "the ask ledger's own fields, kinds, urgencies and states (ask_owner's contract)",
+    "sample": "answered, declined, escalated, open, seen"
+  },
+  "src/embody/asks.py:5e81421294": {
+    "kind": "contract",
+    "why": "the ask ledger's own fields, kinds, urgencies and states (ask_owner's contract)",
+    "sample": "answer, at, by, status"
+  },
+  "src/embody/asks.py:12aae8c5a5": {
+    "kind": "contract",
+    "why": "the ask ledger's own fields, kinds, urgencies and states (ask_owner's contract)",
+    "sample": "at, by, folded, reply"
+  },
+  "src/embody/chronicle_threads.py:8b61a0b0f7": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's event kinds (a fight, a death, a gift) ranked as story, to be read from declared data",
+    "sample": "caught, death, destroyed, died, dishonor, downed, fight, find, first_visit, found, gift, killed, new_person, new_place, "
+  },
+  "src/embody/chronicle_threads.py:528f7d4bc5": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's payload keys (damage, faction), to be read from declared data",
+    "sample": "damage, faction, name, place, target, value, who, why"
+  },
+  "src/embody/cli.py:55c63efdc8": {
+    "kind": "contract",
+    "why": "the CLI's own flags, briefing keys and reply fields",
+    "sample": "description, hidden"
+  },
+  "src/embody/cli.py:69f8ca68c8": {
+    "kind": "contract",
+    "why": "the CLI's own flags, briefing keys and reply fields",
+    "sample": "'quiet_min' in m"
+  },
+  "src/embody/cli.py:1dd2e79949": {
+    "kind": "contract",
+    "why": "the CLI's own flags, briefing keys and reply fields",
+    "sample": "'affordances' in b"
+  },
+  "src/embody/cli.py:ba84bb9960": {
+    "kind": "contract",
+    "why": "the CLI's own flags, briefing keys and reply fields",
+    "sample": "asks, flaws, programs, requests, schemas, scripts, timers"
+  },
+  "src/embody/cli.py:3e05ef4f18": {
+    "kind": "contract",
+    "why": "the CLI's own flags, briefing keys and reply fields",
+    "sample": "packs, worlds"
+  },
+  "src/embody/cli.py:539a31ba08": {
+    "kind": "contract",
+    "why": "the CLI's own flags, briefing keys and reply fields",
+    "sample": "off, on"
+  },
+  "src/embody/cli.py:8ab15f036b": {
+    "kind": "contract",
+    "why": "the CLI's own flags, briefing keys and reply fields",
+    "sample": "no, yes"
+  },
+  "src/embody/cli.py:2368a5a6cb": {
+    "kind": "contract",
+    "why": "the CLI's own flags, briefing keys and reply fields",
+    "sample": "'mine' in kw"
+  },
+  "src/embody/cli.py:3cd6283114": {
+    "kind": "contract",
+    "why": "the CLI's own flags, briefing keys and reply fields",
+    "sample": "'reason' in r"
+  },
+  "src/embody/far.py:02652f32fa": {
+    "kind": "contract",
+    "why": "units and frame names the engine's positions define",
+    "sample": "km, m"
+  },
+  "src/embody/far.py:7e18bcf311": {
+    "kind": "contract",
+    "why": "units and frame names the engine's positions define",
+    "sample": "grid, own"
+  },
+  "src/embody/grants.py:2c52c8936d": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "author, mind, narrator, observer, owner, player"
+  },
+  "src/embody/grants.py:33d50872d3": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "answer_ask, ask_owner, ask_reply, asks_to_owner, clock, guide, handbook, leave, report_flaw, seats, summary, use, worlds"
+  },
+  "src/embody/grants.py:ee95671d3f": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "act, act_many, away, claim_seat, cross, find, gesture, history, history_count, inspect, intend, join, looks, more, perce"
+  },
+  "src/embody/grants.py:2c5104e244": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "find, history, history_count, inspect, looks, map, measure, perceive, recall, schemas, script_source, scripts, timers, v"
+  },
+  "src/embody/grants.py:52d8247df6": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "act_as, chmod, chown, connect, destroy, intend, introduce, layout, link, minds, move, patch, recall, relate, remember, r"
+  },
+  "src/embody/grants.py:0da8366a12": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "chronicle, chronicle_arc, clear_rule, create_world, define_schema, define_script, fork_world, grant_verb, mirror, publis"
+  },
+  "src/embody/grants.py:bf84345ab5": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "ask_readers, evict, flaws, grants, hold_seat, invite, link_world, relink, requests, review_script, revoke, set_parts, vo"
+  },
+  "src/embody/grants.py:5323012610": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "chronicle, chronicle_arc, create_world, fork_world, link_world, minds, mirror, publish_chronicle, restore, rules_changed"
+  },
+  "src/embody/grants.py:09d8a345a3": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "answer, ask_owner, asks_to_owner, guide, handbook, offer, report_flaw, summary, use, wait, worlds"
+  },
+  "src/embody/grants.py:df01a41672": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "author, narrator, observer"
+  },
+  "src/embody/grants.py:24284946f3": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "applebot, bingbot, bluesky, discordbot, embedly, facebookexternalhit, googlebot, iframely, linkedinbot, mastodon, pinter"
+  },
+  "src/embody/grants.py:1986c4fff7": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "[A-Za-z0-9.:\\[\\]-]+"
+  },
+  "src/embody/grants.py:e5f1bed644": {
+    "kind": "contract",
+    "why": "roles, the ops each role may call, HTTP schemes and link-preview crawler user-agent tokens (protocol names, not language)",
+    "sample": "http, https"
+  },
+  "src/embody/handbooks.py:6bb4fa8d4f": {
+    "kind": "contract",
+    "why": "handbook roles and page path syntax (file names on disk, ASCII for every host)",
+    "sample": "author, owner"
+  },
+  "src/embody/handbooks.py:d7f9d08ed3": {
+    "kind": "contract",
+    "why": "handbook roles and page path syntax (file names on disk, ASCII for every host)",
+    "sample": "^[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*\\.md$"
+  },
+  "src/embody/handbooks.py:4ef12c5b80": {
+    "kind": "contract",
+    "why": "handbook roles and page path syntax (file names on disk, ASCII for every host)",
+    "sample": "^([A-Za-z_][\\w-]*):\\s*(.*)$"
+  },
+  "src/embody/hub.py:6a9b10f22b": {
+    "kind": "contract",
+    "why": "server states, pool names, hashed column names and store tables",
+    "sample": "down, maintenance, up"
+  },
+  "src/embody/hub.py:dbc7e4c049": {
+    "kind": "contract",
+    "why": "server states, pool names, hashed column names and store tables",
+    "sample": "connect, pool, read, write"
+  },
+  "src/embody/hub.py:fc0567ec52": {
+    "kind": "contract",
+    "why": "server states, pool names, hashed column names and store tables",
+    "sample": "code_hash, spent_hash, token_hash"
+  },
+  "src/embody/hub.py:20c26ad3cc": {
+    "kind": "contract",
+    "why": "server states, pool names, hashed column names and store tables",
+    "sample": "entity, event, grants"
+  },
+  "src/embody/layout.py:02209370a1": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "aligned_with, bounds, geo, north, note, units, up"
+  },
+  "src/embody/layout.py:1355e740a8": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "at, ceiling, floor, footprint, heading, landmarks, mesh, note, radius, size, solid, terrain"
+  },
+  "src/embody/layout.py:3c7d84441b": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "cell_m, cols, origin, rows, source, version, z"
+  },
+  "src/embody/layout.py:9bbbfdbb1a": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "E, ENE, ESE, N, NE, NNE, NNW, NW, S, SE, SSE, SSW, SW, W, WNW, WSW"
+  },
+  "src/embody/layout.py:6c859bbf36": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "north, units, up"
+  },
+  "src/embody/layout.py:03ad33a6a8": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "'bounds' in out"
+  },
+  "src/embody/layout.py:1456623024": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "'geo' in out"
+  },
+  "src/embody/layout.py:bd34450588": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "lat, lon"
+  },
+  "src/embody/layout.py:ce40c65b16": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "ceiling, floor"
+  },
+  "src/embody/layout.py:0f3c9a30ef": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "'floor' in out"
+  },
+  "src/embody/layout.py:5b8cf24d32": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "'ceiling' in out"
+  },
+  "src/embody/layout.py:f4b0383600": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "mesh, note"
+  },
+  "src/embody/layout.py:284e8d1a98": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "'at' in out"
+  },
+  "src/embody/layout.py:db20bc4c15": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "at, note, radius"
+  },
+  "src/embody/layout.py:3979223413": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "footprint, radius, size"
+  },
+  "src/embody/layout.py:9c6ee4e2a5": {
+    "kind": "contract",
+    "why": "layout keys, compass points and frame fields the engine defines",
+    "sample": "'floor' in lay"
+  },
+  "src/embody/links.py:ae3055d1de": {
+    "kind": "contract",
+    "why": "a world link's name syntax and its signed HTTP header names (ASCII by protocol)",
+    "sample": "^[a-z0-9][a-z0-9_-]{0,39}$"
+  },
+  "src/embody/links.py:359f1b7435": {
+    "kind": "contract",
+    "why": "a world link's name syntax and its signed HTTP header names (ASCII by protocol)",
+    "sample": "x-embody-link, x-embody-nonce, x-embody-sig, x-embody-time"
+  },
+  "src/embody/looks.py:306cec63c9": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's body parts as look slots: a body can be a mote of dust, to be read from declared data",
+    "sample": "arms, back, eyes, face, feet, hair, hands, head, legs, neck, skin, torso"
+  },
+  "src/embody/looks.py:5ae2cc0dad": {
+    "kind": "contract",
+    "why": "the looks model's own kinds and ranges",
+    "sample": "grown, permanent, replaced, worn-on"
+  },
+  "src/embody/looks.py:3f506bb9b7": {
+    "kind": "contract",
+    "why": "the looks model's own kinds and ranges",
+    "sample": "close, far, near"
+  },
+  "src/embody/looks.py:e98d9dbf05": {
+    "kind": "contract",
+    "why": "the looks model's own kinds and ranges",
+    "sample": "grown, replaced"
+  },
+  "src/embody/mcp_server.py:7945f39ca1": {
+    "kind": "contract",
+    "why": "tool names and the refusal shape",
+    "sample": "inspect, minds, programs, schemas, scripts, seats, timers, worlds"
+  },
+  "src/embody/mcp_server.py:d7643ea650": {
+    "kind": "contract",
+    "why": "tool names and the refusal shape",
+    "sample": "hint, ok, reason"
+  },
+  "src/embody/mirror.py:afbe051cdc": {
+    "kind": "contract",
+    "why": "mirror file sections and the event table header",
+    "sample": "description, rules"
+  },
+  "src/embody/mirror.py:a598114b14": {
+    "kind": "contract",
+    "why": "mirror file sections and the event table header",
+    "sample": "'every' in c"
+  },
+  "src/embody/mirror.py:78b33ea4a2": {
+    "kind": "contract",
+    "why": "mirror file sections and the event table header",
+    "sample": "behaviors, listeners"
+  },
+  "src/embody/mirror.py:6072c97348": {
+    "kind": "contract",
+    "why": "mirror file sections and the event table header",
+    "sample": "| seq | t | kind | actor | target | payload |"
+  },
+  "src/embody/openapi.py:928404b738": {
+    "kind": "contract",
+    "why": "roles and OpenAPI/JSON Schema keywords",
+    "sample": "author, builder, mind, narrator, observer, oracle, owner, player"
+  },
+  "src/embody/openapi.py:c8ef405f21": {
+    "kind": "contract",
+    "why": "roles and OpenAPI/JSON Schema keywords",
+    "sample": "description, properties, required, type"
+  },
+  "src/embody/openapi.py:1678a651cd": {
+    "kind": "contract",
+    "why": "roles and OpenAPI/JSON Schema keywords",
+    "sample": "ok, reason"
+  },
+  "src/embody/openapi.py:fc162bdad7": {
+    "kind": "contract",
+    "why": "roles and OpenAPI/JSON Schema keywords",
+    "sample": "'timeout' in props"
+  },
+  "src/embody/ops.py:b8ea9434f4": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "hidden_from_self, policy, rules, secret, space"
+  },
+  "src/embody/ops.py:97ceb6d8b0": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "doc, place, type"
+  },
+  "src/embody/ops.py:feaab4f9af": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "edge, entity, event, hyperedge, rules_change, scheduled, schema, script"
+  },
+  "src/embody/ops.py:ae0ed98af5": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "Session | None"
+  },
+  "src/embody/ops.py:4d83147601": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "introduce, patch, spawn"
+  },
+  "src/embody/ops.py:93291829f0": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "chmod, chown"
+  },
+  "src/embody/ops.py:a36d9eb286": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "act_as, clear_rule, destroy, patch, rename, say_as, set_rule"
+  },
+  "src/embody/ops.py:0b5bef8adf": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "intend, remember, schedule"
+  },
+  "src/embody/ops.py:8ab2a04fb8": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "chmod, chown, destroy, move, patch, rename"
+  },
+  "src/embody/ops.py:58c5b758ab": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'canon' in (args.get('changes') if op == 'patch' el"
+  },
+  "src/embody/ops.py:94c4ca01ee": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "introduce, spawn"
+  },
+  "src/embody/ops.py:5d53c4f6f5": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's state keys (gift_book, gift_uses), to be read from declared data",
+    "sample": "gift_book, gift_uses"
+  },
+  "src/embody/ops.py:e204e73fc1": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "create_world, fork_world, mirror, restore, save"
+  },
+  "src/embody/ops.py:111d1557d6": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "catch_up, drivers, rate, run, step, turn"
+  },
+  "src/embody/ops.py:e925b91d24": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "act_as, destroy, patch, rename, say_as"
+  },
+  "src/embody/ops.py:f92ef5653a": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "link, unlink"
+  },
+  "src/embody/ops.py:b87a0d7f61": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "intend, remember"
+  },
+  "src/embody/ops.py:50e612c769": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "program, unprogram"
+  },
+  "src/embody/ops.py:5c7a9d7b9c": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "clear_rule, set_rule"
+  },
+  "src/embody/ops.py:03c541ec44": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'script' in a"
+  },
+  "src/embody/ops.py:3c31403e64": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'verbs' in lim"
+  },
+  "src/embody/ops.py:f45f3ec47c": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "scripts, types, under"
+  },
+  "src/embody/ops.py:50b52cf906": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "legacy, news, pid"
+  },
+  "src/embody/ops.py:172433c8ce": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "legacy, pid"
+  },
+  "src/embody/ops.py:2fc3bd192f": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "grant, legacy, news, pid, role"
+  },
+  "src/embody/ops.py:d29b90471a": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "answered, declined"
+  },
+  "src/embody/ops.py:1f499921bb": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "code_hash, page, spent_hash, token_hash, world_id"
+  },
+  "src/embody/ops.py:3bd156026f": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's event kind talked (the village pack's), to be read from declared data",
+    "sample": "act, say, talked"
+  },
+  "src/embody/ops.py:6bc064e216": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "footprint, heading, radius, size"
+  },
+  "src/embody/ops.py:e16fab2d83": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "entity, frame"
+  },
+  "src/embody/ops.py:5ad08e9754": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'frame' in p"
+  },
+  "src/embody/ops.py:99e4aa6962": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'route' in back"
+  },
+  "src/embody/ops.py:7e18bcf311": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "grid, own"
+  },
+  "src/embody/ops.py:a8c93a3bbd": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "ceiling, floor, footprint, heading, radius, size"
+  },
+  "src/embody/ops.py:b4d0a8dae1": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'wall' in pe['payload'] or {}"
+  },
+  "src/embody/ops.py:db05cc1230": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "seen_by, wall"
+  },
+  "src/embody/ops.py:bb88086376": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "embodied, released"
+  },
+  "src/embody/ops.py:c2ed2aa28a": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "as, principal"
+  },
+  "src/embody/ops.py:5b2a72a284": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "far, near"
+  },
+  "src/embody/ops.py:d82bcebe3a": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "hidden_from_self, rules, secret, space"
+  },
+  "src/embody/ops.py:e4cf550943": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "rules, secret, space"
+  },
+  "src/embody/ops.py:edcf51b0b6": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "gestured, say"
+  },
+  "src/embody/ops.py:fcd63867fc": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "id, last, opened, title"
+  },
+  "src/embody/ops.py:2a7b711cfe": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's event kinds hit and missed (d20's), to be read from declared data",
+    "sample": "hit, missed"
+  },
+  "src/embody/ops.py:5611912b16": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's event kinds given and traded (the village pack's), to be read from declared data",
+    "sample": "given, traded"
+  },
+  "src/embody/ops.py:4511cb23d2": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "ambient, description, rules"
+  },
+  "src/embody/ops.py:b58c66635b": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "closed, open"
+  },
+  "src/embody/ops.py:84ea41a24a": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "asked, reason, target, verb"
+  },
+  "src/embody/ops.py:ed88c35b60": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'players' in drivers"
+  },
+  "src/embody/ops.py:087ee86b9c": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'result' in r"
+  },
+  "src/embody/ops.py:af7f8aaf4a": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's verb go, assumed for a patrol, to be read from declared data",
+    "sample": "'go' in w.schema_actions(w.need(eid)['type'])"
+  },
+  "src/embody/ops.py:0d88eafb85": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's verb sleep, assumed for away(sleep=true), to be read from declared data",
+    "sample": "'sleep' in w.schema_actions(w.need(eid)['type'])"
+  },
+  "src/embody/ops.py:0ccb37bc31": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "hint, home, link, note, page, paste, returning"
+  },
+  "src/embody/ops.py:1c7155d62b": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'rules_notice' in b"
+  },
+  "src/embody/ops.py:168802c0e8": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "built, delivered"
+  },
+  "src/embody/ops.py:06eaee3b21": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "reason, thing, verb"
+  },
+  "src/embody/ops.py:a0222d2de2": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'verbs' in res"
+  },
+  "src/embody/ops.py:bc80c18202": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'frames' in res"
+  },
+  "src/embody/ops.py:e4f6d969e3": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "scene, words"
+  },
+  "src/embody/ops.py:0722afa12c": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "ask_owner, ask_reply, asks_to_owner, clock, guide, leave, report_flaw, use, worlds"
+  },
+  "src/embody/ops.py:896446d9a1": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "find, inspect, looks, map, measure, perceive, wait"
+  },
+  "src/embody/ops.py:36495a49b8": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "embodied, merged, opinion, patched, released, script_error"
+  },
+  "src/embody/ops.py:3c20588893": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's event kind talked (the village pack's), to be read from declared data",
+    "sample": "say, talked"
+  },
+  "src/embody/ops.py:f398f5f110": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "code, layer, param"
+  },
+  "src/embody/ops.py:e27d370a8f": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "arrived, came, did, heard, named, to_me"
+  },
+  "src/embody/ops.py:daadeffae4": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "actor, kind, payload, player, seq, t, target, text, who"
+  },
+  "src/embody/ops.py:91e52619b0": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "always_there, appeared, arrived, built, delivered"
+  },
+  "src/embody/ops.py:b7b61ffdd5": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "act, act_as, act_many, answer, answer_ask, ask_owner, ask_readers, ask_reply, asks_to_owner, away, chmod, chown, chronic"
+  },
+  "src/embody/ops.py:5bf6dc2ac2": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "building, in the world, keeping the world, oracle, to the owner, your seat"
+  },
+  "src/embody/ops.py:4f3a3a57a6": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "act, act_many, away, clock, cross, find, gesture, history, history_count, inspect, intend, looks, map, measure, more, pe"
+  },
+  "src/embody/ops.py:c3e780132e": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "claim_seat, guide, handbook, join, leave, seats, summary, use, worlds"
+  },
+  "src/embody/ops.py:0a0f721395": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "ask_owner, ask_reply, asks_to_owner, report_flaw"
+  },
+  "src/embody/ops.py:5e997d1e87": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "answer_ask, ask_readers, chronicle, chronicle_arc, create_world, evict, flaws, fork_world, grants, hold_seat, invite, li"
+  },
+  "src/embody/ops.py:9fdc882049": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "act_as, chmod, chown, clear_rule, connect, define_schema, define_script, destroy, grant_verb, introduce, layout, link, m"
+  },
+  "src/embody/ops.py:4478df7cc6": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "answer, offer"
+  },
+  "src/embody/ops.py:bb1a0c97d7": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's event kinds slept and woke (the sleep pack's) as routine, to be read from declared data",
+    "sample": "embodied, finished, merged, opinion, reclaimed, released, slept, woke"
+  },
+  "src/embody/ops.py:020ee01b81": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's event kinds (downed, killed, struck, yielded) as news, to be read from declared data",
+    "sample": "agreed, caught, destroyed, downed, found, killed, renamed, rose, searched, stopped, struck, wounded, yielded"
+  },
+  "src/embody/ops.py:792c3dd600": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "author, changes, helpers, hosting, mind, narrator, player, scripting, skills, watch"
+  },
+  "src/embody/ops.py:559539672e": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "guide, recheck, retired"
+  },
+  "src/embody/ops.py:0473ceeba1": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "creature, place, thing"
+  },
+  "src/embody/ops.py:b5345ca134": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'hidden' in p.get('changes') or {}"
+  },
+  "src/embody/ops.py:4e9b716ed8": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "budget, chars, items"
+  },
+  "src/embody/ops.py:a9cd95c837": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "chronicled, laid_out, ledger_received, left, linked, moved, patched, related, say, scene, spawned, stepped, unlinked, un"
+  },
+  "src/embody/ops.py:b7708be25f": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "act, clock, find, history, history_count, inspect, join, leave, perceive, recall, say, seats, summary, use, wait, worlds"
+  },
+  "src/embody/ops.py:d319cba737": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "act_as, chmod, chown, clear_rule, clock, connect, create_world, define_schema, define_script, destroy, fork_world, inten"
+  },
+  "src/embody/ops.py:48875e18bb": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "\\b(?:https?|ftp)://\\S+|\\bwww\\.\\S+"
+  },
+  "src/embody/ops.py:5f667cb653": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "\\b[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)*\\.[a-z]{2,}\\b"
+  },
+  "src/embody/ops.py:0c4badf7f7": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "\\b[a-z0-9][a-z0-9-]*(?:\\.[a-z0-9-]+)*\\.(?:com|net|org|io|gg|xyz|app|dev|ly|link|ai|info|biz|ru|cn|tk|tv|uk|site|online|s"
+  },
+  "src/embody/ops.py:b5f59aa398": {
+    "kind": "debt",
+    "why": "English phrases (dm me, follow me on, my insta) in the reach-out guard; formats stay, the phrases wait on Nate's word (asked 2026-11-28)",
+    "sample": "\\b(?:discord\\.gg|t\\.me|wa\\.me)/\\S+|\\bdms?\\s+me\\b|\\b(?:follow|add|message|msg|text|contact|find|reach)\\s+me\\s+(?:on|at|vi"
+  },
+  "src/embody/ops.py:c54dde42d7": {
+    "kind": "debt",
+    "why": "payment brand names and English phrases (send me crypto) in the reach-out guard; waits on Nate's word with the handle phrases",
+    "sample": "\\b(?:paypal|venmo|cash\\s?app|zelle|patreon|ko-?fi|buymeacoffee|gofundme|onlyfans)\\b|\\b(?:send|donate|tip|pay)\\s+(?:me\\s+"
+  },
+  "src/embody/ops.py:0cc2822eaf": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "\\b0x[a-f0-9]{40}\\b|\\bbc1[a-z0-9]{25,59}\\b|\\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\\b"
+  },
+  "src/embody/ops.py:4d16935d16": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's state keys a lock keeps (code, key, secret) in a script lint, to be read from declared data",
+    "sample": "[\"'](?:code|key|secret|password|token|access|canon|programmed)[\"']"
+  },
+  "src/embody/ops.py:30e96d19d7": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "destroyed, linked, related, renamed, spawned, unlinked, unrelated"
+  },
+  "src/embody/ops.py:e0ba5c266c": {
+    "kind": "contract",
+    "why": "the engine's own names: ops, roles, layers, guide topics, event kinds the core emits, param, output and meta keys, store tables, refusal fields, identifier and link formats",
+    "sample": "'participants' in r"
+  },
+  "src/embody/positions.py:3979223413": {
+    "kind": "contract",
+    "why": "layout keys and frame names",
+    "sample": "footprint, radius, size"
+  },
+  "src/embody/positions.py:7e18bcf311": {
+    "kind": "contract",
+    "why": "layout keys and frame names",
+    "sample": "grid, own"
+  },
+  "src/embody/script.py:a54f772b12": {
+    "kind": "contract",
+    "why": "the script subset's allowed methods and builtins (Python's own names)",
+    "sample": "capitalize, count, endswith, find, format, isalnum, isalpha, isdigit, isspace, join, lower, lstrip, partition, removepre"
+  },
+  "src/embody/script.py:fb915e190e": {
+    "kind": "contract",
+    "why": "the script subset's allowed methods and builtins (Python's own names)",
+    "sample": "append, copy, count, extend, index, insert, pop, remove, reverse, sort"
+  },
+  "src/embody/script.py:448ca26bcd": {
+    "kind": "contract",
+    "why": "the script subset's allowed methods and builtins (Python's own names)",
+    "sample": "copy, get, items, keys, pop, setdefault, update, values"
+  },
+  "src/embody/script.py:f79bf61df8": {
+    "kind": "contract",
+    "why": "the script subset's allowed methods and builtins (Python's own names)",
+    "sample": "count, index"
+  },
+  "src/embody/script.py:b24c6e7fad": {
+    "kind": "contract",
+    "why": "the script subset's allowed methods and builtins (Python's own names)",
+    "sample": "add, copy, discard, pop, remove"
+  },
+  "src/embody/script.py:6bc682811a": {
+    "kind": "contract",
+    "why": "the script subset's allowed methods and builtins (Python's own names)",
+    "sample": "abs, all, any, bool, dict, enumerate, float, int, isinstance, len, list, max, min, range, reversed, round, set, sorted, "
+  },
+  "src/embody/script.py:f66f20ffe4": {
+    "kind": "contract",
+    "why": "the script subset's allowed methods and builtins (Python's own names)",
+    "sample": "bool, dict, float, int, list, str"
+  },
+  "src/embody/script.py:c0d7e85452": {
+    "kind": "contract",
+    "why": "the script subset's allowed methods and builtins (Python's own names)",
+    "sample": "dict | None"
+  },
+  "src/embody/script.py:93f0eff214": {
+    "kind": "contract",
+    "why": "the script subset's allowed methods and builtins (Python's own names)",
+    "sample": "False, None, True"
+  },
+  "src/embody/site.py:395fd7ec1d": {
+    "kind": "contract",
+    "why": "event kinds the public site leaves out, form fields, HTTP methods",
+    "sample": "act_refused, clock, destroyed, embodied, hand, intended, joined, left, linked, opinion, patched, program_refused, relate"
+  },
+  "src/embody/site.py:bc8b150dcc": {
+    "kind": "contract",
+    "why": "event kinds the public site leaves out, form fields, HTTP methods",
+    "sample": "contact, name, why"
+  },
+  "src/embody/site.py:5fe366e04f": {
+    "kind": "contract",
+    "why": "event kinds the public site leaves out, form fields, HTTP methods",
+    "sample": "GET, HEAD"
+  },
+  "src/embody/site.py:7df91691dd": {
+    "kind": "contract",
+    "why": "event kinds the public site leaves out, form fields, HTTP methods",
+    "sample": "contact, name, side, why"
+  },
+  "src/embody/site.py:483bf70e36": {
+    "kind": "contract",
+    "why": "event kinds the public site leaves out, form fields, HTTP methods",
+    "sample": "contact, name"
+  },
+  "src/embody/store.py:29dc3283d3": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "grants, principal"
+  },
+  "src/embody/store.py:f8806025cd": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, role"
+  },
+  "src/embody/store.py:433cf9113b": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, grant_id"
+  },
+  "src/embody/store.py:ca5c01f3c5": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "REAL, last_seen"
+  },
+  "src/embody/store.py:28d7ff3b42": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "REAL, acted_t"
+  },
+  "src/embody/store.py:f94c1e11ca": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "REAL, lapse"
+  },
+  "src/embody/store.py:b9722b039b": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, brief"
+  },
+  "src/embody/store.py:8775f23b24": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, code_hash"
+  },
+  "src/embody/store.py:7740430934": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "REAL, code_expires"
+  },
+  "src/embody/store.py:2369961ac6": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, page"
+  },
+  "src/embody/store.py:e3fd46a0a8": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, limits"
+  },
+  "src/embody/store.py:82c3238ae7": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, parent_id"
+  },
+  "src/embody/store.py:5c41f537b3": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "INTEGER, slots"
+  },
+  "src/embody/store.py:01b347881c": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, made"
+  },
+  "src/embody/store.py:2792ba54db": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "INTEGER, vouched"
+  },
+  "src/embody/store.py:91fb87a3ac": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, spent_hash"
+  },
+  "src/embody/store.py:2a49ba5e23": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, held"
+  },
+  "src/embody/store.py:8b712c0a7d": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, parts"
+  },
+  "src/embody/store.py:ea7cdb51e9": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "TEXT, traveller"
+  },
+  "src/embody/store.py:4fee0f9cb2": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "edge, entity, event, grants, hyperedge, link_nonce, links, principal, rules_change, scheduled, schema, script, seat_offe"
+  },
+  "src/embody/store.py:b0e3c97964": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "counters, meta"
+  },
+  "src/embody/store.py:95feeea8b3": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "actions, behaviors, listeners, senses, space, state"
+  },
+  "src/embody/store.py:f15bfceb55": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "pos, state"
+  },
+  "src/embody/store.py:9fafff15fd": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "data, participants"
+  },
+  "src/embody/store.py:fff6242c5c": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "path, payload"
+  },
+  "src/embody/store.py:2d1198eede": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "held, limits, parts, scope"
+  },
+  "src/embody/store.py:559539672e": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "guide, recheck, retired"
+  },
+  "src/embody/store.py:aafaccf229": {
+    "kind": "contract",
+    "why": "SQL column types and names, store tables",
+    "sample": "array, object"
+  },
+  "src/embody/watch.py:8340469232": {
+    "kind": "contract",
+    "why": "roles, event kinds the viewer draws, and graph fields",
+    "sample": "author, narrator, observer, owner"
+  },
+  "src/embody/watch.py:29e8a8fe32": {
+    "kind": "contract",
+    "why": "roles, event kinds the viewer draws, and graph fields",
+    "sample": "destroyed, moved, patched, renamed, spawned, stepped"
+  },
+  "src/embody/watch.py:0c01b1dc13": {
+    "kind": "contract",
+    "why": "roles, event kinds the viewer draws, and graph fields",
+    "sample": "'from_pos' in p"
+  },
+  "src/embody/watch.py:ef310c0019": {
+    "kind": "contract",
+    "why": "roles, event kinds the viewer draws, and graph fields",
+    "sample": "data, id, relation, source, target"
+  },
+  "src/embody/watch.py:e44f3ada42": {
+    "kind": "contract",
+    "why": "roles, event kinds the viewer draws, and graph fields",
+    "sample": "data, id, participants, relation"
+  },
+  "src/embody/watch.py:3f59019a5c": {
+    "kind": "contract",
+    "why": "roles, event kinds the viewer draws, and graph fields",
+    "sample": "extends, id, space"
+  },
+  "src/embody/watch_door.py:dbe86ad7aa": {
+    "kind": "contract",
+    "why": "the bearer header syntax and the door's reply keys",
+    "sample": "Bearer ([A-Za-z0-9_-]+)"
+  },
+  "src/embody/watch_door.py:d3122cd793": {
+    "kind": "contract",
+    "why": "the bearer header syntax and the door's reply keys",
+    "sample": "not_embodied, not_joined, seat_released"
+  },
+  "src/embody/watch_door.py:bb43fe6f16": {
+    "kind": "contract",
+    "why": "the bearer header syntax and the door's reply keys",
+    "sample": "'raw' in r"
+  },
+  "src/embody/workspace.py:0e1944aa07": {
+    "kind": "contract",
+    "why": "ops a world build may log and store tables",
+    "sample": "clear_rule, connect, define_schema, destroy, introduce, link, move, patch, relate, rename, rules_changed, schedule, set_"
+  },
+  "src/embody/workspace.py:a26b716a35": {
+    "kind": "contract",
+    "why": "ops a world build may log and store tables",
+    "sample": "edge, entity, event, hyperedge, principal, rules_change, scheduled, schema, script"
+  },
+  "src/embody/world.py:fd3ea1ee14": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "[a-z][a-z0-9_]{0,39}"
+  },
+  "src/embody/world.py:f956850152": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's thing keys (bulk, lit, locked, portable), to be read from declared data",
+    "sample": "bulk, count, description, kind, lit, locked, open, portable"
+  },
+  "src/embody/world.py:ce3ee6cca9": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "access, access_groups, canon, maker, oracle, programmed, scripts_pending"
+  },
+  "src/embody/world.py:763dc06255": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "oracle_answer, oracle_called, oracle_lapsed"
+  },
+  "src/embody/world.py:2161b4aad8": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "max_chars, max_open, per_hour"
+  },
+  "src/embody/world.py:4e982a59f5": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's sheet keys (attributes, skills, xp), to be read from declared data",
+    "sample": "attributes, sheet, skills, xp"
+  },
+  "src/embody/world.py:f248f8342a": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's body keys (attire, beast, carry, hp, looks), to be read from declared data",
+    "sample": "attire, beast, body, carry, gift_book, gift_uses, hp, looks, max_hp, progress, understands, understands_until, verbs_onl"
+  },
+  "src/embody/world.py:8e7dba26c0": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's body keys (asleep, dead, down, hp, rank), to be read from declared data",
+    "sample": "aid, asleep, attributes, body, brief, carry, dead, down, grants, hp, intent, max_hp, memory, playable, programmed, rank,"
+  },
+  "src/embody/world.py:6d755784ad": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "BODY_KEYS, CHRONICLE_NEWS, CHRONICLE_ROUTINE, RELEASE_CLEARS, WAYS_OUT"
+  },
+  "src/embody/world.py:4390bfec01": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "children, has, id, is_a, linked, name, parent, peers, pos, state, type"
+  },
+  "src/embody/world.py:505a68b44e": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "EntityView | None"
+  },
+  "src/embody/world.py:15c0fdb49e": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "EntityView | str"
+  },
+  "src/embody/world.py:9927280df9": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "chance, choice, randint, random, roll, shuffle"
+  },
+  "src/embody/world.py:fda6a088dd": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "act, acted_at, actor, bulk, children, chmod, chown, clear_rule, count, day_seconds, destroy, distance, edges, embodied, "
+  },
+  "src/embody/world.py:5d53c4f6f5": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's state keys (gift_book, gift_uses), to be read from declared data",
+    "sample": "gift_book, gift_uses"
+  },
+  "src/embody/world.py:9819215993": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "'canon' in ch"
+  },
+  "src/embody/world.py:ef6770a7c1": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "'canon' in state or {}"
+  },
+  "src/embody/world.py:7e18bcf311": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "grid, own"
+  },
+  "src/embody/world.py:e98d9dbf05": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "grown, replaced"
+  },
+  "src/embody/world.py:03c541ec44": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "'script' in a"
+  },
+  "src/embody/world.py:a71f92e4d6": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "'script' in lst"
+  },
+  "src/embody/world.py:55e30eedac": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "r, w, x"
+  },
+  "src/embody/world.py:74287ffb9a": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "both, out"
+  },
+  "src/embody/world.py:a7e5eba740": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "both, in"
+  },
+  "src/embody/world.py:080621e7ec": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "'at' in lay"
+  },
+  "src/embody/world.py:fa2c998235": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "at, heading"
+  },
+  "src/embody/world.py:9902c50a77": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's stack key count read on a thing, to be read from declared data",
+    "sample": "'count' in e['state']"
+  },
+  "src/embody/world.py:5f9f4aa880": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's stack key count read on a thing, to be read from declared data",
+    "sample": "'count' in c['state']"
+  },
+  "src/embody/world.py:76173d2cf4": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "'wall' in p"
+  },
+  "src/embody/world.py:da076b17f6": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "'seen_by' in p"
+  },
+  "src/embody/world.py:063b4555f9": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's verbs sleep and wake, to be read from declared data",
+    "sample": "sleep, wake"
+  },
+  "src/embody/world.py:64c4a1b6c1": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "here, sight"
+  },
+  "src/embody/world.py:6d1b71ede4": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "active, done, dropped"
+  },
+  "src/embody/world.py:f38484cfba": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "edge, entity, hyperedge, scheduled"
+  },
+  "src/embody/world.py:5f76598426": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "created_seq, updated_seq, world_id"
+  },
+  "src/embody/world.py:bccd79c017": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's give keys (given_by, given_before_by), to be read from declared data",
+    "sample": "given_before_by, given_by"
+  },
+  "src/embody/world.py:0b33022df7": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's event kinds slept and woke, to be read from declared data",
+    "sample": "act, slept, woke"
+  },
+  "src/embody/world.py:3c20588893": {
+    "kind": "debt",
+    "why": "world content in the core (audit items 13-14): a pack's or a world's event kind talked, to be read from declared data",
+    "sample": "say, talked"
+  },
+  "src/embody/world.py:e630ae84fc": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "act_refused, before_act, destroyed, embodied, finished, hand, intended, left, linked, merged, moved, opinion, patched, p"
+  },
+  "src/embody/world.py:44b78d9f26": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "act_refused, hand, intended, program_refused, remembered"
+  },
+  "src/embody/world.py:ea204e50aa": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "act_refused, hand, program_refused, regrouped"
+  },
+  "src/embody/world.py:4e579cd694": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "brief, cooldowns, goals, idle_orders, memory, policy"
+  },
+  "src/embody/world.py:13189b8d14": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "free, held"
+  },
+  "src/embody/world.py:4b525630a5": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "before_act, scheduled, schema_defined, script_defined, tick, unscheduled"
+  },
+  "src/embody/world.py:481f285ada": {
+    "kind": "contract",
+    "why": "the core's own names: ops in the script ctx, event kinds it emits, meta and state keys it owns (access, canon, idle_orders), pack declarations, refusal code syntax, edge directions",
+    "sample": "actor, kind, path, payload, seq, t, target"
+  }
+}

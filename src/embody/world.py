@@ -1409,7 +1409,7 @@ class World:
                 continue
             cat = self.catalogue(spec)
             for name, own in sorted(book.items()):
-                if name in out or not isinstance(own, dict) or not re.fullmatch(r"[a-z][a-z0-9_]{0,31}", str(name)):
+                if name in out or not isinstance(own, dict) or not _book_name(str(name)):
                     continue
                 entry = {**(cat.get(name) if isinstance(cat.get(name), dict) else {}), **own}
                 adef = {k: v for k, v in base.items() if k != "named_by"}
@@ -2156,8 +2156,8 @@ class World:
         kinds = lst.get("kinds") or []
         if kinds and ev["kind"] not in kinds:
             return False
-        if lst.get("unless_embodied") and self.embodied(node) and not self.own_lines(node):
-            return False  # the table is the floor; an embodied mind answers instead, unless it left lines and is idle
+        if lst.get("unless_embodied") and self.embodied(node):
+            return False  # the table is the floor; an embodied mind answers instead
         sb = (ev["payload"] or {}).get("seen_by")
         if sb is not None and node not in sb and self.is_a(self.need(node)["type"], "creature"):
             return False  # a veiled body's deed: someone it was not shown does not hear it either
@@ -3174,15 +3174,13 @@ class World:
         e = self.get(body)
         st = (e or {}).get("state", {})
         line = None if (st.get("idle_orders") or {}).get("rests") else (st.get("standing_orders") or {}).get("answer")
-        own = self._own_line(e, text) if self.own_lines(body) else None
-        line = own or line
-        if not line or not self.embodied(body) or not (own or self.idle(body)) or self.present(body):
+        if not line or not self.embodied(body) or not self.idle(body) or self.present(body):
             return
         last = self._answered.get((body, asker))
         if last is not None and self.t - last < 600:
             return
         self._answered[(body, asker)] = self.t
-        self.emit("say", actor=body, target=asker, reach=0 if line != own else 1, caused_by=caused_by,
+        self.emit("say", actor=body, target=asker, reach=0, caused_by=caused_by,
                   payload={"text": str(line), "to": asker, "away": True})
 
     # ---- principals -----------------------------------------------------------
@@ -3391,14 +3389,6 @@ class World:
 
     # ---- a mind's idle orders: its body's patrol and its own lines -----------------------------------------------
 
-    def own_lines(self, entity_id: str) -> bool:
-        """An embodied body whose mind left its own dialog lines (away(dialog=...)) and has done nothing since, or
-        whose seat is idle: it answers talk from its tables as an unheld body does, its lines over the author's."""
-        e = self.get(entity_id)
-        orders = (e or {}).get("state", {}).get("idle_orders") or {}
-        return bool(orders.get("dialog") and (orders.get("fresh") or self.idle(entity_id))
-                    and not self.present(entity_id))
-
     def mark_present(self, principal_id: str, until: float | None) -> None:
         """A seat waiting in the scene (wait(present=true)) until real time `until`; None: not, its lines may answer."""
         if until is None:
@@ -3411,20 +3401,6 @@ class World:
         stay quiet, as do the author's lines that give way to a mind. Its idle behaviors run as before."""
         p = self.embodied(entity_id)
         return bool(p and self._present.get(p["id"], 0.0) > self.wall())
-
-    @staticmethod
-    def _own_line(e: dict[str, Any] | None, text: Any) -> str | None:
-        """The mind's own line for words said to its body: the key ("ferry|crossing") with the most of its aliases
-        among the words, longer aliases first, as the village table picks."""
-        table = (((e or {}).get("state") or {}).get("idle_orders") or {}).get("dialog") or {}
-        clean = "".join(c if c.isalnum() else " " for c in str(text or "").lower())
-        words = " " + " ".join(clean.split()) + " "
-        best, best_s = None, 0
-        for key in table:
-            s = sum(10 + len(a.strip()) for a in str(key).lower().split("|") if a.strip() and f" {a.strip()} " in words)
-            if s > best_s:
-                best, best_s = key, s
-        return str(table[best]) if best is not None else None
 
     def patrol_ways(self, body: str, stops: list[str]) -> bool:
         """Whether a patrol's stops are each one known way from the next; True when the last leads back to the first
@@ -3735,18 +3711,17 @@ _NO_WAKE = frozenset({"act", "slept", "woke"})
 _WORD_KINDS = frozenset({"say", "talked"})
 
 
+def _book_name(s: str) -> bool:
+    """A name in a book of named verbs (named_by): one lowercase word in any script, at most 32 characters."""
+    return bool(s) and len(s) <= 32 and s == s.lower() and s[0].isalpha() and all(c.isalnum() or c == "_" for c in s)
+
+
 def tone(text: str, reach: int = 1) -> str:
-    """How a line sounds to one who hears no words: a whisper (reach 0), a shout (reach past 1, all capitals, or
-    "!"), sharp (three words or fewer ending in ? or !), else calm."""
-    t = text.strip()
+    """How a line sounds to one who hears no words: how far the speaker sent it. A whisper (reach 0), a shout (past
+    1: loud=true), else calm. Never read from its letters or its punctuation: a line is in any language."""
     if reach <= 0:
         return "whisper"
-    letters = [c for c in t if c.isalpha()]
-    if reach > 1 or (len(letters) > 1 and all(c.isupper() for c in letters)) or ("!" in t and len(t.split()) > 3):
-        return "shout"
-    if len(t.split()) <= 3 and t[-1:] in "?!" and t:
-        return "sharp"
-    return "calm"
+    return "shout" if reach > 1 else "calm"
 
 
 def _loud(ev: dict[str, Any]) -> bool:

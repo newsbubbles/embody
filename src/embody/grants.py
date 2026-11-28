@@ -123,7 +123,7 @@ def is_preview_bot(user_agent: str) -> bool:
 
 
 def slug(text: str) -> str:
-    s = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    s = re.sub(r"[\W_]+", "-", (text or "").casefold()).strip("-")
     return s[:24] or "guest"
 
 

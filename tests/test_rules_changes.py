@@ -96,8 +96,13 @@ def test_any_way_of_asking_what_changed_reads_the_changelog(tmp_path):
     p.join("ferry-at-dusk", "Traveler")
     gm.rules_changed("hp-bar", was="vigor and hp", now="one hp bar")
     gm.rules_changed("sweat", was="", now="heavy deeds cost water")
-    for ask, since in (("changelog", None), ("what changed", None), ("v2", None), ("", 1), ("Rules", 0)):
+    for ask, since in (("changes", None), ("", 1), ("Changes", 0)):
         ch = p.guide(ask, since=since)
         assert ch["topic"] == "changes", ask
-    assert "world:sweat" in p.guide("v2")["text"] and "world:hp-bar" not in p.guide("v2")["text"]  # what v2 changed, not v1
+    for ask in ("changelog", "what changed", "v2"):  # topics are matched as named: no synonyms, no version read from a word
+        with pytest.raises(Rejected) as r:
+            p.guide(ask)
+        assert "changes" in r.value.hint, ask
+    text = p.guide("changes", since=1)["text"]
+    assert "world:sweat" in text and "world:hp-bar" not in text  # since=1: what came after v1
     assert p.guide()["topic"] == "index"  # no topic and no since: the index as before

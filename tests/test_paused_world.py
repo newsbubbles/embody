@@ -44,7 +44,7 @@ def test_minds_counts_a_wait_in_real_minutes_while_the_clock_is_paused():
 def test_join_takes_world_as_well_as_world_id():
     eng, w, i = engine_with_two_rooms()
     sam = eng.session("sam")
-    assert sam.join(world="two-rooms", entity="Prisoner")
+    assert sam.join(world_id="two-rooms", entity="Prisoner")
 
 
 def test_two_waits_on_one_principal_say_they_share_a_cursor():

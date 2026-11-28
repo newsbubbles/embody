@@ -18,7 +18,7 @@ MANIFEST = ".manifest.json"
 
 
 def slug(name: str, fallback: str) -> str:
-    s = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    s = re.sub(r"[\W_]+", "-", (name or "").casefold()).strip("-")
     return s or fallback
 
 

@@ -120,7 +120,7 @@ async def _watch(args: argparse.Namespace) -> int:
                         r = _one(await s.call_tool("wait", a))
                         if isinstance(r, dict) and r.get("ok") is False:
                             reason = str(r.get("reason", ""))
-                            if args.rejoin and ("not embodied" in reason or "not in this world" in reason):
+                            if args.rejoin and r.get("code") in ("not_joined", "seat_released", "not_embodied"):
                                 j = _one(await s.call_tool("join", {"world_id": world, **who}))
                                 if not (isinstance(j, dict) and j.get("ok") is False):
                                     print(f"(the seat had lapsed; took it again at t={j.get('t', '?')})", file=sys.stderr)
@@ -134,7 +134,7 @@ async def _watch(args: argparse.Namespace) -> int:
                             raw = r.get("raw") if isinstance(r, dict) else r
                             print(f"REFUSED: the door answered {str(raw)[:400]}"
                                   + ("\nhint: this server is older than wait(until=...); drop --until, or ask the host"
-                                     " to update it" if args.until and "until" in str(raw) else ""))
+                                     " to update it" if args.until else ""))
                             return 2
                         if not r.get("timed_out") or left <= PIECE:
                             return out(r)

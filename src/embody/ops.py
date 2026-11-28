@@ -62,7 +62,6 @@ _SAY_WINDOW = 60.0
 # A mind's idle orders: how many stops a patrol has, how long it dwells at each (world s), how many own lines.
 _PATROL_STOPS = 12
 _DWELL = (30.0, 3600.0, 120.0)  # least, most, default
-_OWN_TOPICS = 20
 # State keys only the entity itself (its mind) and authors ever see.
 # State keys nobody but the host reads: a mind's memory, its brief and goals, and the host's plan for the world
 # (`policy` on the root). The `secret` list on an entity adds its own.
@@ -427,7 +426,7 @@ class Session:
     def _me(self) -> str:
         p = self._principal()
         if not p["entity_id"]:
-            raise Rejected("you are not embodied", hint="join(world, entity) to embody something")
+            raise Rejected("you are not embodied", hint="join(world_id, entity) to embody something", code="not_embodied")
         if self.world.get(p["entity_id"]) is None:
             raise Rejected(f"the entity you embodied ({p['entity_id']}) no longer exists",
                            hint="join another entity")
@@ -444,8 +443,8 @@ class Session:
             orders = (body or {}).get("state", {}).get("idle_orders") or {}
             answer = (body["state"].get("standing_orders") or {}).get("answer") if back else None
             rests = bool(answer) and not orders.get("rests")
-            if orders.get("patrol") or orders.get("fresh") or rests:  # a deed ends a patrol; own lines wait for idle
-                rest = {k: v for k, v in orders.items() if k not in ("patrol", "fresh")}
+            if orders.get("patrol") or rests:  # a deed ends a patrol
+                rest = {k: v for k, v in orders.items() if k != "patrol"}
                 if rests or orders.get("rests"):
                     rest["rests"] = True  # back from idle: the standing answer is quiet until away() sets it again
                 w.patch(body["id"], {"idle_orders": rest or None}, replace=True)
@@ -1173,12 +1172,10 @@ class Session:
         No topic: the index and the rules for every role. A topic (narrator, author, player, mind, hosting, helpers, watch):
         that part's whole guide; scripting: the ctx reference (docs/SCRIPTING.md). A pointer to another part reads as
         guide('<part>'). changes: this world's rules changelog since version `since` (default: since your seat last
-        read it), and reading it marks your seat current; `since` with no topic, or a topic that asks for the changes
-        ("changelog", "rules", "what changed", "v13"), reads the same."""
+        read it), and reading it marks your seat current; `since` with no topic reads the same. Topics are matched
+        as named; any other is refused with the list."""
         ask = (topic or "").strip().lower()
-        if ask in _CHANGES_ASKS or re.fullmatch(r"v?\d+", ask) or (since is not None and not ask):
-            if since is None and re.fullmatch(r"v?\d+", ask):
-                since = max(0, int(ask.lstrip("v")) - 1)  # "v13": what v13 changed
+        if ask == "changes" or (since is not None and not ask):
             return self._changes(since)
         if (topic or "").strip().lower() == "skills":
             return self._skills_guide()
@@ -2076,8 +2073,8 @@ class Session:
         live, pending = [], []
         for spec in verbs:
             v = spec.get("verb") if isinstance(spec, dict) else None
-            if not (isinstance(v, str) and re.fullmatch(r"[a-z][a-z_]{1,23}", v)):
-                raise Rejected(f"a verb is a short lowercase word, not {v!r}", hint="verb='search'")
+            if not (isinstance(v, str) and _word_name(v, 24)):
+                raise Rejected(f"a verb is one short lowercase word, in any script, not {v!r}", hint="verb='search'")
             if v in theirs or v in new:
                 raise Rejected(f"{e['name'] or eid} already has a verb {v!r}", hint="offer another word")
             doc, params = spec.get("doc", ""), spec.get("params") or {}
@@ -2272,12 +2269,9 @@ class Session:
         if len(hits) == 1:
             return hits[0]["id"]
         if not hits:
-            if re.search(r"^\s*(\d+|a few|some|all|several)\s|\sto\s", ref, re.I):
-                raise Rejected(f"nothing called {ref!r}",
-                               hint="a target is one thing's id or name: a count goes in params (take <id> with count=N), "
-                                    "and give takes the person as the target (give <who> with item=<id>, count=N)",
-                               layer="target", code="no_target")
-            raise Rejected(f"nothing called {ref!r}", hint="use an id from perceive or find(name=...)",
+            raise Rejected(f"nothing called {ref!r}",
+                           hint="a target is one thing's id or name, from perceive or find(name=...); a count or another "
+                                "thing goes in params, as the verb declares them (perceive's affordances)",
                            layer="target", code="no_target")
         raise Rejected(f"{len(hits)} entities are called {ref!r}: " + ", ".join(h["id"] for h in hits),
                        hint="use the id", layer="target", code="ambiguous_target", accepts=[h["id"] for h in hits])
@@ -3775,7 +3769,6 @@ class Session:
         said = (target, params)
         try:
             self._params_object(me, verb, target, params)
-            target, params, read = self._read_words(me, verb, target, params)
             tid = self._resolve_for(me, target, verb, params) if target else None
             self._stray_params(me, verb, tid, params)
             r = self.world.act(me, verb, tid, params, principal_id=self.pid)
@@ -3783,53 +3776,12 @@ class Session:
             self._refused(me, verb, said[0], tid, said[1], why)
             raise
         r = self._paged(r)
-        if read:
-            r["read_as"] = {"target": target, "params": params}
         r = self._turn(r)
         w = self.world
         r["events"] = self._events_for(me, w.events(since=since, touching=me, limit=200))
         r["cursor"] = w.store.next_seq(w.id) - 1
         w.set_cursor(self.pid, r["cursor"])
         return r
-
-    def _names_something(self, ref: str) -> bool:
-        w = self.world
-        return bool(w.get(ref)) or any(e["name"].lower() == ref.lower() for e in w.find(name=ref, limit=10))
-
-    def _declares(self, me: str, verb: str, tid: str | None, key: str) -> bool:
-        try:
-            adef, _ = self.world.resolve_action(me, verb, tid)
-        except Rejected:
-            return False
-        return key in (adef.get("params") or {})
-
-    def _read_words(self, me: str, verb: str, target: str | None,
-                    params: dict[str, Any] | None) -> tuple[str | None, dict[str, Any] | None, bool]:
-        """A target written the way a player says it, read into params, only when the words as written name nothing:
-        "5 arrows" is count 5 (a verb that takes count), and "5 arrows to Mara" or "e12 to e34" is the
-        person as the target and the thing as `item` (a verb that takes item, as give). Anything else goes on as
-        written, so its refusal says why. Returns (target, params, read)."""
-        if not target or self._names_something(target):
-            return target, params, False
-        p = dict(params or {})
-        t = target.strip()
-        to = re.match(r"^(.+?)\s+to\s+(.+)$", t, re.I)
-        if to and "item" not in p and self._names_something(to.group(2).strip()):
-            who = self._resolve_for(me, to.group(2).strip(), verb, params)
-            if self._declares(me, verb, who, "item"):
-                t, thing = to.group(2).strip(), to.group(1).strip()
-                n = re.match(r"^(\d+)\s+(.+)$", thing)
-                if n and "count" not in p and self._declares(me, verb, who, "count"):
-                    p["count"], thing = int(n.group(1)), n.group(2).strip()
-                p["item"] = thing
-                return t, p, True
-        n = re.match(r"^(\d+)\s+(.+)$", t)
-        if n and "count" not in p and self._names_something(n.group(2).strip()):
-            tid = self._resolve_for(me, n.group(2).strip(), verb, params)
-            if self._declares(me, verb, tid, "count"):
-                p["count"] = int(n.group(1))
-                return n.group(2).strip(), p, True
-        return target, params, False
 
     def _params_object(self, me: str, verb: str, target: str | None, params: Any) -> None:
         """params is an object of name: value. A mind that sent it as a string of JSON got a 500 (a world's builders,
@@ -4039,8 +3991,7 @@ class Session:
 
     def away(self, give: list[dict[str, Any]] | None = None, answer: str | None = None,
              entity: str | None = None, sleep: bool = False, patrol: list[str] | None = None,
-             dwell: float | None = None, dialog: dict[str, str] | None = None,
-             lapse: float | None = None) -> dict[str, Any]:
+             dwell: float | None = None, lapse: float | None = None) -> dict[str, Any]:
         """Standing orders for your body while your seat is idle (you went to bed, your mind is on a long watch).
         give=[{"item": <name>, "to": <name> or "anyone"}]: who may reclaim() what from you. answer: one line your
         body says to whoever speaks to it, heard by them alone. Others see them on your card while you are idle.
@@ -4053,8 +4004,7 @@ class Session:
         those stops by its own `go` (each one way from the next; back to the first if the last leads there, else back
         the way it came), `dwell` world seconds at each (default 120), from now until the seat's next deed. Keep a
         wait(until=...) going and it sees what the body sees wherever it stands (until="len(present) > 0" wakes you
-        when anyone is there). dialog={"ferry|crossing": "line", ...}: the body's own answers while the seat is idle,
-        over the author's table; others hear the lines, never the table.
+        when anyone is there).
 
         lapse: real seconds of silence before your seat is given back, your own (60 up to the world's
         claim_lapse_max; 0 goes back to the world's claim_lapse). It stays with the seat until you set it again or
@@ -4093,16 +4043,6 @@ class Session:
             if not lo <= d <= hi:
                 raise Rejected(f"dwell is {lo:g} to {hi:g} world seconds", hint=f"dwell={df:g}")
             idle["patrol"] = {"stops": stops, "dwell": d, "loop": loop, "id": w._next_id("pt")}
-        if dialog:
-            if not isinstance(dialog, dict) or len(dialog) > _OWN_TOPICS:
-                raise Rejected(f"own lines are a dict of at most {_OWN_TOPICS} topics",
-                               hint='dialog={"ferry|crossing": "The ferry runs at dawn."}')
-            for k, v in dialog.items():
-                if not str(k).strip() or not isinstance(v, str) or not v.strip() or len(v) > _SAY_MAX:
-                    raise Rejected(f"each own line is a topic and one line of at most {_SAY_MAX} characters",
-                                   hint='{"door|gate": "Ask Mara at the door."}')
-            idle["dialog"] = {str(k).strip().lower(): str(v) for k, v in dialog.items()}
-            idle["fresh"] = True  # they answer from now until the seat's next deed, then whenever it is idle
         if lapse is not None:
             me = w.principal(self.pid)
             top = w.claim_lapse_max()
@@ -4127,8 +4067,6 @@ class Session:
                              "loop": pat["loop"],
                              "hint": "it walks from now until your next deed; wait(until='len(present) > 0') wakes you "
                                      "when anyone is where it stands"}
-        if idle.get("dialog"):
-            out["dialog"] = sorted(idle["dialog"])
         if w.principal(self.pid) is not None:
             out["lapse"] = w.seat_lapse(w.principal(self.pid))  # real seconds of silence this seat keeps
         return out
@@ -4202,9 +4140,6 @@ class Session:
             if far and not out["heard_by"]:
                 out["note"] = (f"nobody stood within {r:g} m to hear the words: step closer"
                                + ("" if loud or reach > 1 else ", or shout it with loud=true"))
-        deed = _deed_in(self.world, me, str(text))
-        if deed:
-            out["note"] = deed
         return out
 
     def link_world(self, world: str | None = None, url: str | None = None, secret: str | None = None,
@@ -4463,9 +4398,6 @@ class Session:
             if not out["seen_by"]:
                 out["note"] = (f"nobody stood within {self.world.low_radius():g} m to see it: step closer, or make it "
                                "to someone with to=")
-        deed = _deed_in(self.world, me, text, sign=True)
-        if deed:
-            out["note"] = deed
         return out
 
     def _sign_ok(self, text: str) -> None:
@@ -4731,7 +4663,7 @@ class Session:
         change; every reply carries `rules_notice` while the seat has not read the rules changes.
 
         `present`: you are in the scene, not gone. While this wait runs and for PRESENT_GRACE real seconds after,
-        your body's own lines (away(dialog=...)), its standing answer and the author's lines that give way to a mind
+        your body's standing answer and the author's lines that give way to a mind
         stay quiet, so a player hears you and not your stand-in. Its idle behaviors still run. A wait without it (the
         watcher's) lets them answer again."""
         if self._reader():
@@ -4878,7 +4810,8 @@ class Session:
             p = w.principal(self.pid)
             me = p["entity_id"] if p and p["entity_id"] and w.get(p["entity_id"]) else None
             if me is None and not self._privileged():
-                raise Rejected("you are not embodied", hint="join() your seat first, then wait(until=...)")
+                raise Rejected("you are not embodied", hint="join() your seat first, then wait(until=...)",
+                               code="not_embodied")
             if since is None:
                 since = p["cursor_seq"] if (me and p) else w.store.next_seq(w.id) - 1
             _try_until(cond, self._watch_view(me, []))
@@ -4958,7 +4891,7 @@ class Session:
         privileged = self._privileged()
 
         def low(x: Any) -> str:
-            return str(x or "").lower()
+            return str(x or "").casefold()
 
         def heard(word: str = "", by: str = "") -> bool:
             return any(e["text"] and low(word) in low(e["text"]) and low(by) in low(e["actor"]) for e in data["events"])
@@ -4979,20 +4912,17 @@ class Session:
                        for e in data["events"])
 
         mine = ent["name"] if ent else ""
-        parts = _name_parts(mine)
 
         def spoken(e: dict[str, Any]) -> bool:
             return e["kind"] in ("say", "talked") and bool(e["actor"]) and e["actor"] != mine
 
         def to_me() -> bool:
-            # said to you (a line or a talk aimed at you) or with your name as its address ("Mara, the gate"), not your
-            # name in passing: a question about you put to the room is someone else's business
-            return any(spoken(e) and (e["target"] == mine or _addressed(e["text"], parts)) for e in data["events"])
+            # a line or a talk said to you: its `to` is you. Words are never read for an address, in any language
+            return any(spoken(e) and e["target"] == mine for e in data["events"])
 
         def named() -> bool:
-            # your name anywhere in a line someone else said
-            return any(spoken(e) and any(re.search(r"\b" + p + r"\b", low(e["text"])) for p in parts)
-                       for e in data["events"])
+            # your name, whole and as the world spells it, in a line someone else said
+            return bool(mine) and any(spoken(e) and low(mine) in low(e["text"]) for e in data["events"])
 
         def state(name: str) -> dict[str, Any]:
             for n, st in data["cards"].items():
@@ -5313,8 +5243,8 @@ class Session:
         f = self._frame_for(frame)
         eid = self._resolve(thing)
         e = w.need(eid)
-        if not re.fullmatch(r"[a-z][a-z0-9_]{0,31}", str(verb or "")):
-            raise Rejected(f"a verb is one short lowercase word, not {verb!r}", hint="like hail or tune_engine")
+        if not _word_name(str(verb or ""), 32):
+            raise Rejected(f"a verb is one short lowercase word, in any script, not {verb!r}", hint="like hail or tune_engine")
         if verb in w.own_actions(e):
             raise Rejected(f"{e['name'] or eid} already has {verb} of its own", hint="pick another word")
         if e["state"].get("canon") and self.role != OWNER:
@@ -5997,8 +5927,8 @@ UNTIL_DOC = ("until is one Python expression (the embody script subset: no impor
              "them, read with .get), and helpers heard(word, by=''), did(kind, by='') (with no kind: any "
              "deed by someone else here; it wakes you on every one, so name the verb or use to_me() when you can), "
              "came(name) (is here now), arrived(name) (walked in since the wait began; '' for anyone but you), to_me() "
-             "(said to you, or with your name as its address: the default for a mind or a player owed nothing in "
-             "particular), named() (your name anywhere in someone's line), state(name) "
+             "(a line or a talk said to you: its to= is you; the default for a mind or a player owed nothing in "
+             "particular), named() (your whole name, as the world spells it, in someone's line), state(name) "
              "(the state you can see of someone here or something you hold). Examples: "
              "\"arrived('Mara')\", \"heard('ferry', by='Mara') or state('Lamp').get('lit')\", \"t >= 43200\", "
              "\"ambient.get('time_of_day') == 'dusk'\". Names match by part, any case.")
@@ -6048,28 +5978,6 @@ def _try_until(cond: Script, view: dict[str, Any]) -> None:
                            hint="read a field that may be missing with .get('key', default); " + UNTIL_DOC, **_BAD_UNTIL) from None
 
 
-def _name_parts(name: str) -> list[str]:
-    """The words a body is called by: the capitalised words of its name, not "the" or "of" ("Mara of the Mill": mara,
-    mill)."""
-    ws = [w for w in re.findall(r"[A-Za-z]+", str(name)) if len(w) > 2 and w.lower() not in ("the", "and")]
-    caps = [w for w in ws if w[0].isupper()]
-    return [w.lower() for w in (caps or ws)]
-
-
-_HAIL = r"(?:hey|oi|hi|hello|ho|listen|look|you)"
-
-# A line that narrates handing something over has moved nothing (a blade "laid on the sand" in a say, never dropped,
-# then believed): say's reply says so. A note, never a refusal: "I gave you that blade" can be true.
-_HANDING = re.compile(r"\b(?:lays?|laid|laying|hands?|handed|handing|gives?|gave|giving|drops?|dropped|dropping|"
-                      r"pours?|poured|pouring|puts?|putting|sets?|setting|places?|placed|placing|toss(?:es)?|tossed|"
-                      r"throws?|threw|passes|passed|slides?|slid)\b", re.I)
-
-
-def _bare(name: str) -> str:
-    """A name as it is said in a line: lower case, without its article ("A tin flask": "tin flask")."""
-    return re.sub(r"^(?:a|an|the)\s+", "", str(name).lower().strip())
-
-
 def _frame_rules(access: Path) -> str:
     """The maker's frame section of docs/ACCESS.md, for guide('scripting'): an agent with only the door programs
     against the same rules the host reads."""
@@ -6092,34 +6000,6 @@ def _dead_seats_open(w: World) -> bool:
     """Whether a dead body stays a seat others (or its own player, after leaving it) may join. Death is the world's,
     not the engine's (Nate, 2026-11-23): open unless the world's meta says `dead_seats: "closed"`."""
     return str(w.meta().get("dead_seats") or "open") != "closed"
-
-
-def _deed_in(w: World, me: str, text: str, sign: bool = False) -> str | None:
-    """The note say (and gesture, `sign`) adds when its text narrates a deed: a stage direction (*...*) in a line,
-    or a hand-over of a thing the speaker still holds."""
-    if not sign and re.search(r"\*[^*\n]{2,}\*", text):
-        return ("words only: nothing in a line happens, *stage directions* included; a sign goes in "
-                "say(text, gesture=...) or gesture(), a deed in act() first, then say what you did")
-    if not _HANDING.search(text):
-        return None
-    low = text.lower()
-    held = [c["name"] for c in w.children(me) if len(_bare(c["name"])) > 2 and _bare(c["name"]) in low]
-    if held:
-        return (f"nothing moved: {held[0]} is still yours; if your line hands it over, act('give' or 'drop' or 'put', "
-                f"...) does it")
-    return None
-
-
-def _addressed(text: str, parts: list[str]) -> bool:
-    """Whether a line uses one of these names as its address: "Mara, the gate", "Hey Mara", "the gate, Mara?",
-    "Listen, Mara, ...", or the name alone; not "Mara went west" or "where is Mara?"."""
-    tx = str(text or "").lower().strip()
-    for p in parts:
-        n = r"\b" + re.escape(p) + r"\b"
-        if (re.match(r"^\W*" + n + r"\s*(?:[,!?:]|$)", tx) or re.search(_HAIL + r"\W+" + n, tx)
-                or re.search(r",\s*" + n + r"\s*(?:[,.!?]|$)", tx)):
-            return True
-    return False
 
 
 # How something new comes into the world (introduce): never from nowhere unless the game says so.
@@ -6177,10 +6057,6 @@ _CHRONICLE_ROUTINE = frozenset({"merged", "opinion", "woke", "slept", "embodied"
 _NEWS_KINDS = frozenset({"found", "downed", "killed", "yielded", "caught", "renamed", "destroyed", "agreed", "wounded",
                          "rose", "searched", "stopped", "struck"})
 GUIDE_TOPICS = ("narrator", "author", "player", "mind", "hosting", "helpers", "watch", "scripting", "changes", "skills")
-_CHANGES_ASKS = frozenset({"changes", "change", "changelog", "rules", "rules changes", "rule changes", "what changed",
-                           "whats new", "what's new", "news", "updates", "update", "rules_notice"})
-
-
 def rules_version(w: World) -> int:
     """A world's rules version: how many changes its rules changelog holds."""
     r = w.store.execute("SELECT MAX(version) FROM rules_change WHERE world_id=?", (w.id,)).fetchone()
@@ -6239,8 +6115,8 @@ def _clean_parts(parts: Any) -> list[str]:
     out = []
     for p in ([parts] if isinstance(parts, str) else list(parts or [])):
         n = str(p).strip().lower()
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,31}", n):
-            raise Rejected(f"no part {p!r}", hint="a part is a short name: angel, demon, red-team")
+        if not _word_name(n, 32, dash=True):
+            raise Rejected(f"no part {p!r}", hint="a part is a short name, in any script: angel, demon, red-team")
         if n in ROLES or n == handbooks.EVERYONE:
             raise Rejected(f"{n!r} is an engine role, not a part", hint="the role is invite's first argument; parts are "
                                                                          "the world's own (angel, demon, guide...)")
@@ -6360,6 +6236,14 @@ def page_config(page: Any) -> dict[str, int]:
                 cfg[k] = max(lo, min(hi, int(v)))
     cfg["chars"] = min(cfg["chars"], cfg["budget"] * 4)  # one string's page fits the budget
     return cfg
+
+
+def _word_name(s: str, most: int, dash: bool = False) -> bool:
+    """A name a world gives a verb, a part or a book: one lowercase word in any script (letters, digits, `_`, and `-`
+    when `dash`), starting with a letter, at most `most` characters. Never English letters only."""
+    if not s or len(s) > most or s != s.lower() or not s[0].isalpha():
+        return False
+    return all(c.isalnum() or c == "_" or (dash and c == "-") for c in s)
 
 
 def _json_size(v: Any) -> int:

@@ -104,21 +104,11 @@ def test_two_stops_walk_back_and_forth_and_a_shut_way_holds_the_step(hold):
     assert where(gm, "Warden") == "Yard" and not gm.inspect("Warden")["state"].get("idle_orders")
 
 
-def test_the_minds_own_lines_answer_while_it_is_idle_over_the_authors(hold):
+def test_a_mind_leaves_no_keyword_table_its_seat_answers_for_it(hold):
+    # no table of words read against what players say (Nate 2026-11-28): a held body answers through its mind, or
+    # with the one standing answer it left
     eng, gm, mind, ada = hold
     gm.move("Ada", "Gate")
-    mind.away(dialog={"water|well": "Ask at the well, not me."}, answer="On watch. Speak plainly.")
-    card = str(ada.inspect("Warden")["state"])
-    assert "idle_orders" not in card and "the well" not in card  # others hear lines, never the table
-    lines = lambda: [e["payload"]["text"] for e in gm.history(kinds=["say"]) if e["actor"] == gm.inspect("Warden")["id"]]
-
-    ada.act("talk", "Warden", {"about": "where is the water"})
-    ada.act("talk", "Warden", {"about": "the gate"})  # the author's line still answers its own topic
-    assert lines() == ["Ask at the well, not me.", "The gate shuts at dusk."]
-    ada.say("Any water up here?", to="Warden")  # a line said to the body: its own line before its standing answer
-    assert lines()[-1] == "Ask at the well, not me."
-
-    # once the mind acts, it answers for itself
-    mind.say("Move along.")
-    ada.act("talk", "Warden", {"about": "water"})
-    assert lines()[-1] == "Move along."
+    from embody.ops import call
+    r = call(mind, "away", dialog={"water|well": "Ask at the well, not me."})  # as the door takes it
+    assert (r["code"], r["param"]) == ("bad_args", "dialog")

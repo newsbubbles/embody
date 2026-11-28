@@ -73,10 +73,19 @@ def test_a_loud_person_says_its_lines_aloud(tmp_path):
 
 def test_an_unquoted_line_is_said_unless_lines_are_quoted(tmp_path):
     eng, gm, me = world(tmp_path)
-    assert answer(eng, me, "the cat") == [("say", "The cat opens one eye, judges you, and closes it.")]
+    assert answer(eng, me, "cat") == [("say", "The cat opens one eye, judges you, and closes it.")]
     gm.patch("Varn", {"lines": "quoted"})
-    assert answer(eng, me, "the cat") == [("gestured", "The cat opens one eye, judges you, and closes it.")]
+    assert answer(eng, me, "cat") == [("gestured", "The cat opens one eye, judges you, and closes it.")]
     gm.patch("Varn", {"lines": None})
     w = eng.world("bench")
     gm.patch(w.root_id, {"lines": "quoted"})  # the world's word, for every person
-    assert answer(eng, me, "the cat")[0][0] == "gestured"
+    assert answer(eng, me, "cat")[0][0] == "gestured"
+
+
+def test_a_topic_is_named_as_the_world_wrote_it_and_never_read_out_of_a_sentence(tmp_path):
+    # Nate 2026-11-28: no word guessing over what people say, in any language
+    eng, gm, me = world(tmp_path)
+    gm.patch("Varn", {"dialog": {"ferry|crossing": "At dawn.", "渡船": "天亮时。"}, "default_line": None})
+    assert answer(eng, me, "Crossing") == [("say", "At dawn.")]  # one of its names, any case
+    assert answer(eng, me, "渡船") == [("say", "天亮时。")]  # any script
+    assert answer(eng, me, "when does the ferry run?") == []  # a sentence names no topic, and the pack adds no words

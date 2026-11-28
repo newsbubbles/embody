@@ -26,7 +26,7 @@ def test_reeds_route_wakes_tam_and_he_walks_to_the_raft():
     tam = next(p for p in here["present"] if p["name"] == "Old Tam")
     assert tam["state"]["asleep"] is True
     with pytest.raises(Rejected) as rej:
-        you.act("talk", "Old Tam", {"about": "the ferry"})
+        you.act("talk", "Old Tam", {"about": "ferry"})
     assert "asleep" in rej.value.reason
     r = you.act("wake", "Old Tam")
     assert any(e["kind"] == "scene" and "Raft is this way" in e["payload"]["text"] for e in r["events"])
@@ -69,10 +69,10 @@ def test_followers_come_along_and_the_tinderbox_is_a_real_thing():
     eng, gm, you = ferry()
     tinder = gm.find(name="Tinderbox")[0]
     assert gm.world.need(tinder["id"])["parent_id"] == gm.find(name="Mara")[0]["id"]
-    you.act("talk", "Mara", {"about": "I need fire to light it"})  # beats lantern|lamp: two aliases hit
+    you.act("talk", "Mara", {"about": "fire"})
     assert any(h["id"] == tinder["id"] for h in you.perceive()["holding"])
     # the second ask gets the gone line, not a second tinderbox
-    r = you.act("talk", "Mara", {"about": "another tinderbox"})
+    r = you.act("talk", "Mara", {"about": "tinderbox"})
     assert any(e["kind"] == "say" and "already" in e["payload"]["text"] for e in r["events"])
     # a fed dog follows through go, without waiting for its tick
     you.act_many([{"verb": "take", "target": "Bone"}, {"verb": "go", "target": "Pell's Mill"},
@@ -81,14 +81,17 @@ def test_followers_come_along_and_the_tinderbox_is_a_real_thing():
     assert any(p["name"] == "Biscuit" for p in you.perceive()["present"])
 
 
-def test_dialog_prefers_the_best_matching_entry():
+def test_a_topic_is_one_of_an_entrys_names_and_a_sentence_names_none():
     eng, gm, you = ferry()
+    r = you.act("talk", "Mara", {"about": "across"})
+    lines = [e["payload"]["text"] for e in r["events"] if e["kind"] == "say"]
+    assert lines and "Tam" in lines[0]  # across is a name of ferry|across|crossing
+    r = you.act("talk", "Mara", {"about": "Tale"})
+    lines = [e["payload"]["text"] for e in r["events"] if e["kind"] == "say"]
+    assert lines and "Go on then" in lines[0]  # tale names the story she is owed, in any case
     r = you.act("talk", "Mara", {"about": "how do I get across the river in this fog"})
     lines = [e["payload"]["text"] for e in r["events"] if e["kind"] == "say"]
-    assert lines and "Tam" in lines[0]  # ferry|across|crossing scores above fog|weather|dark|night
-    r = you.act("talk", "Mara", {"about": "tell me a tale"})
-    lines = [e["payload"]["text"] for e in r["events"] if e["kind"] == "say"]
-    assert lines and "Go on then" in lines[0]  # "tale" is not "ale"; it is the story she is owed
+    assert lines and "Ask me something" in lines[0]  # no words are read out of it: her own default line
 
 
 def test_check_rolls_a_visible_d20():

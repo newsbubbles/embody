@@ -18,9 +18,9 @@ def test_ferry_at_dusk_rails_complete():
     verbs = {(a["verb"], a["target_name"]) for a in first["affordances"] if a["ok"]}
     assert ("talk", "Mara") in verbs and ("read", "Notice board") in verbs
 
-    r = you.act("talk", "Mara", {"about": "the ferry"})
+    r = you.act("talk", "Mara", {"about": "ferry"})
     assert any(e["kind"] == "say" and "Tam" in e["payload"]["text"] for e in r["events"])
-    you.act("talk", "Mara", {"about": "a light"})
+    you.act("talk", "Mara", {"about": "light"})
     assert any(h["name"] == "Tinderbox" for h in you.perceive()["holding"])
 
     # peace rule in the square, with a hint

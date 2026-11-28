@@ -60,7 +60,7 @@ def define(s):
                                  "targets": "creature", "scope": "here", "params": {"item": "id or name of a thing you hold"}},
                         "talk": {"script": "talk", "doc": "Talk to someone about something",
                                  "targets": "creature", "scope": "here", "duration": 2,
-                                 "params": {"about": "the topic, in your words"}},
+                                 "params": {"about": "one topic, as they name it (Mara: ferry, Tam, Hob, fog, light, ale)"}},
                         "touch": {"script": "touch", "doc": "Touch, pet or pat something or someone here",
                                   "targets": "entity", "scope": "here"},
                         "check": {"script": "check", "doc": "Try your luck or skill at something: a d20 everyone sees",
@@ -139,7 +139,7 @@ MARA = {
         "work|chore|help|hands": "Hob's wheel wants greasing and his sacks want stacking. Ask him. Work is coin here.",
         "sleep|bed|room": "There's a bench by the fire if you must. But the river won't wait for morning, and the fog won't either.",
     },
-    "default_line": "Mara wipes a mug. 'Ask me something I know about: the ferry, Tam, Hob, the fog, the light. Or have a drink.'",
+    "default_line": "Mara wipes a mug. 'Ask me something I know about: ferry, Tam, Hob, fog, light. Or ale.'",
     "gives": {
         # the tinderbox is a real thing in her apron, handed over; a mind embodying her gives it with the give verb
         "light|fire|tinderbox": {"item": "Tinderbox", "line": "She digs the tinderbox out of her apron and puts it in your hand.",

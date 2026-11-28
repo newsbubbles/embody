@@ -29,12 +29,12 @@ def test_mara_pours_one_ale_per_asker_not_per_lifetime():
     gm.spawn("person", "Ashford Square", "Pedlar")
     other = eng.session("pedlar")
     other.join("ferry-at-dusk", "Pedlar")
-    you.act("talk", "Mara", {"about": "an ale"})
+    you.act("talk", "Mara", {"about": "ale"})
     assert [c["name"] for c in you.perceive()["holding"]] == ["Dark ale"]
     r = other.act("talk", "Mara", {"about": "ale"})
     assert [c["name"] for c in other.perceive()["holding"]] == ["Dark ale"]
     assert any(t and t.startswith("She sets") for t in texts(r))
-    r = you.act("talk", "Mara", {"about": "another ale"})
+    r = you.act("talk", "Mara", {"about": "ale"})
     assert any(t and t.startswith("One was the deal") for t in texts(r))
     assert len(you.perceive()["holding"]) == 1
     me = gm.world.find(name="Traveler")[0]["id"]
@@ -45,7 +45,7 @@ def test_mara_pours_one_ale_per_asker_not_per_lifetime():
 def test_a_story_is_the_fare_and_three_drinks_make_you_tipsy():
     eng, gm, you = ferry()
     you.say("Let me tell you how I came to be here.", to="Mara")
-    r = you.act("talk", "Mara", {"about": "my story, the one I owe you"})
+    r = you.act("talk", "Mara", {"about": "story"})
     assert any(t and "three mugs" in t for t in texts(r))
     mugs = next(c for c in you.perceive()["holding"] if c["name"].startswith("Three"))
     for _ in range(3):
