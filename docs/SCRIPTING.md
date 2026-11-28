@@ -38,7 +38,7 @@ packs/<name>/
   scripts/*.py    verbs and rules a world takes with "requires": ["<name>"]
 ```
 
-`load_world(id)` builds it: for each pack in `requires`, the pack's scripts and its `define`; then the world's scripts, its `define` (schemas), its `populate` (entities, rules, timers) and the replay of `changes.jsonl`. A world script with the same name as a pack script wins, and the pack's is never defined. `load_world(id, upgrade=true)` runs packs, scripts, `define` and `upgrade(s)` against the live world: new code, same state and history.
+`load_world(id)` builds it: for each pack in `requires`, the pack's scripts and its `define` (the world folder's own `packs/<name>/` first: it overrides the workspace pack of that name, or, with `EXTENDS = True` in its `pack.py`, lays its files over the workspace pack's, a file of the same name in place of the pack's, includes too, and runs the workspace pack's `define` then its own; a pack whose `pack.py` names `REQUIRES = [...]` has those packs installed before it, each once, so a small pack says what it reads and a name can stand for several); then the world's scripts, its `define` (schemas), its `populate` (entities, rules, timers) and the replay of `changes.jsonl`. A world script with the same name as a pack script wins, and the pack's is never defined. `load_world(id, upgrade=true)` runs packs, scripts, `define` and `upgrade(s)` against the live world: new code, same state and history.
 
 Scripts share code with `use("name")` on a line of its own: the file `scripts/_name.py` (or `name.py`) is pasted in its place when the world loads. Files that start with `_` are includes, never scripts of their own. `packs/d20/scripts/_common.py` carries the dice helpers its verbs share.
 

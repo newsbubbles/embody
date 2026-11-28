@@ -401,7 +401,7 @@ class Session:
 
     def _not_seated(self) -> Rejected:
         """No seat in this world: say whether one was released and why, with join in the reason, so a harness that
-        reads only the reason (or the code) knows to join again (a Reach crew's hands stayed empty all night, 26 Nov)."""
+        reads only the reason (or the code) knows to join again (a hosted world's crew sat with empty hands all night, 26 Nov)."""
         w = self.world
         g = w.store.get("grants", w.id, self.grant["id"]) if self.grant else None
         held = (g or {}).get("held") or {}
@@ -583,27 +583,30 @@ class Session:
             ok = [r is not None and (not under or w.within(self._resolve(r), under)
                                      or bool(self._access_allows(self._resolve(r), "w"))) for r in refs]
             if not (any(ok) if any_ else all(ok)):
-                raise Rejected(f"your grant reaches only under {where}", hint=f"work inside it: find(under='{where}')")
+                raise Rejected(f"your grant reaches only under {where}", hint=f"work inside it: find(under='{where}')",
+                               layer="target", code="out_of_grant")
 
         def named(x: Any, what: str) -> None:
             if not str(x).startswith(pre):
-                raise Rejected(f"your {what} start with {pre}", hint=f"call it {pre}{x}")
+                raise Rejected(f"your {what} start with {pre}", hint=f"call it {pre}{x}", layer="call", code="out_of_grant")
 
         if op in ("create_world", "fork_world", "save", "restore", "mirror"):
-            raise Rejected(f"{op} reaches the whole world; your grant is limited", hint="ask the owner")
+            raise Rejected(f"{op} reaches the whole world; your grant is limited", hint="ask the owner", layer="call",
+                           code="out_of_grant")
         if op == "clock" and any(args.get(k) is not None for k in ("run", "rate", "step", "turn", "drivers",
                                                              "catch_up")):
-            raise Rejected("the clock is the whole world's; your grant is limited", hint="clock() with no arguments reads it")
+            raise Rejected("the clock is the whole world's; your grant is limited", hint="clock() with no arguments reads it",
+                           layer="call", code="out_of_grant")
         if op == "introduce":
             need(args["parent"], *(args.get("known_by") or {}))
             if not w.may_spawn(args["type"], lim):
                 raise Rejected(f"your grant may not make a {args['type']}", hint="a type its limits list, or a schema of yours",
-                               alternatives=list(lim.get("types") or []))
+                               alternatives=list(lim.get("types") or []), layer="call", code="out_of_grant", param="type")
         elif op == "spawn":
             need(args["parent"])
             if not w.may_spawn(args["type"], lim):
                 raise Rejected(f"your grant may not make a {args['type']}", hint="a type its limits list, or a schema of yours",
-                               alternatives=list(lim.get("types") or []))
+                               alternatives=list(lim.get("types") or []), layer="call", code="out_of_grant", param="type")
         elif op in ("patch", "rename", "destroy", "act_as", "say_as"):
             need(args["entity"])
         elif op == "move":
@@ -614,7 +617,8 @@ class Session:
             need(args["a"], args["b"], any_=True)
         elif op == "layout":
             if args.get("frame") is not None:
-                raise Rejected("the frame is the whole world's; your grant is limited", hint="lay out inside your part")
+                raise Rejected("the frame is the whole world's; your grant is limited", hint="lay out inside your part",
+                               layer="call", code="out_of_grant", param="frame")
             for p in args.get("placements") or []:
                 if isinstance(p, dict) and p.get("entity"):
                     need(p["entity"])
@@ -1145,7 +1149,9 @@ class Session:
                self._guides_line(self.role),
                "the rules can change while you play: when perceive carries rules_notice, read guide('changes') before you "
                "act and rebuild your watch and notes on the new terms",
-               "tell the human what happens as a story, in prose, in the fiction: no bullets, no stat sheets, no tool names"]
+               # how a world is told is the world's own (a story, a log, a notice board's notes): its root's `telling`
+               str((root["state"].get("telling") if root else None)
+                   or "tell the human what happens in the world's own terms, plainly: no tool names")]
         if self.role == PLAYER:
             how.insert(0, "this briefing is for you, not for them: say nothing of seats, grants, tokens or tools; open in the "
                           "world, with where they stand, who is near and what the body feels, then ask what they do")
@@ -1155,7 +1161,7 @@ class Session:
             how.insert(0, "your card carries the secret brief: who you are and what you want; remember() and intend() keep your notes")
         out = {"role": self.role, "role_doc": ROLE_DOC.get(self.role, ""), "world": w.name, "you": ent["name"] if ent else eid,
                "text": (root["state"].get("briefing") if root else None) or w.summary()["description"],
-               "pace": pace, "how": how}
+               "pace": pace, "pace_rate": float(ck["rate"]) if ck["running"] or waits else 0.0, "how": how}
         if self._parts():
             out["parts"] = self._parts()
         if self.grant and self.grant.get("brief"):
@@ -1557,7 +1563,7 @@ class Session:
             # a game's read-only hand on one part of the world (Session._reader)
             if set(lim) != {"under"}:
                 raise Rejected("an observer's limits are under=<entity> alone: the part of the world it reads",
-                               hint="limits={'under': 'The Reach'}")
+                               hint="limits={'under': '<a place in the world>'}")
             lim["under"] = self._resolve(lim["under"])
             return lim, self._limits_note(lim, role)
         if role not in (AUTHOR_ROLE, BUILDER, NARRATOR_ROLE):
@@ -1581,7 +1587,7 @@ class Session:
 
     def requests(self, limit: int = 50, offset: int = 0, side: str = "") -> list[dict[str, Any]]:
         """(owner) Seat requests left on the world's page (/seat-request), newest first: who, how to reach them, which
-        side draws them, why. Kept beside the database, never in the world's log. Filter: `side` (hold, keth, ...).
+        side draws them, why. Kept beside the database, never in the world's log. Filter: `side` (one side the oracle names).
         Paging: `limit` (1 to 500, default 50) and `offset`."""
         from .site import read_requests
         self._tick()
@@ -2277,8 +2283,8 @@ class Session:
                        hint="use the id", layer="target", code="ambiguous_target", accepts=[h["id"] for h in hits])
 
     def _resolve_for(self, me: str, ref: str, verb: str, params: dict[str, Any] | None) -> str:
-        """A target for a deed: an id, a unique name, or, when several share the name (stacks of coins, two
-        waterskins), the one in your reach that the verb would take, else the first in your reach, so its refusal
+        """A target for a deed: an id, a unique name, or, when several share the name (two of a kind, a stack
+        and a single one), the one in your reach that the verb would take, else the first in your reach, so its refusal
         says why. Names alone stay ambiguous only when none of them is near you."""
         w = self.world
         if w.get(ref):
@@ -2313,7 +2319,7 @@ class Session:
             me = self._me()
             p = self._principal()
         # a look through a body someone else holds is a host's read, not that body looking: it leaves the body's own
-        # "since I last looked" alone (a rejoin starts from it) and shows the last `events` (Tender, 2026-11-23)
+        # "since I last looked" alone (a rejoin starts from it) and shows the last `events` (a hosted world's keeper, 2026-11-23)
         held = p is None and (w.embodied(me) or {}).get("id") not in (None, self.pid)
         if cursor is None and p is not None:
             cursor = p["cursor_seq"]
@@ -2964,7 +2970,7 @@ class Session:
 
     def _watch_me(self, e: dict[str, Any]) -> dict[str, Any]:
         """A watcher's own state as its body's rules read it: the schema's defaults under what is stored, so
-        me['water'] works on a body that has never dried (a rule reads a missing value as its default)."""
+        me['<key>'] works on a body whose rules never wrote it (a rule reads a missing value as its default)."""
         kept = kept_from_self(e)
         out = {k: v for k, v in self.world.schema_defaults(e["type"]).items()
                if k not in ("rules", "secret", "space") and k not in kept}
@@ -3704,7 +3710,7 @@ class Session:
                     "hint": "chronicle_arc(id, title, people, places) opens one; status='closed' ends it"}
         key = str(id).strip()[:60]
         if not key:
-            raise Rejected("an arc needs an id", hint="a short stable name: chronicle_arc('narrows-siege', title=...)")
+            raise Rejected("an arc needs an id", hint="a short stable name: chronicle_arc('long-winter', title=...)")
         if status is not None and status not in ("open", "closed"):
             raise Rejected(f"no status {status!r}", hint="status is 'open' or 'closed'")
         today = int(w.t // self._day_seconds()) + 1
@@ -3800,7 +3806,7 @@ class Session:
     def _read_words(self, me: str, verb: str, target: str | None,
                     params: dict[str, Any] | None) -> tuple[str | None, dict[str, Any] | None, bool]:
         """A target written the way a player says it, read into params, only when the words as written name nothing:
-        "5 Crown arrows" is count 5 (a verb that takes count), and "5 Crown arrows to Rin" or "e485 to e422" is the
+        "5 arrows" is count 5 (a verb that takes count), and "5 arrows to Mara" or "e12 to e34" is the
         person as the target and the thing as `item` (a verb that takes item, as give). Anything else goes on as
         written, so its refusal says why. Returns (target, params, read)."""
         if not target or self._names_something(target):
@@ -4094,7 +4100,7 @@ class Session:
             for k, v in dialog.items():
                 if not str(k).strip() or not isinstance(v, str) or not v.strip() or len(v) > _SAY_MAX:
                     raise Rejected(f"each own line is a topic and one line of at most {_SAY_MAX} characters",
-                                   hint='{"water|well": "Ask Mara at the well."}')
+                                   hint='{"door|gate": "Ask Mara at the door."}')
             idle["dialog"] = {str(k).strip().lower(): str(v) for k, v in dialog.items()}
             idle["fresh"] = True  # they answer from now until the seat's next deed, then whenever it is idle
         if lapse is not None:
@@ -4898,7 +4904,7 @@ class Session:
                 try:
                     fired = bool(cond.call("until", env=view, fuel=20_000))
                 except ScriptError as e:
-                    raise Rejected(f"until: {e.reason}", hint=UNTIL_DOC) from None
+                    raise Rejected(f"until: {e.reason}", hint=UNTIL_DOC, **_BAD_UNTIL) from None
                 timed_out = clock() - start >= timeout and scan >= head
                 if fired:
                     # true on the room as it stands, with no event at all: armed again, it fires again at once
@@ -5034,12 +5040,17 @@ class Session:
 
     def _expand_uses(self, sid: str, source: str) -> str:
         """use("x") lines, expanded as the loader expands them: x from the world's stored scripts, else from a pack's
-        include files (scripts/_x.py), so a script file defines live the way it builds."""
+        include files (scripts/_x.py), the world folder's own packs before the workspace's, so a script file defines
+        live the way it builds."""
         if not any(USE_LINE.match(line) for line in source.splitlines()):
             return source
         known = {s["id"]: s["source"] for s in self.world.scripts()}
         ws = self.engine.workspace
         if ws is not None:
+            own = ws.world_dir(self.world.id) / "packs"
+            for d in (sorted(p for p in own.iterdir() if (p / "pack.py").exists()) if own.is_dir() else []):
+                for k, v in read_scripts(d).items():
+                    known.setdefault(k, v)
             for name in ws.list_packs():
                 for k, v in read_scripts(ws.pack_dir(name)).items():
                     known.setdefault(k, v)
@@ -5257,7 +5268,7 @@ class Session:
         check(ctx) if you like), the language of every verb (guide('scripting')). The frame's `maker` names the kinds of thing
         it programs, and the thing's access must give you w. The code runs held: it changes only the machine and
         what it holds; whoever chose the verb it may move and give things, and change only on the keys the frame's
-        `maker.actor_keys` names, never a body's make (stats, skills, hp, water, carry); it reads public state; it makes nothing from nothing and sets
+        `maker.actor_keys` names, never a body's make (the keys its schema and packs declare); it reads public state; it makes nothing from nothing and sets
         no rules; what it says reaches others marked untrusted. With the frame's `review` on, the verb waits for
         the owner; with review "writes" it runs before then on a look-only trial (no writes, its machine's secrets
         sealed). The owner and author program anything; frame=... holds their code to that frame. `targets` (a
@@ -5958,12 +5969,30 @@ def call(session: Session, op: str, **kw: Any) -> Any:
     except Rejected as r:
         return r.to_dict()
     except TypeError as e:
-        return Rejected(f"{op}: {e}", hint=f"see help for {op}", layer="call", code="bad_args").to_dict()
+        bad = _bad_param(fn, kw)
+        return Rejected(f"{op}: {e}", hint=f"see help for {op}", layer="call", code="bad_args",
+                        **({"param": bad} if bad else {})).to_dict()
+
+
+def _bad_param(fn: Any, kw: dict[str, Any]) -> str | None:
+    """The first param a call names that the op does not take, or the first it needs and was not given, read from the
+    op's signature, so a harness finds it in `param` and never parses Python's wording."""
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return None
+    ps = sig.parameters
+    if not any(p.kind is p.VAR_KEYWORD for p in ps.values()):
+        extra = [k for k in kw if k not in ps]
+        if extra:
+            return extra[0]
+    return next((n for n, p in ps.items() if p.default is p.empty and n not in kw
+                 and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)), None)
 
 
 UNTIL_DOC = ("until is one Python expression (the embody script subset: no imports, no lambdas) over what you may "
              "know: t (world seconds), ambient (dict: time_of_day, light, ...), here (your place's name), present "
-             "(names of who is here), me (your own state: water, hp, wounded, ...), events (since the wait began: "
+             "(names of who is here), me (your own state, as your card shows it), events (since the wait began: "
              "seq, t, kind, actor, target, who, text, player, and payload: the event's own fields as you perceive "
              "them, read with .get), and helpers heard(word, by=''), did(kind, by='') (with no kind: any "
              "deed by someone else here; it wakes you on every one, so name the verb or use to_me() when you can), "
@@ -5971,10 +6000,11 @@ UNTIL_DOC = ("until is one Python expression (the embody script subset: no impor
              "(said to you, or with your name as its address: the default for a mind or a player owed nothing in "
              "particular), named() (your name anywhere in someone's line), state(name) "
              "(the state you can see of someone here or something you hold). Examples: "
-             "\"arrived('Mara')\", \"heard('ferry', by='Mara') or me.get('hp', 0) < 3\", \"t >= 43200\", "
+             "\"arrived('Mara')\", \"heard('ferry', by='Mara') or state('Lamp').get('lit')\", \"t >= 43200\", "
              "\"ambient.get('time_of_day') == 'dusk'\". Names match by part, any case.")
 
 
+_BAD_UNTIL = {"layer": "call", "code": "bad_until", "param": "until"}  # a wait's until is the call's own shape
 _WATCH_HELPERS = ("heard", "did", "came", "arrived", "to_me", "named")
 _WATCH_NAMES = frozenset({"t", "ambient", "here", "present", "me", "events", "state", *_WATCH_HELPERS})
 _WATCH_EVENT = {"seq": 0, "t": 0.0, "kind": "", "actor": "", "target": "", "who": "", "text": "", "player": False,
@@ -5984,13 +6014,13 @@ _WATCH_EVENT = {"seq": 0, "t": 0.0, "kind": "", "actor": "", "target": "", "who"
 def _until_script(until: str) -> Script:
     expr = " ".join(str(until).split())
     if len(expr) > 2000:
-        raise Rejected("until is too long (2000 characters at most)", hint=UNTIL_DOC)
+        raise Rejected("until is too long (2000 characters at most)", hint=UNTIL_DOC, **_BAD_UNTIL)
     try:
         sc = Script("def until():\n    return (" + expr + ")\n", name="until")
     except ScriptError as e:
-        raise Rejected(f"until: {e.reason}", hint=UNTIL_DOC) from None
+        raise Rejected(f"until: {e.reason}", hint=UNTIL_DOC, **_BAD_UNTIL) from None
     if set(sc.functions) != {"until"}:
-        raise Rejected("until is one expression, not definitions", hint=UNTIL_DOC)
+        raise Rejected("until is one expression, not definitions", hint=UNTIL_DOC, **_BAD_UNTIL)
     bound, used = set(), set()
     for node in ast.walk(sc.tree):
         if isinstance(node, ast.comprehension):
@@ -6001,7 +6031,7 @@ def _until_script(until: str) -> Script:
     if unknown:
         raise Rejected(f"until: a watch cannot read {', '.join(unknown)}; it reads "
                        f"{', '.join(sorted(_WATCH_NAMES))}, and each event has {', '.join(_WATCH_EVENT)}",
-                       hint=UNTIL_DOC)
+                       hint=UNTIL_DOC, **_BAD_UNTIL)
     return sc
 
 
@@ -6015,7 +6045,7 @@ def _try_until(cond: Script, view: dict[str, Any]) -> None:
             cond.call("until", env=v, fuel=20_000)
         except ScriptError as e:
             raise Rejected(f"until: {e.reason} (tried when armed, with every helper {'true' if truth else 'false'})",
-                           hint="read a field that may be missing with .get('key', default); " + UNTIL_DOC) from None
+                           hint="read a field that may be missing with .get('key', default); " + UNTIL_DOC, **_BAD_UNTIL) from None
 
 
 def _name_parts(name: str) -> list[str]:
@@ -6036,7 +6066,7 @@ _HANDING = re.compile(r"\b(?:lays?|laid|laying|hands?|handed|handing|gives?|gave
 
 
 def _bare(name: str) -> str:
-    """A name as it is said in a line: lower case, without its article ("A Crown flask": "crown flask")."""
+    """A name as it is said in a line: lower case, without its article ("A tin flask": "tin flask")."""
     return re.sub(r"^(?:a|an|the)\s+", "", str(name).lower().strip())
 
 
@@ -6050,7 +6080,7 @@ def _frame_rules(access: Path) -> str:
 
 
 def _mechanics_in(w: World, text: str) -> str | None:
-    """An entity id of this world or a tool call in a line someone says (a mind said "e57 is mine" aloud)."""
+    """An entity id of this world or a tool call in a line someone says (a mind said "e12 is mine" aloud)."""
     for m in re.finditer(r"\be\d+\b", text):
         if w.get(m.group(0)):
             return f"{m.group(0)} (that is {w.need(m.group(0))['name']})"
@@ -6492,7 +6522,7 @@ def _lint(src: str) -> list[str]:
     return [why for rx, why in _LINT if rx.search(src or "")]
 
 
-# The end of every author hint: it may be meant, or someone else's to fix (Glass Reach, Nate 2026-11-15).
+# The end of every author hint: it may be meant, or someone else's to fix (Nate 2026-11-15).
 _TAIL = " If that's meant, or not yours to fix, ignore this."
 FLAW_PER_HOUR = 5  # report_flaw, a principal
 

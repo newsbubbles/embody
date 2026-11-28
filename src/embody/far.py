@@ -13,7 +13,7 @@ its description, in ordinary perceive. Only what carries `far` is ever in sight,
   plain catches the eye); otherwise the container's line stands for it.
 - Hidden stays hidden: a hidden thing never shows; a hidden place shows only to one who knows the way to it, or when
   its `far` says `seen: true`, and then without its name or id (`far.called`, if any, is what it looks like).
-- Line of sight, 2.5D: a thing with `occludes: true` and a top (a ridge, a wall, the Scar) blocks what lies behind it
+- Line of sight, 2.5D: a thing with `occludes: true` and a top (a ridge, a wall, a cliff) blocks what lies behind it
   when its top stands above the line from the viewer's eye to the target's top where that line crosses it. One you
   stand on blocks nothing.
 - Night (the viewer's ambient `time_of_day` is one of the root's `far_night`, default ["night"]): what has a `glow`

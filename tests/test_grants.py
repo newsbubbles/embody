@@ -547,13 +547,14 @@ def test_a_player_reads_no_plan_off_the_root_and_the_paste_asks_for_prose():
     gm.patch(w.root_id, {"policy": {"fixed": ["the Warden turns at t=240"]},
                          "templates": {"newcomer": {"type": "person", "place": "Hall", "doc": "a stranger off the road",
                                                     "state": {"coins": 3}, "brief": "You are the Warden's man."}},
-                         "briefing": "Two rooms and a locked door."})
+                         "briefing": "Two rooms and a locked door.",
+                         "telling": "tell it as a story, in prose: no bullets, no stat sheets, no tool names"})
     inv = gm.invite("player", label="kit")
     assert "as a story, in prose" not in inv["page"] and "Say nothing of the setup" in inv["page"]
     assert "Say nothing of the setup" not in gm.invite("observer", label="eye")["page"]
     p = eng.session_for_token(inv["token"])
     b = p.join(template="newcomer", name="Kit")
-    assert any("no bullets" in line for line in b["briefing"]["how"])
+    assert any("no bullets" in line for line in b["briefing"]["how"])  # the world's own telling (engine audit, 11-28)
     root = p.inspect(w.root_id)["state"]
     assert "policy" not in root and root["briefing"] == "Two rooms and a locked door."
     assert root["templates"] == {"newcomer": {"type": "person", "place": "Hall", "doc": "a stranger off the road"}}
@@ -561,6 +562,10 @@ def test_a_player_reads_no_plan_off_the_root_and_the_paste_asks_for_prose():
     assert full["policy"]["fixed"] == ["the Warden turns at t=240"]
     assert full["templates"]["newcomer"]["brief"] == "You are the Warden's man."
     assert full["templates"]["newcomer"]["state"] == {"coins": 3}
+    gm.patch(w.root_id, {"telling": None})  # with no telling of its own, a world is told in its own terms
+    plain = eng.session("nate").join("two-rooms", "Prisoner")
+    plain = plain.get("briefing", plain)
+    assert not any("story" in line for line in plain["how"]) and any("own terms" in line for line in plain["how"])
 
 
 def _get_ua(url: str, ua: str) -> tuple[int, str, bytes]:

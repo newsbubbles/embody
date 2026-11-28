@@ -62,3 +62,32 @@ def test_a_refused_program_leaves_a_trace_only_the_hosts_read():
     p = rows[0]["payload"]
     assert p["verb"] == "Knock Twice" and p["thing"] == "Iron door" and "lowercase" in p["reason"] and "source" not in p
     assert not [e for e in s.perceive()["events"] if e.get("kind") == "program_refused"]
+
+
+def test_a_harness_reads_the_case_from_fields_never_the_words():
+    # body-harness, 2026-11-28 (Nate: "ask engine dev for the refusal codes"): five places a harness still read wording
+    from tests.test_limits import builder
+    from tests.test_grants import owner
+    eng, w, i = engine_with_two_rooms()
+    gm = owner(eng)
+    b, inv = builder(eng, gm)
+    b.use("two-rooms")
+    r = call(b, "spawn", type="thing", parent="Cell", name="Crate")
+    assert (r["layer"], r["code"]) == ("target", "out_of_grant")
+    r = call(b, "clock", rate=2)
+    assert (r["layer"], r["code"]) == ("call", "out_of_grant")
+    s = eng.session("nate")
+    s.join("two-rooms", "Prisoner")
+    r = call(s, "perceive", wings=2)
+    assert (r["code"], r["param"]) == ("bad_args", "wings")
+    for until in ("1 +", "nobody_knows_me", "me.get("):
+        r = call(s, "wait", until=until, timeout=0)
+        assert (r["layer"], r["code"], r["param"]) == ("call", "bad_until", "until"), until
+    w.define_script("brittle", "def on(ctx, event):\n    return 1 / 0\n")
+    w.set_rule(w.root_id, "brittle", ["tally"])
+    with pytest.raises(Rejected) as e:
+        w.emit("tally", target=w.root_id)
+    assert e.value.code == "script_error"
+    brief = s.join("two-rooms", "Prisoner")
+    brief = brief.get("briefing", brief)
+    assert isinstance(brief["pace_rate"], float)

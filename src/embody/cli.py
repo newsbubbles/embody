@@ -284,7 +284,7 @@ def render_act(r: dict[str, Any]) -> str:
 PAGED_CLI = {
     "requests": ("requests", "(owner) seat requests on the world's page, newest first", [
         ("--limit", "limit", int, 50, "at most this many (1 to 500)"), ("--offset", "offset", int, 0, "skip this many"),
-        ("--side", "side", str, "", "only this side (hold, keth, ...)")]),
+        ("--side", "side", str, "", "only this side (one side the oracle names)")]),
     "flaws": ("flaws", "(owner) holes reported with report_flaw, newest first", [
         ("--limit", "limit", int, 50, "at most this many (1 to 500)"), ("--offset", "offset", int, 0, "skip this many"),
         ("--severity", "severity", str, "", "only low, medium or high")]),

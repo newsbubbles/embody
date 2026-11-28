@@ -264,8 +264,11 @@ def resolve_uses(sid: str, raw: dict[str, str], known: dict[str, str], stack: tu
 def define_scripts(session: "Session", folder: Path, known: dict[str, str], shadowed: set[str] = frozenset()) -> list[str]:
     """Define every scripts/*.py of the folder. A file whose name starts with `_` is an include for use(), not a script.
     `shadowed` names the scripts the world has its own file for: a pack's version of those is never defined, so the
-    world's replaces it outright (the Glass Reach has its own `go` over the village pack's)."""
-    raw = read_scripts(folder)
+    world's replaces it outright (a world's own `go` over the village pack's)."""
+    return _define_raw(session, read_scripts(folder), known, shadowed)
+
+
+def _define_raw(session: "Session", raw: dict[str, str], known: dict[str, str], shadowed: set[str] = frozenset()) -> list[str]:
     done = []
     for sid in raw:
         src = resolve_uses(sid, raw, known)
@@ -312,29 +315,96 @@ def _manifest(build_py: Path) -> dict[str, Any] | None:
 
 
 def install_pack(session: "Session", ws: Workspace, name: str, known: dict[str, str],
-                 shadowed: set[str] = frozenset()) -> dict[str, Any]:
+                 shadowed: set[str] = frozenset(), folder: Path | None = None,
+                 done: set[str] | None = None, out: list[dict[str, Any]] | None = None,
+                 _path: tuple[str, ...] = ()) -> dict[str, Any]:
+    """Install the pack `name` a world requires, after the packs it requires itself (its pack.py's REQUIRES, a list
+    of names; a pack a world extends adds the world's REQUIRES to its own). The world folder's own packs/<name>/
+    comes first: it overrides the workspace's pack of that name (only the world's is installed), or, when its pack.py
+    says EXTENDS = True, extends it (the workspace's files, with the world's files of the same name in their place
+    and its new ones beside them; the workspace pack's define, then the world's). Without a world pack, the
+    workspace's packs/<name>/. `done` and `out` carry what one load has installed, so a pack two others require is
+    installed once; each install's result is appended to `out`."""
+    done = set() if done is None else done
+    if name in _path:
+        raise Rejected(f"packs require each other in a ring: {' -> '.join((*_path, name))}",
+                       hint="a pack's REQUIRES names only what it reads; move the shared part into a pack both require")
+    layers, origin = _pack_layers(ws, name, folder)
+    for dep in dict.fromkeys(d for _, mod, _ in layers for d in (getattr(mod, "REQUIRES", None) or [])):
+        if dep not in done:
+            install_pack(session, ws, str(dep), known, shadowed, folder, done, out, (*_path, name))
+    r = _install(session, name, layers, known, shadowed, origin)
+    done.add(name)
+    if out is not None:
+        out.append(r)
+    return r
+
+
+def install_packs(session: "Session", ws: Workspace, names: list[str], known: dict[str, str],
+                  shadowed: set[str] = frozenset(), folder: Path | None = None) -> list[dict[str, Any]]:
+    """Every pack a world requires, each after what it requires, each once, in that order."""
+    done: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for n in names:
+        if n not in done:
+            install_pack(session, ws, n, known, shadowed, folder, done, out)
+    return out
+
+
+def _pack_layers(ws: Workspace, name: str, folder: Path | None) -> tuple[list[tuple[Path, Any, str]], str]:
+    """Where the pack `name` comes from for one world: its folders and modules, and which origin that is."""
+    own = folder / "packs" / name if folder is not None else None
+    if own is not None and (own / "pack.py").exists():
+        mod = _import(own / "pack.py", f"embody_world_{folder.name}_pack_{name}", [folder, ws.root])
+        if getattr(mod, "EXTENDS", False) is not True:
+            return [(own, mod, name)], "world"
+        base = ws.pack_dir(name)
+        if not (base / "pack.py").exists():
+            raise Rejected(f"{own / 'pack.py'} extends the pack {name!r}, and there is no {name!r} in {ws.packs_dir}",
+                           hint="drop EXTENDS to make the world's pack the whole pack, or name a pack that is there: "
+                                + (", ".join(ws.list_packs()) or "none"))
+        return [(base, _import(base / "pack.py", f"embody_pack_{name}", [ws.root]), name),
+                (own, mod, f"{name}.world")], "world+workspace"
     d = ws.pack_dir(name)
     if not (d / "pack.py").exists():
-        raise Rejected(f"no pack {name!r} in {ws.packs_dir}",
+        where = f"{ws.packs_dir}" + (f" or {folder / 'packs'}" if folder is not None else "")
+        raise Rejected(f"no pack {name!r} in {where}",
                        hint=("packs here: " + ", ".join(ws.list_packs())) if ws.list_packs() else "a pack is packs/<name>/pack.py plus scripts/")
-    mod = _import(d / "pack.py", f"embody_pack_{name}", [ws.root])
-    scripts = define_scripts(session, d, known, shadowed)
-    if hasattr(mod, "define"):
-        mod.define(session)
-    record_declares(session.world, name, mod)
-    log_folder_rules(session, mod, name)
-    return {"pack": name, "scripts": scripts}
+    return [(d, _import(d / "pack.py", f"embody_pack_{name}", [ws.root]), name)], "workspace"
 
 
-def record_declares(world: Any, name: str, mod: Any) -> None:
+def _install(session: "Session", name: str, layers: list[tuple[Path, Any, str]], known: dict[str, str],
+             shadowed: set[str], origin: str) -> dict[str, Any]:
+    """One pack from one folder or more, later folders' files over earlier ones; each folder's define in order, the
+    declarations merged under the pack's name, each folder's RULES under its own source."""
+    raw: dict[str, str] = {}
+    for d, _, _ in layers:
+        raw.update(read_scripts(d))
+    scripts = _define_raw(session, raw, known, shadowed)
+    for _, mod, _ in layers:
+        if hasattr(mod, "define"):
+            mod.define(session)
+    record_declares(session.world, name, *(mod for _, mod, _ in layers))
+    for _, mod, source in layers:
+        log_folder_rules(session, mod, source)
+    return {"pack": name, "scripts": scripts, "from": origin}
+
+
+def record_declares(world: Any, name: str, *mods: Any) -> None:
     """A pack's declarations (world.PACK_DECLARES) into the world's meta under `pack_declares`, written only when they
-    changed, so a renew of the same code writes nothing."""
+    changed, so a renew of the same code writes nothing. Several modules (a pack a world extends, then the world's)
+    merge: lists join, a later text for the same key wins."""
     from .world import PACK_DECLARES
-    decl = {}
-    for k in PACK_DECLARES:
-        v = getattr(mod, k, None)
-        if v:
-            decl[k] = {str(a): str(b) for a, b in v.items()} if isinstance(v, dict) else sorted(str(x) for x in v)
+    decl: dict[str, Any] = {}
+    for mod in mods:
+        for k in PACK_DECLARES:
+            v = getattr(mod, k, None)
+            if not v:
+                continue
+            if isinstance(v, dict):
+                decl[k] = {**decl.get(k, {}), **{str(a): str(b) for a, b in v.items()}}
+            else:
+                decl[k] = sorted(set(decl.get(k, [])) | {str(x) for x in v})
     have = dict(world.meta().get("pack_declares") or {})
     if have.get(name, {}) == decl:
         return
@@ -347,11 +417,13 @@ def record_declares(world: Any, name: str, mod: Any) -> None:
 
 def log_folder_rules(session: "Session", mod: Any, source: str) -> int:
     """A pack's or a world folder's RULES = [{id, date, was, now, recheck, guide, retired}, ...] into the world's
-    rules changelog, oldest first; what is logged already stays at its version. Returns how many were new."""
+    rules changelog, oldest first; what is logged already stays at its version. An entry's own `source` keeps the
+    key it was first logged under, so a rule that moves from one pack to another is not news again. Returns how many
+    were new."""
     from .ops import log_rules
     n = 0
     for entry in getattr(mod, "RULES", None) or []:
-        n += not log_rules(session.world, entry, source=source).get("unchanged")
+        n += not log_rules(session.world, entry, source=str(entry.get("source") or source)).get("unchanged")
     return n
 
 
@@ -402,7 +474,7 @@ def _load_folder(session: "Session", ws: Workspace, target: Path, upgrade: bool,
         if upgrade:
             if not session.world_id:
                 raise Rejected("point the session at the world to upgrade first", hint="use(world_id)")
-            packs = [install_pack(session, ws, p, known, own) for p in (manifest or {}).get("requires", [])]
+            packs = install_packs(session, ws, (manifest or {}).get("requires", []), known, own, folder)
             scripts = define_scripts(session, folder, known)
             if hasattr(mod, "define"):
                 mod.define(session)
@@ -429,7 +501,7 @@ def _load_folder(session: "Session", ws: Workspace, target: Path, upgrade: bool,
             raise Rejected(f"world {wid!r} already exists", hint=f"load_world({wid!r}, upgrade=True) renews its code; fork_world or restore for a new game")
         session.create_world(manifest.get("name") or wid, seed=int(manifest.get("seed", 0)), id=wid,
                              description=manifest.get("description", ""))
-        packs = [install_pack(session, ws, p, known, own) for p in manifest.get("requires", [])]
+        packs = install_packs(session, ws, manifest.get("requires", []), known, own, folder)
         scripts = define_scripts(session, folder, known)
         if hasattr(mod, "define"):
             mod.define(session)

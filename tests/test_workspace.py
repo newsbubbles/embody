@@ -116,6 +116,105 @@ def test_scripts_are_files_that_use_each_other_and_packs_define_before_the_world
         load_world(gm2, "nope")
 
 
+def _shouting_pack(root):
+    pack = root / "packs" / "shouting"
+    (pack / "scripts").mkdir(parents=True)
+    (pack / "pack.py").write_text(
+        'PACK = {"name": "shouting"}\nBODY_KEYS = ["voice"]\nRULES = [{"id": "loud", "date": "2026-11-01", "now": "shouts are loud"}]\n\n'
+        'def define(s):\n    s.define_schema("shouter", extends="creature", actions={"shout": {"script": "shout"}, "hum": {"script": "hum"}})\n')
+    (pack / "scripts" / "_common.py").write_text("LOUD = 'LOUD'\n")
+    (pack / "scripts" / "shout.py").write_text('use("common")\ndef apply(ctx):\n    ctx.emit("shouted", target=ctx.actor, reach=1, how=LOUD)\n')
+    (pack / "scripts" / "hum.py").write_text('def apply(ctx):\n    ctx.emit("hummed", target=ctx.actor, reach=1, how="pack")\n')
+    world = root / "worlds" / "the-pit"
+    (world / "scripts").mkdir(parents=True)
+    (world / "build.py").write_text(
+        'WORLD = {"id": "the-pit", "name": "The Pit", "seed": 1, "requires": ["shouting"]}\n\n'
+        'def populate(s):\n    root = s.summary()["root"]\n    s.spawn("place", root, "The Floor")\n    s.spawn("shouter", "The Floor", "Echo")\n')
+    return world
+
+
+def _how(eng, verb, kind):
+    you = eng.session("you")
+    you.join("the-pit", "Echo")
+    return next(e for e in you.act(verb)["events"] if e["kind"] == kind)["payload"]["how"]
+
+
+def test_a_world_pack_of_the_same_name_overrides_the_workspace_pack(tmp_path):
+    world = _shouting_pack(tmp_path)
+    own = world / "packs" / "shouting"
+    (own / "scripts").mkdir(parents=True)
+    (own / "pack.py").write_text(
+        'PACK = {"name": "shouting"}\n\ndef define(s):\n    s.define_schema("shouter", extends="creature", actions={"shout": {"script": "shout"}})\n')
+    (own / "scripts" / "shout.py").write_text('def apply(ctx):\n    ctx.emit("shouted", target=ctx.actor, reach=1, how="mine")\n')
+    eng = Engine(workspace=tmp_path)
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    r = load_world(gm, "the-pit")
+    assert r["packs"] == ["shouting"]
+    assert [s["id"] for s in gm.scripts()] == ["shout"]  # the workspace pack's hum and its define never ran
+    assert "voice" not in gm.world.declared("BODY_KEYS")
+    assert _how(eng, "shout", "shouted") == "mine"
+
+
+def test_a_world_pack_that_extends_layers_its_files_over_the_workspace_pack(tmp_path):
+    world = _shouting_pack(tmp_path)
+    (world / "scripts" / "hum.py").write_text('def apply(ctx):\n    ctx.emit("hummed", target=ctx.actor, reach=1, how="world")\n')
+    own = world / "packs" / "shouting"
+    (own / "scripts").mkdir(parents=True)
+    (own / "pack.py").write_text(
+        'EXTENDS = True\nBODY_KEYS = ["breath"]\nRULES = [{"id": "hoarse", "date": "2026-11-02", "now": "a long shout leaves you hoarse"}]\n\n'
+        'def define(s):\n    s.define_schema("shouter", extends="creature", actions={"shout": {"script": "shout"}, '
+        '"hum": {"script": "hum"}, "whisper": {"script": "whisper"}})\n')
+    (own / "scripts" / "_common.py").write_text("LOUD = 'HOARSE'\n")  # the workspace pack's shout now reads this one
+    (own / "scripts" / "whisper.py").write_text('use("common")\ndef apply(ctx):\n    ctx.emit("whispered", target=ctx.actor, reach=1, how=LOUD.lower())\n')
+    eng = Engine(workspace=tmp_path)
+    gm = eng.session("gm", capabilities=[AUTHOR])
+    r = load_world(gm, "the-pit")
+    assert r["packs"] == ["shouting"] and r["scripts"] == ["hum"]
+    assert [s["id"] for s in gm.scripts()] == ["hum", "shout", "whisper"]
+    assert gm.world.declared("BODY_KEYS") >= {"voice", "breath"}
+    w = gm.world
+    assert w.store.get("rules_change", w.id, "shouting:loud") and w.store.get("rules_change", w.id, "shouting.world:hoarse")
+    assert _how(eng, "shout", "shouted") == "HOARSE" and _how(eng, "whisper", "whispered") == "hoarse"
+    assert _how(eng, "hum", "hummed") == "world"  # the world's own scripts/ still win over every pack
+    # defined live, use() finds the world pack's include first
+    gm.define_script("yell", 'use("common")\ndef apply(ctx):\n    ctx.emit("yelled", target=ctx.actor, how=LOUD)\n')
+    assert "LOUD = 'HOARSE'" in gm.script_source("yell")["source"]
+
+
+def test_a_world_pack_needs_no_workspace_pack_unless_it_extends_one(tmp_path):
+    world = _shouting_pack(tmp_path)
+    (world / "build.py").write_text((world / "build.py").read_text().replace('["shouting"]', '["shouting", "echoes"]'))
+    own = world / "packs" / "echoes"
+    (own / "scripts").mkdir(parents=True)
+    (own / "pack.py").write_text('def define(s):\n    s.define_schema("cave", extends="place")\n')
+    (own / "scripts" / "echo.py").write_text('use("common")\ndef apply(ctx):\n    ctx.emit("echoed", target=ctx.actor, reach=1, how=LOUD)\n')
+    gm = Engine(workspace=tmp_path).session("gm", capabilities=[AUTHOR])
+    load_world(gm, "the-pit")
+    assert "LOUD = 'LOUD'" in gm.script_source("echo")["source"]  # an include of a pack installed before it
+    (own / "pack.py").write_text('EXTENDS = True\n')
+    with pytest.raises(Rejected, match="extends the pack 'echoes'") as e:
+        load_world(Engine(workspace=tmp_path).session("gm", capabilities=[AUTHOR]), "the-pit")
+    assert "shouting" in e.value.hint
+
+
+def test_a_pack_installs_the_packs_it_requires_first_and_each_once(tmp_path):
+    # pack audit, 2026-11-28: a pack names what it reads (REQUIRES), so a split pack's parts come in by its name
+    world = _shouting_pack(tmp_path)
+    for name, req in (("voices", ["shouting"]), ("choir", ["voices", "shouting"])):
+        d = tmp_path / "packs" / name
+        (d / "scripts").mkdir(parents=True)
+        (d / "pack.py").write_text(f"REQUIRES = {req!r}\n")
+        (d / "scripts" / f"{name}_sing.py").write_text('use("common")\ndef apply(ctx):\n    ctx.emit("sang", target=ctx.actor, reach=1, how=LOUD)\n')
+    (world / "build.py").write_text((world / "build.py").read_text().replace('["shouting"]', '["choir"]'))
+    gm = Engine(workspace=tmp_path).session("gm", capabilities=[AUTHOR])
+    r = load_world(gm, "the-pit")
+    assert r["packs"] == ["shouting", "voices", "choir"]
+    assert "LOUD = 'LOUD'" in gm.script_source("choir_sing")["source"]
+    (tmp_path / "packs" / "shouting" / "pack.py").write_text('REQUIRES = ["choir"]\n')
+    with pytest.raises(Rejected, match="in a ring: choir -> voices -> shouting -> choir"):
+        load_world(Engine(workspace=tmp_path).session("gm", capabilities=[AUTHOR]), "the-pit")
+
+
 def test_the_hosted_world_loads_by_id_the_samples_by_path_and_the_legacy_single_file_world_still_loads(tmp_path):
     # a hosted world is a folder under the workspace's worlds/: the fixture world, copied into a workspace of its own
     # with the packs it requires, as an owner's workspace would hold it

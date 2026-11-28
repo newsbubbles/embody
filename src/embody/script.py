@@ -20,10 +20,11 @@ from typing import Any, Callable
 class ScriptError(Exception):
     """A script failed. `reason` is for the caller, `hint` says what to do next."""
 
-    def __init__(self, reason: str, hint: str | None = None, line: int | None = None):
+    def __init__(self, reason: str, hint: str | None = None, line: int | None = None, code: str | None = None):
         self.reason = reason
         self.hint = hint
         self.line = line
+        self.code = code
         where = f" (line {line})" if line else ""
         super().__init__(reason + where + (f" Hint: {hint}" if hint else ""))
 
@@ -191,7 +192,7 @@ class _Interp:
             raise ScriptError("script ran out of fuel",
                               hint="the script loops too much or does too much work for one call; "
                               "simplify it or split the work across ticks",
-                              line=getattr(node, "lineno", None))
+                              line=getattr(node, "lineno", None), code="out_of_fuel")
 
     # ---- functions
 

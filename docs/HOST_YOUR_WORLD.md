@@ -28,7 +28,7 @@ Then open `worlds/my-world/build.py` and set `"id": "my-world"` in its `WORLD` m
 
 Before you host it:
 
-- Mark the bodies a guest may take with `playable: true`, and give the root a `briefing` paragraph (what `join` hands every newcomer).
+- Mark the bodies a guest may take with `playable: true`, and give the root a `briefing` paragraph (what `join` hands every newcomer) and, if you like, a `telling` line (how a seat tells its human what happens, such as "as a story, in prose").
 - Give the build a `host(s)` function if the world should keep real time: it sets the pace, the seats' lapse and the timers (docs/HOSTING.md, "The path"). Without one the world is hosted as it is, with its clock paused.
 - Try it on your own machine:
 

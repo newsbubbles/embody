@@ -495,8 +495,7 @@ class Ctx(ScriptObject):
 
     def _caller_keys(self, i: Any, keys: Any) -> None:
         """A frame's code changes the caller and what they carry only on the keys its frame names (maker.actor_keys,
-        none by default), and never a body's own make: its stats, skills, hp, water, carry, sheet and the rest its
-        schema gives it. A playtest's hauler wrote its riders sixteen hp and wits 5."""
+        none by default), and never a body's own make: the keys its schema gives it and the packs declare as a body's. A playtest's hauler wrote its riders sixteen hp and wits 5."""
         i = _ev(self._w, i)
         if (self._limits or {}).get("frame"):
             owners = sorted(k for k in keys if k in FRAME_NEVER)
@@ -515,8 +514,8 @@ class Ctx(ScriptObject):
             ok = sorted(named - body)
             raise Rejected(f"a frame's code may not change {', '.join(bad)} on {e['name'] or i}",
                            hint=f"it changes the one who chose the verb, or what they carry, only on the keys its frame "
-                                f"names ({', '.join(ok) or 'none'}), and never a body's own make (stats, skills, hp, "
-                                f"water, carry). It may still move them and give them things")
+                                f"names ({', '.join(ok) or 'none'}), and never a body's own make (the keys its schema "
+                                f"and packs declare). It may still move them and give them things")
 
     # -- identity
     @property
@@ -741,7 +740,7 @@ class Ctx(ScriptObject):
         return EntityView(self._w, eid)
 
     def _frame_lifts(self, id: Any, to: Any, count: Any = None) -> bool:
-        """A frame's machine lifts stone (Nate 2026-11-16, Bram's crane on a hauler): its code may move into the machine
+        """A frame's machine lifts stone (Nate 2026-11-16, a crane on a hauler): its code may move into the machine
         a thing the world marks `stone` that lies loose where the machine stands (a direct child of that place, not
         held or inside anything), portable, not a body, not canon, nobody's but the caller's, and only as far as the
         machine's `cargo` allows. True when this is such a lift; a lift that breaks one of those says which; anything
@@ -2176,7 +2175,7 @@ class World:
             return True
         except ScriptError as e:
             raise Rejected(f"listener {lst['script']!r} on {node} failed: {e.reason}",
-                           hint=e.hint or "fix the listener script") from None
+                           hint=e.hint or "fix the listener script", code="script_error") from None
         logs.extend(ctx.logs)
         return False
 
@@ -2641,11 +2640,11 @@ class World:
                 # a check that reads a big state may ask for more, as apply does: `check_fuel`, else the action's `fuel`
                 res = ctx.run(s, "check", [ctx], fuel=min(int(adef.get("check_fuel") or adef.get("fuel") or 5_000), 1_000_000))
             except ScriptError as e:
-                if "out of fuel" in e.reason:
+                if e.code == "out_of_fuel":
                     raise Rejected(f"the world's check for {verb!r} ran out of fuel: its script does too much for one "
                                    "check, not your call", hint="report_flaw so the owner raises the action's "
-                                   "check_fuel (or fuel); a smaller call will not help") from None
-                raise Rejected(f"check for {verb!r} failed: {e.reason}", hint=e.hint) from None
+                                   "check_fuel (or fuel); a smaller call will not help", code="script_error") from None
+                raise Rejected(f"check for {verb!r} failed: {e.reason}", hint=e.hint, code="script_error") from None
             if ctx._trial and self.store.conn.total_changes != before:
                 raise Rejected(f"{verb} waits for the owner's review: until then it may only look, and this run would change the world", hint="it runs in full once the owner approves it (review(thing, verb)); until then use it to look, or ask the owner")
             if res is False:
@@ -2689,7 +2688,7 @@ class World:
                     # a verb that walks a big book may ask for more (`fuel` on the action, at most a million)
                     result = ctx.run(s, "apply", [ctx], fuel=min(int(adef.get("fuel") or 50_000), 1_000_000))
                 except ScriptError as e:
-                    raise Rejected(f"{verb} failed while applying: {e.reason}", hint=e.hint) from None
+                    raise Rejected(f"{verb} failed while applying: {e.reason}", hint=e.hint, code="script_error") from None
                 if ctx._trial and self.store.conn.total_changes != before:
                     # the store counts every row written, so no write call slips past a list of them
                     raise Rejected(f"{verb} waits for the owner's review: until then it may only look, and this run would change the world", hint="it runs in full once the owner approves it (review(thing, verb)); until then use it to look, or ask the owner")
@@ -3010,16 +3009,16 @@ class World:
             return
         if kind == "tick":
             if eid and (self.get(eid)["state"].get("crossed")):
-                return  # a body whose person has crossed to another world waits out of play: no thirst, no fight
+                return  # a body whose person has crossed to another world waits out of play: none of its behaviors run
             if eid is None or (self.embodied(eid) and not p.get("always")
                                and not (self._runs_idle(eid, p["script"]) and self.idle(eid))):
                 return  # controller swap: an embodied entity is driven by its principal; `always` behaviors are
-                        # the body, not the mind (thirst, bleeding), and run on an embodied seat too; `idle` ones
-                        # (a body seeing to its own water) run on a seat that has done nothing for a while
+                        # the body, not the mind, and run on an embodied seat too; `idle` ones (a body seeing to
+                        # its own needs) run on a seat that has done nothing for a while
             s = self.script(p["script"])
             if not s.has("tick"):
                 return
-            # A tick is not an event of the world: nothing is written for it, so a body's thirst does not fill the log
+            # A tick is not an event of the world: nothing is written for it, so a body's steady behaviors do not fill the log
             # (hosted, that was three rows a second). The script sees it as one all the same; its seed comes from the
             # timer and the hour, so the same tick on the same log rolls the same dice.
             seq = self.store.next_seq(self.id)
@@ -3478,9 +3477,9 @@ class World:
 
     def idle(self, entity_id: str) -> bool:
         """A body nobody embodies, or whose seat has done nothing (no act, no line) for idle_after world seconds: a
-        mind on a watcher, a player gone to bed. The world goes on; the body's `idle` behaviors (drinking when
-        thirsty, see packs/d20 quench) run on it as on a body nobody holds, so a seat kept overnight is not a body
-        left to dry. Reading, waiting and watching keep the seat; they are not deeds."""
+        mind on a watcher, a player gone to bed. The world goes on; the body's `idle` behaviors (a pack's or
+        world's, run on `idle`) run on it as on a body nobody holds, so a seat kept overnight is not a body left
+        untended. Reading, waiting and watching keep the seat; they are not deeds."""
         p = self.embodied(entity_id)
         if p is None:
             return True

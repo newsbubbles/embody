@@ -206,6 +206,7 @@ def test_a_long_wait_reads_in_minutes_and_hours_and_a_heavy_check_may_ask_for_fu
     with pytest.raises(Rejected) as r:
         sam.act("weigh")
     assert "ran out of fuel" in r.value.reason and "not your call" in r.value.reason and "check_fuel" in r.value.hint
+    assert r.value.code == "script_error"
     assert sam.act("lift")["ok"]
     assert w._wait_words(100) == "100 s" and w._wait_words(360) == "6 minutes" and w._wait_words(3 * 3600) == "3 hours"
     # use(world=...) as well as use(world_id=...), and a bare use() names what it needs
